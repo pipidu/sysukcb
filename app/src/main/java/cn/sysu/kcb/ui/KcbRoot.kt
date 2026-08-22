@@ -43,6 +43,7 @@ import androidx.navigation.navArgument
 import cn.sysu.kcb.ui.course.CourseEditScreen
 import cn.sysu.kcb.ui.exam.ExamScreen
 import cn.sysu.kcb.ui.login.LoginScreen
+import cn.sysu.kcb.ui.me.AboutScreen
 import cn.sysu.kcb.ui.me.MeScreen
 import cn.sysu.kcb.ui.timetable.TimetableScreen
 
@@ -65,11 +66,15 @@ fun KcbRoot(viewModel: AppViewModel) {
                 HomeTabs(
                     viewModel = viewModel,
                     onLogin = { nav.navigate("login") },
+                    onAbout = { nav.navigate("about") },
                     onEdit = { id -> nav.navigate("edit/$id") },
                     onAdd = { day, period, semester ->
                         nav.navigate("add?day=$day&period=$period&semester=$semester")
                     },
                 )
+            }
+            composable("about") {
+                AboutScreen(onBack = { nav.popBackStack() })
             }
             composable("login") {
                 LoginScreen(
@@ -161,6 +166,7 @@ private fun ImportOverlay(progress: String) {
 private fun HomeTabs(
     viewModel: AppViewModel,
     onLogin: () -> Unit,
+    onAbout: () -> Unit,
     onEdit: (Long) -> Unit,
     onAdd: (Int, Int, String) -> Unit,
 ) {
@@ -205,7 +211,7 @@ private fun HomeTabs(
                 TimetableScreen(viewModel = viewModel, onEdit = onEdit, onAdd = onAdd, onLogin = onLogin)
             }
             composable("exam") { ExamScreen(viewModel) }
-            composable("me") { MeScreen(viewModel = viewModel, onLogin = onLogin) }
+            composable("me") { MeScreen(viewModel = viewModel, onLogin = onLogin, onAbout = onAbout) }
         }
     }
 }

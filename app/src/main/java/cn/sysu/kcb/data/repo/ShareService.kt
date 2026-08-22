@@ -39,7 +39,7 @@ class ShareService(
             exams = repo.listExams(semester).map { it.copy(id = 0) },
         )
         val dir = File(context.cacheDir, "share").apply { mkdirs() }
-        val file = File(dir, "中大课表-$semester.sysukcb.json")
+        val file = File(dir, "课程表D-$semester.sysukcb.json")
         file.writeText(json.encodeToString(SharePack.serializer(), pack))
         return file
     }
@@ -53,7 +53,7 @@ class ShareService(
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "application/json"
             putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, "中大课表")
+            putExtra(Intent.EXTRA_SUBJECT, "课程表D")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
@@ -63,7 +63,7 @@ class ShareService(
     suspend fun importJson(text: String): String {
         val pack = json.decodeFromString(SharePack.serializer(), text)
         if (pack.format != "sysukcb") {
-            error("不是中大课表导出文件")
+            error("不是课程表D导出文件")
         }
         val groupedCourses = pack.courses.groupBy { it.acadYearSemester }
         val groupedWeeks = pack.weeks.groupBy { it.acadYearSemester }

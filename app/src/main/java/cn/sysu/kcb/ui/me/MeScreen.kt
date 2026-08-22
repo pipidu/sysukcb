@@ -25,7 +25,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -60,7 +64,7 @@ import cn.sysu.kcb.ui.theme.PresetThemeColors
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit) {
+fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val importing by viewModel.importing.collectAsStateWithLifecycle()
     val loggedIn by viewModel.loggedIn.collectAsStateWithLifecycle()
@@ -214,6 +218,17 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            ListItem(
+                headlineContent = { Text("关于") },
+                supportingContent = { Text("课程表D · GitHub") },
+                leadingContent = {
+                    Icon(Icons.Outlined.Info, contentDescription = null)
+                },
+                trailingContent = {
+                    Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+                },
+                modifier = Modifier.clickable { onAbout() },
             )
         }
     }

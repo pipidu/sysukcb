@@ -7,10 +7,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -19,13 +22,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -119,10 +125,18 @@ fun TimetableScreen(
     }
     val week = snapshot.weeks.firstOrNull { it.weekly == selectedWeek }
     var semesterMenu by remember { mutableStateOf(false) }
+    var weekPicker by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf(false) }
     var viewingCourse by remember { mutableStateOf<CourseEntity?>(null) }
     val maxWeek = snapshot.weeks.maxOfOrNull { it.weekly } ?: 30
+    val academicWeek = remember(snapshot.weeks, snapshot.semester?.startMillis) {
+        ClassAlarmScheduler.resolveWeek(
+            date = LocalDate.now(),
+            weeks = snapshot.weeks,
+            semesterStartMillis = snapshot.semester?.startMillis ?: 0L,
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -133,17 +147,27 @@ fun TimetableScreen(
                     actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
                 ),
                 title = {
-                    Column {
-                        Text(
-                            week?.weeklyName?.ifBlank { null } ?: "第${selectedWeek}周",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 26.sp,
-                        )
-                        Text(
-                            semester.ifBlank { "课表" },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
+                    Row(
+                        modifier = Modifier.clickable { weekPicker = true },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column {
+                            Text(
+                                week?.weeklyName?.ifBlank { null } ?: "第${selectedWeek}周",
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                lineHeight = 26.sp,
+                            )
+                            Text(
+                                semester.ifBlank { "课表" },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
+                            )
+                        }
+                        Icon(
+                            Icons.Filled.ArrowDropDown,
+                            contentDescription = "选择周次",
+                            tint = MaterialTheme.colorScheme.onPrimary,
                         )
                     }
                 },
@@ -266,6 +290,20 @@ fun TimetableScreen(
             }
         }
     }
+    if (weekPicker) {
+        WeekPickerDialog(
+            weeks = snapshot.weeks,
+            selectedWeek = selectedWeek,
+            currentWeek = academicWeek,
+            maxWeek = maxWeek,
+            onPick = { weekNo ->
+                userPickedWeek = true
+                selectedWeek = weekNo
+                weekPicker = false
+            },
+            onDismiss = { weekPicker = false },
+        )
+    }
 }
 
 private fun pickSemester(settings: UserSettings, semesters: List<SemesterEntity>, options: List<String>): String {
@@ -274,6 +312,51 @@ private fun pickSemester(settings: UserSettings, semesters: List<SemesterEntity>
     return semesters.firstOrNull { it.isCurrent }?.acadYearSemester
         ?: options.firstOrNull().orEmpty()
         ?: saved
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WeekPickerDialog(
+    weeks: List<WeekEntity>,
+    selectedWeek: Int,
+    currentWeek: Int?,
+    maxWeek: Int,
+    onPick: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val last = maxOf(maxWeek, weeks.maxOfOrNull { it.weekly } ?: 0, selectedWeek).coerceAtLeast(1)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("选择周次") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (weekNo in 1..last) {
+                        val isCurrent = weekNo == currentWeek
+                        FilterChip(
+                            selected = weekNo == selectedWeek,
+                            onClick = { onPick(weekNo) },
+                            label = {
+                                Text(
+                                    if (isCurrent) "${weekNo} 本周" else "$weekNo",
+                                    fontSize = 13.sp,
+                                    lineHeight = 16.sp,
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
 }
 
 private fun resolveWeekStart(
