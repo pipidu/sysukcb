@@ -6,7 +6,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,13 +16,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -55,6 +61,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,8 +87,8 @@ import cn.sysu.kcb.domain.WeekMask
 import cn.sysu.kcb.notify.ClassAlarmScheduler
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.course.CourseDetailSheet
-import cn.sysu.kcb.ui.theme.KcbMotion
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import java.time.LocalDate
 
 private val dayNames = listOf("一", "二", "三", "四", "五", "六", "日")
@@ -145,6 +152,36 @@ fun TimetableScreen(
             semesterStartMillis = snapshot.semester?.startMillis ?: 0L,
         )
     }
+    val pageCount = maxWeek.coerceAtLeast(1)
+    val pagerState = rememberPagerState(
+        initialPage = (selectedWeek - 1).coerceIn(0, pageCount - 1),
+        pageCount = { pageCount },
+    )
+    var syncingPager by remember { mutableStateOf(false) }
+    LaunchedEffect(selectedWeek, pageCount) {
+        val target = (selectedWeek - 1).coerceIn(0, pageCount - 1)
+        if (pagerState.currentPage != target) {
+            syncingPager = true
+            if (userPickedWeek) pagerState.animateScrollToPage(target) else pagerState.scrollToPage(target)
+            syncingPager = false
+        }
+    }
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }
+            .distinctUntilChanged()
+            .collect { page ->
+                if (syncingPager || selectedWeek <= 0) return@collect
+                val week = page + 1
+                if (week != selectedWeek) {
+                    userPickedWeek = true
+                    selectedWeek = week
+                }
+            }
+    }
+    val sheetBottomInset = WindowInsets.safeDrawing
+        .union(WindowInsets.systemBars)
+        .asPaddingValues()
+        .calculateBottomPadding()
 
     Scaffold(
         topBar = {
@@ -286,18 +323,12 @@ fun TimetableScreen(
                                 TextButton(onClick = onLogin) { Text("去登录") }
                             }
                         } else {
-                            AnimatedContent(
-                                targetState = selectedWeek,
+                            HorizontalPager(
+                                state = pagerState,
                                 modifier = Modifier.fillMaxSize(),
-                                transitionSpec = {
-                                    if (initialState == 0 || targetState == 0) {
-                                        fadeIn() togetherWith fadeOut()
-                                    } else {
-                                        KcbMotion.weekPage(targetState > initialState)
-                                    }
-                                },
-                                label = "weekPage",
-                            ) { weekNo ->
+                                beyondViewportPageCount = 1,
+                            ) { page ->
+                                val weekNo = page + 1
                                 val weekEntity = snapshot.weeks.firstOrNull { it.weekly == weekNo }
                                 TimetableGrid(
                                     periods = snapshot.periods,
@@ -323,6 +354,7 @@ fun TimetableScreen(
                     course = course,
                     periods = snapshot.periods,
                     onDismiss = { viewingCourse = null },
+                    bottomInset = sheetBottomInset,
                 )
             }
         }

@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,6 +26,7 @@ import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.sysu.kcb.data.local.CourseEntity
@@ -39,6 +39,7 @@ fun CourseDetailSheet(
     course: CourseEntity,
     periods: List<PeriodEntity>,
     onDismiss: () -> Unit,
+    bottomInset: Dp = 0.dp,
 ) {
     val start = periods.firstOrNull { it.sectionNumber == course.startPeriod }?.startTime.orEmpty()
     val end = periods.firstOrNull { it.sectionNumber == course.endPeriod }?.endTime.orEmpty()
@@ -54,9 +55,8 @@ fun CourseDetailSheet(
         Column(
             Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 20.dp),
+                .padding(bottom = bottomInset.coerceAtLeast(48.dp) + 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
