@@ -138,16 +138,31 @@ class ClassAlarmScheduler(private val context: Context) {
         const val EXTRA_BODY = "body"
         const val EXTRA_CHANNEL = "channel"
 
-        fun resolveWeek(date: LocalDate, weeks: List<WeekEntity>): Int? {
+        fun resolveWeek(date: LocalDate, weeks: List<WeekEntity>, semesterStartMillis: Long = 0): Int? {
             for (week in weeks) {
                 val start = week.startDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: continue
                 val end = week.endDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: continue
                 if (!date.isBefore(start) && !date.isAfter(end)) return week.weekly
             }
-            val known = weeks.firstOrNull { !it.startDate.isNullOrBlank() } ?: return null
-            val start = runCatching { LocalDate.parse(known.startDate) }.getOrNull() ?: return null
-            val diff = ChronoUnit.WEEKS.between(start, date).toInt()
-            return known.weekly + diff
+            val dated = weeks.filter { !it.startDate.isNullOrBlank() }
+            val known = dated.minByOrNull { it.weekly }
+            if (known != null) {
+                val start = runCatching { LocalDate.parse(known.startDate) }.getOrNull()
+                if (start != null) {
+                    val diff = ChronoUnit.WEEKS.between(start, date).toInt()
+                    val week = known.weekly + diff
+                    val max = weeks.maxOfOrNull { it.weekly } ?: WeekMask.MAX_WEEK
+                    if (week in 1..max) return week
+                }
+            }
+            if (semesterStartMillis > 0) {
+                val start = java.time.Instant.ofEpochMilli(semesterStartMillis)
+                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                val week = ChronoUnit.WEEKS.between(start, date).toInt() + 1
+                val max = weeks.maxOfOrNull { it.weekly } ?: WeekMask.MAX_WEEK
+                if (week in 1..max) return week
+            }
+            return null
         }
     }
 }

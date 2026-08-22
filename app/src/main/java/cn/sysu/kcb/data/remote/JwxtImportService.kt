@@ -2,6 +2,7 @@ package cn.sysu.kcb.data.remote
 
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.ExamEntity
+import cn.sysu.kcb.data.local.ExamWeekEntity
 import cn.sysu.kcb.data.local.PeriodEntity
 import cn.sysu.kcb.data.local.RawImportEntity
 import cn.sysu.kcb.data.local.SemesterEntity
@@ -11,6 +12,7 @@ import cn.sysu.kcb.data.prefs.CookieStore
 import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.repo.TimetableRepository
 import cn.sysu.kcb.domain.CourseColors
+import cn.sysu.kcb.domain.SemesterRange
 import cn.sysu.kcb.domain.WeekMask
 import cn.sysu.kcb.domain.cleanJwxt
 import kotlinx.coroutines.Dispatchers
@@ -37,176 +39,269 @@ class JwxtImportService(
     private val repo: TimetableRepository,
     private val settings: SettingsRepository,
 ) {
-    suspend fun isLoggedIn(): Boolean = withContext(Dispatchers.IO) {
+    suspend fun isLoggedIn(): Boolean = checkSession().status == SessionStatus.Valid
+
+    suspend fun checkSession(): SessionCheckResult = withContext(Dispatchers.IO) {
         cookies.syncFromWebView()
-        if (!cookies.hasSession()) return@withContext false
+        if (!cookies.hasSession()) return@withContext SessionCheckResult(SessionStatus.LoggedOut)
         runCatching {
-            val body = api.loginStatus()
+            val body = api.showNewAcadlist()
             requireOk(body)
-            true
-        }.getOrDefault(false)
+            SessionCheckResult(SessionStatus.Valid)
+        }.getOrElse { error ->
+            when (error) {
+                is SessionExpiredException -> SessionCheckResult(SessionStatus.Expired, error.message.orEmpty())
+                else -> SessionCheckResult(SessionStatus.Unreachable, error.message.orEmpty())
+            }
+        }
     }
 
-    suspend fun importAll(semesterOverride: String? = null): String = withContext(Dispatchers.IO) {
+    suspend fun importAll(semesterOverride: String? = null): String =
+        importAllYears(onlyCurrent = semesterOverride != null, semesterOverride = semesterOverride)
+
+    suspend fun importAllYears(
+        onlyCurrent: Boolean = false,
+        semesterOverride: String? = null,
+        onProgress: suspend (String) -> Unit = {},
+    ): String = withContext(Dispatchers.IO) {
         cookies.syncFromWebView()
         if (!cookies.hasSession()) throw SessionExpiredException()
-        val status = api.loginStatus()
-        saveRaw("login/status", semesterOverride.orEmpty(), status)
-        requireOk(status)
-
+        onProgress("正在验证登录…")
         val current = api.showNewAcadlist()
         saveRaw("showNewAcadlist", "", current)
         requireOk(current)
         val currentObj = dataObject(current)
-        val currentSem = semesterOverride
-            ?: currentObj.str("acadYearSemester").ifBlank { error("无法读取当前学年学期") }
+        val jwxtCurrent = currentObj.str("acadYearSemester").ifBlank { error("无法读取当前学年学期") }
+        val focus = semesterOverride?.ifBlank { null } ?: jwxtCurrent
 
-        val semester = SemesterEntity(
-            acadYearSemester = currentSem,
-            acadYear = currentObj.str("acadYear").ifBlank { currentSem },
-            acadSemester = currentObj.int("acadSemester"),
-            startMillis = currentObj.long("acadStartdate"),
-            endMillis = currentObj.long("acadEnddate"),
-            isCurrent = semesterOverride == null || semesterOverride == currentObj.str("acadYearSemester"),
-        )
-        repo.upsertSemester(semester)
-
-        val box = api.findAcadyeartermNamesBox()
-        saveRaw("findAcadyeartermNamesBox", currentSem, box)
-        requireOk(box)
-        dataArray(box).forEach { item ->
-            val obj = item.jsonObject
-            val id = obj.str("acadYearSemester")
-            if (id.isNotBlank() && id != currentSem) {
-                repo.upsertSemester(
-                    SemesterEntity(
-                        acadYearSemester = id,
-                        acadYear = obj.str("acadYear").ifBlank { id },
-                        acadSemester = obj.str("acadYear").toIntOrNull() ?: 0,
-                        startMillis = 0,
-                        endMillis = 0,
-                        isCurrent = false,
-                    ),
-                )
-            }
+        val listed = runCatching {
+            val box = api.findAcadyeartermNamesBox()
+            saveRaw("findAcadyeartermNamesBox", jwxtCurrent, box)
+            dataArray(box).map { it.jsonObject.str("acadYearSemester") }.filter { it.isNotBlank() }
+        }.getOrDefault(emptyList())
+        val generated = SemesterRange.span(jwxtCurrent, before = 8, after = 8)
+        val jwxtOrd = SemesterRange.ordinal(jwxtCurrent)
+        val extra = listed.filter { sem ->
+            val ord = SemesterRange.ordinal(sem) ?: return@filter false
+            jwxtOrd != null && kotlin.math.abs(ord - jwxtOrd) <= 8
+        }
+        val targets = if (onlyCurrent) {
+            listOf(focus)
+        } else {
+            (generated + extra + focus).distinct().sortedByDescending { SemesterRange.ordinal(it) ?: 0 }
         }
 
-        val weekdays = api.weekdays()
-        saveRaw("findcodedataNames", currentSem, weekdays)
-        requireOk(weekdays)
-        repo.replaceWeekdays(
-            dataArray(weekdays).map {
-                val o = it.jsonObject
-                WeekdayEntity(o.str("dataNumber"), o.str("dataName"))
-            },
-        )
-
-        val periodsResp = api.minorName(currentSem)
-        saveRaw("minorName", currentSem, periodsResp)
-        requireOk(periodsResp)
-        repo.replacePeriods(
-            currentSem,
-            dataArray(periodsResp).map {
-                val o = it.jsonObject
-                PeriodEntity(
-                    acadYearSemester = currentSem,
-                    sectionNumber = o.int("sectionNumber"),
-                    minorName = o.str("minorName"),
-                    startTime = o.str("startTime"),
-                    endTime = o.str("endTime"),
-                    bigSection = o.str("bigSection"),
-                    bigSectionName = o.str("bigSectionName"),
-                )
-            },
-        )
-
-        val weeklyResp = api.weeklyList(currentSem)
-        saveRaw("school-calender/weekly", currentSem, weeklyResp)
-        requireOk(weeklyResp)
-        val weeklyData = dataObject(weeklyResp)
-        val weeklyList = weeklyData["weeklyList"]?.jsonArray.orEmpty()
-        val nowWeekly = weeklyData.str("nowWeekly").toIntOrNull()
-            ?: weeklyData.int("nowTimeWeekly").takeIf { it > 0 }
-            ?: 1
-        val weeks = mutableListOf<WeekEntity>()
-        for (item in weeklyList) {
-            val o = item.jsonObject
-            val weekly = o.int("weekly")
-            val cal = runCatching { api.schoolCalender(currentSem, weekly) }.getOrNull()
-            if (cal != null) {
-                saveRaw("school-calender/$weekly", currentSem, cal)
-            }
-            val range = cal?.let { runCatching { dataObject(it) }.getOrNull() }
-            weeks += WeekEntity(
-                acadYearSemester = currentSem,
-                weekly = weekly,
-                weeklyName = o.str("weeklyName").ifBlank { "第${weekly}周" },
-                startDate = range?.str("startTime"),
-                endDate = range?.str("endTime"),
+        onProgress("正在读取节次和星期…")
+        runCatching {
+            val weekdays = api.weekdays()
+            saveRaw("findcodedataNames", jwxtCurrent, weekdays)
+            requireOk(weekdays)
+            repo.replaceWeekdays(
+                dataArray(weekdays).map {
+                    val o = it.jsonObject
+                    WeekdayEntity(o.str("dataNumber"), o.str("dataName"))
+                },
             )
         }
-        repo.replaceWeeks(currentSem, weeks)
+
+        repo.clearCurrentFlag()
+        var importedCount = 0
+        for ((index, sem) in targets.withIndex()) {
+            onProgress("正在导入 $sem（${index + 1}/${targets.size}）")
+            val ok = runCatching {
+                importSemester(
+                    semester = sem,
+                    currentMeta = if (sem == jwxtCurrent) currentObj else null,
+                    isCurrent = sem == jwxtCurrent,
+                )
+            }.isSuccess
+            if (ok) importedCount++
+        }
+
+        if (importedCount == 0) throw ImportFailedException("没有成功导入任何学期，请重新登录后再试")
+        val previous = settings.snapshot().selectedSemester
+        settings.setSelectedSemester(previous.takeIf { it.isNotBlank() } ?: jwxtCurrent)
+        onProgress("导入完成")
+        jwxtCurrent
+    }
+
+    private suspend fun importSemester(
+        semester: String,
+        currentMeta: JsonObject?,
+        isCurrent: Boolean,
+    ) {
+        repo.upsertSemester(
+            SemesterEntity(
+                acadYearSemester = semester,
+                acadYear = currentMeta?.str("acadYear").orEmpty().ifBlank { semester },
+                acadSemester = currentMeta?.int("acadSemester")
+                    ?: semester.substringAfter("-").toIntOrNull() ?: 0,
+                startMillis = currentMeta?.long("acadStartdate") ?: 0L,
+                endMillis = currentMeta?.long("acadEnddate") ?: 0L,
+                isCurrent = isCurrent,
+            ),
+        )
+
+        val periodsResp = api.minorName(semester)
+        saveRaw("minorName", semester, periodsResp)
+        if (runCatching { requireOk(periodsResp); true }.getOrDefault(false)) {
+            repo.replacePeriods(
+                semester,
+                dataArray(periodsResp).map {
+                    val o = it.jsonObject
+                    PeriodEntity(
+                        acadYearSemester = semester,
+                        sectionNumber = o.int("sectionNumber"),
+                        minorName = o.str("minorName"),
+                        startTime = o.str("startTime"),
+                        endTime = o.str("endTime"),
+                        bigSection = o.str("bigSection"),
+                        bigSectionName = o.str("bigSectionName"),
+                    )
+                },
+            )
+        }
+
+        val weeklyResp = api.weeklyList(semester)
+        saveRaw("school-calender/weekly", semester, weeklyResp)
+        if (runCatching { requireOk(weeklyResp); true }.getOrDefault(false)) {
+            val weeklyData = dataObject(weeklyResp)
+            val weeklyList = weeklyData["weeklyList"]?.jsonArray.orEmpty()
+            val nowWeekly = weeklyData.str("nowWeekly").toIntOrNull()
+                ?: weeklyData.int("nowTimeWeekly").takeIf { it > 0 }
+                ?: 1
+            val anchor = runCatching { api.schoolCalender(semester, nowWeekly) }.getOrNull()
+            if (anchor != null) saveRaw("school-calender/$nowWeekly", semester, anchor)
+            val range = anchor?.let { runCatching { dataObject(it) }.getOrNull() }
+            val anchorStart = range?.str("startTime")?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+            val anchorEnd = range?.str("endTime")?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+            val weeks = weeklyList.map { item ->
+                val o = item.jsonObject
+                val weekly = o.int("weekly")
+                val offset = (weekly - nowWeekly).toLong()
+                WeekEntity(
+                    acadYearSemester = semester,
+                    weekly = weekly,
+                    weeklyName = o.str("weeklyName").ifBlank { "第${weekly}周" },
+                    startDate = anchorStart?.plusWeeks(offset)?.toString(),
+                    endDate = anchorEnd?.plusWeeks(offset)?.toString(),
+                )
+            }
+            repo.replaceWeeks(semester, weeks)
+
+            if (isCurrent) {
+                runCatching {
+                    val weeklyTable = api.selectStudentClassTable(semester, nowWeekly)
+                    saveRaw("selectStudentClassTable", semester, weeklyTable)
+                }
+                runCatching {
+                    val unknownBody = buildJsonObject {
+                        put("pageNo", 1)
+                        put("pageSize", 10)
+                        put("total", true)
+                        put("param", buildJsonObject { put("schoolSemester", semester) })
+                    }
+                    saveRaw("class/unknown", semester, api.classUnknown(unknownBody))
+                }
+                runCatching {
+                    val mediationBody = buildJsonObject {
+                        put("pageNo", 1)
+                        put("pageSize", 10)
+                        put("total", true)
+                        put("param", buildJsonObject { put("yearTerm", semester) })
+                    }
+                    saveRaw("mediationApply/timetable/list", semester, api.mediationList(mediationBody))
+                }
+            }
+        }
 
         val queryBody = buildJsonObject {
-            put("acadYear", currentSem)
+            put("acadYear", semester)
             put("submitFlag", "1")
             put("nothroughCourseFlag", "1")
         }
         val table = api.studentQuery(queryBody)
-        saveRaw("studentQuery", currentSem, table)
+        saveRaw("studentQuery", semester, table)
         requireOk(table)
-        val imported = parseCourses(currentSem, dataObject(table))
-        repo.replaceImportedCourses(currentSem, imported)
-
-        runCatching {
-            val weeklyTable = api.selectStudentClassTable(currentSem, nowWeekly)
-            saveRaw("selectStudentClassTable", currentSem, weeklyTable)
+        repo.replaceImportedCourses(semester, parseCourses(semester, dataObject(table)))
+        runCatching { importExams(semester) }
+        if (isCurrent) {
+            previousSemester(semester)?.let { prev ->
+                runCatching { importExams(prev) }
+            }
         }
-
-        val unknownBody = buildJsonObject {
-            put("pageNo", 1)
-            put("pageSize", 10)
-            put("total", true)
-            put("param", buildJsonObject { put("schoolSemester", currentSem) })
-        }
-        saveRaw("class/unknown", currentSem, api.classUnknown(unknownBody))
-
-        val mediationBody = buildJsonObject {
-            put("pageNo", 1)
-            put("pageSize", 10)
-            put("total", true)
-            put("param", buildJsonObject { put("yearTerm", currentSem) })
-        }
-        saveRaw("mediationApply/timetable/list", currentSem, api.mediationList(mediationBody))
-
-        importExams(currentSem)
-        previousSemester(currentSem)?.let { prev ->
-            runCatching { importExams(prev) }
-        }
-
-        settings.setSelectedSemester(currentSem)
-        currentSem
     }
 
     private suspend fun importExams(semester: String) {
         val weeksResp = api.queryExamWeekName(semester)
         saveRaw("queryExamWeekName", semester, weeksResp)
         requireOk(weeksResp)
+        val weekItems = dataArray(weeksResp).map { it.jsonObject }.filter { it.str("examWeekId").isNotBlank() }
+        repo.replaceExamWeeks(
+            semester,
+            weekItems.map { week ->
+                ExamWeekEntity(
+                    acadYearSemester = semester,
+                    examWeekId = week.str("examWeekId"),
+                    examWeekName = week.str("examWeekName"),
+                    startDate = week.str("startDate"),
+                    endDate = week.str("endDate"),
+                )
+            },
+        )
         val exams = mutableListOf<ExamEntity>()
-        for (item in dataArray(weeksResp)) {
-            val week = item.jsonObject
+        for (week in weekItems) {
             val body = buildJsonObject {
                 put("acadYear", semester)
                 put("examWeekId", week.str("examWeekId"))
                 put("examWeekName", week.str("examWeekName"))
                 put("examDate", "")
             }
-            val examResp = api.queryStuExamInfo(body)
+            val examResp = runCatching { api.queryStuExamInfo(body) }.getOrNull() ?: continue
             saveRaw("queryStuEaxmInfo/${week.str("examWeekId")}", semester, examResp)
-            requireOk(examResp)
-            exams += parseExams(semester, week.str("examWeekId"), examResp)
+            if (runCatching { requireOk(examResp); true }.getOrDefault(false)) {
+                exams += parseExams(semester, week.str("examWeekId"), examResp)
+            }
         }
-        repo.replaceExams(semester, exams)
+        repo.replaceExams(semester, exams.distinctBy { it.examIndex ?: "${it.subjectName}|${it.examDate}|${it.startTime}" })
+    }
+
+    private fun parseExams(semester: String, weekId: String, resp: JsonObject): List<ExamEntity> {
+        return collectExamObjects(resp["data"]).mapNotNull { el ->
+            val name = el.str("examSubjectName").ifBlank { return@mapNotNull null }
+            ExamEntity(
+                acadYearSemester = el.str("acadYear").ifBlank { semester },
+                examIndex = el.str("index").ifBlank { null },
+                subjectName = name,
+                examDate = el.str("examDate").ifBlank { el.str("examDateStr") },
+                startTime = el.str("startTime"),
+                endTime = el.str("endTime"),
+                duration = el.str("duration"),
+                classroom = el.str("classroomNumber"),
+                examMode = el.str("examMode"),
+                examStage = el.str("examStage"),
+                examWeekName = el.str("examWeekName"),
+                examWeekId = weekId.ifBlank { el.str("examWeekId") },
+                weekly = el.int("weekly"),
+                dayOfWeek = el.str("week").toIntOrNull() ?: el.int("week"),
+                startPeriod = el.int("startClassTimes"),
+                endPeriod = el.int("endClassTimes"),
+                extraJson = el.toString(),
+            )
+        }
+    }
+
+    private fun collectExamObjects(el: JsonElement?): List<JsonObject> {
+        if (el == null || el is JsonNull) return emptyList()
+        return when (el) {
+            is JsonArray -> el.flatMap { collectExamObjects(it) }
+            is JsonObject -> when {
+                el.containsKey("examSubjectName") -> listOf(el)
+                el.containsKey("timetable") -> collectExamObjects(el["timetable"])
+                else -> el.values.flatMap { collectExamObjects(it) }
+            }
+            else -> emptyList()
+        }
     }
 
     private fun parseCourses(semester: String, data: JsonObject): List<CourseEntity> {
@@ -244,43 +339,6 @@ class JwxtImportService(
             }
         }
         return result.distinctBy { listOf(it.classesId, it.dayOfWeek, it.startPeriod, it.weeksMask) }
-    }
-
-    private fun parseExams(semester: String, weekId: String, resp: JsonObject): List<ExamEntity> {
-        val dataEl = resp["data"] ?: return emptyList()
-        val blocks = when (dataEl) {
-            is JsonArray -> dataEl
-            is JsonObject -> {
-                val timetable = dataEl["timetable"]
-                if (timetable is JsonObject) {
-                    timetable.values.filterIsInstance<JsonArray>().flatten()
-                } else emptyList()
-            }
-            else -> emptyList()
-        }
-        return blocks.mapNotNull { el ->
-            if (el !is JsonObject) return@mapNotNull null
-            val name = el.str("examSubjectName").ifBlank { return@mapNotNull null }
-            ExamEntity(
-                acadYearSemester = el.str("acadYear").ifBlank { semester },
-                examIndex = el.str("index").ifBlank { null },
-                subjectName = name,
-                examDate = el.str("examDate").ifBlank { el.str("examDateStr") },
-                startTime = el.str("startTime"),
-                endTime = el.str("endTime"),
-                duration = el.str("duration"),
-                classroom = el.str("classroomNumber"),
-                examMode = el.str("examMode"),
-                examStage = el.str("examStage"),
-                examWeekName = el.str("examWeekName"),
-                examWeekId = weekId,
-                weekly = el.int("weekly"),
-                dayOfWeek = el.str("week").toIntOrNull() ?: el.int("week"),
-                startPeriod = el.int("startClassTimes"),
-                endPeriod = el.int("endClassTimes"),
-                extraJson = el.toString(),
-            )
-        }
     }
 
     private suspend fun saveRaw(endpoint: String, semester: String, body: JsonObject) {
@@ -343,14 +401,6 @@ class JwxtImportService(
         return when (el) {
             is JsonPrimitive -> el.longOrNull ?: el.contentOrNull?.toLongOrNull() ?: 0L
             else -> 0L
-        }
-    }
-
-    private fun JsonArray.flatten(): List<JsonElement> = flatMap { el ->
-        when (el) {
-            is JsonArray -> el
-            JsonNull -> emptyList()
-            else -> listOf(el)
         }
     }
 }

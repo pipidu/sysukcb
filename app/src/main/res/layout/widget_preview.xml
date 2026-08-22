@@ -2,12 +2,21 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:gravity="center"
-    android:background="#FF8C1A1A">
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="@drawable/widget_background">
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/widget_today"
-        android:textColor="#FFFFFFFF"
+        android:text="@string/app_name"
+        android:textColor="#8C1A1A"
+        android:textStyle="bold"
         android:textSize="16sp" />
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="今日课程"
+        android:textColor="#667085"
+        android:textSize="12sp" />
 </LinearLayout>

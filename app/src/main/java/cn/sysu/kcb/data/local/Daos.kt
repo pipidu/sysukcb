@@ -22,6 +22,9 @@ interface SemesterDao {
     @Query("SELECT * FROM semesters WHERE isCurrent = 1 LIMIT 1")
     suspend fun current(): SemesterEntity?
 
+    @Query("UPDATE semesters SET isCurrent = 0")
+    suspend fun clearCurrentFlag()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: SemesterEntity)
 
@@ -116,6 +119,24 @@ interface ExamDao {
     suspend fun deleteSemester(sem: String)
 
     @Query("DELETE FROM exams")
+    suspend fun clear()
+}
+
+@Dao
+interface ExamWeekDao {
+    @Query("SELECT * FROM exam_weeks WHERE acadYearSemester = :sem ORDER BY startDate, examWeekName")
+    fun observe(sem: String): Flow<List<ExamWeekEntity>>
+
+    @Query("SELECT * FROM exam_weeks ORDER BY acadYearSemester DESC, startDate")
+    fun observeAll(): Flow<List<ExamWeekEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(items: List<ExamWeekEntity>)
+
+    @Query("DELETE FROM exam_weeks WHERE acadYearSemester = :sem")
+    suspend fun deleteSemester(sem: String)
+
+    @Query("DELETE FROM exam_weeks")
     suspend fun clear()
 }
 

@@ -12,6 +12,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -54,15 +58,19 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.theme.PresetThemeColors
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val importing by viewModel.importing.collectAsStateWithLifecycle()
     val loggedIn by viewModel.loggedIn.collectAsStateWithLifecycle()
+    val checkingSession by viewModel.checkingSession.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showColor by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        viewModel.checkSession(silentIfValid = true)
+    }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching {
@@ -79,20 +87,40 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(bottom = 24.dp),
         ) {
-            ListItem(
-                headlineContent = { Text(if (loggedIn) "已登录教务系统" else "未登录") },
-                supportingContent = { Text(if (loggedIn) "可重新导入最新课表和考试" else "通过 WebView 登录后自动导入") },
-                trailingContent = {
-                    Button(onClick = onLogin) { Text(if (loggedIn) "重新登录" else "登录") }
-                },
-            )
-            Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { viewModel.importFromJwxt() }, enabled = !importing && loggedIn) {
-                    Text(if (importing) "导入中…" else "从教务导入")
+            Card(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("教务登录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        when {
+                            checkingSession -> "正在检查登录…"
+                            loggedIn -> "登录有效，可导入课表"
+                            else -> "未登录或已过期，请重新登录后再导入"
+                        },
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = onLogin) { Text(if (loggedIn) "重新登录" else "登录") }
+                        if (loggedIn) OutlinedButton(onClick = { viewModel.logout() }) { Text("退出登录") }
+                    }
                 }
-                if (loggedIn) OutlinedButton(onClick = { viewModel.logout() }) { Text("退出登录") }
             }
-            Spacer(Modifier.height(8.dp))
+            Card(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("导入课表", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "选中学期只导入当前课表页所选学年；全部导入会拉取当前学期前后各 8 个学期（含已公布的未来课表）。",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { viewModel.importFromJwxt() }, enabled = !importing && loggedIn) {
+                            Text(if (importing) "导入中…" else "导入选中学期")
+                        }
+                        Button(onClick = { viewModel.importAllYears() }, enabled = !importing && loggedIn) {
+                            Text("全部导入")
+                        }
+                    }
+                }
+            }
             ListItem(
                 headlineContent = { Text("导出课表") },
                 supportingContent = { Text("生成 JSON 文件，分享给同学用本 App 导入") },

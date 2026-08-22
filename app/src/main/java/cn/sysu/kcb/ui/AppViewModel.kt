@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import cn.sysu.kcb.KcbApp
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.prefs.UserSettings
+import cn.sysu.kcb.data.remote.SessionCheckResult
 import cn.sysu.kcb.data.remote.SessionExpiredException
+import cn.sysu.kcb.data.remote.SessionStatus
 import cn.sysu.kcb.widget.WidgetData
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -25,10 +27,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     val message = MutableStateFlow<String?>(null)
     val importing = MutableStateFlow(false)
+    val importProgress = MutableStateFlow("")
     val loggedIn = MutableStateFlow(container.cookies.hasSession())
+    val checkingSession = MutableStateFlow(false)
 
     fun consumeMessage() {
         message.value = null
+    }
+
+    fun checkSession(silentIfValid: Boolean = false) = viewModelScope.launch {
+        checkingSession.value = true
+        val result = runCatching { container.importer.checkSession() }.getOrElse {
+            SessionCheckResult(SessionStatus.Unreachable, it.message.orEmpty())
+        }
+        loggedIn.value = result.status == SessionStatus.Valid
+        message.value = when (result.status) {
+            SessionStatus.Valid -> if (silentIfValid) null else "登录有效"
+            SessionStatus.LoggedOut -> if (silentIfValid) null else "尚未登录教务系统"
+            SessionStatus.Expired -> "登录已过期，请重新登录"
+            SessionStatus.Unreachable -> "无法检查登录${if (result.detail.isBlank()) "" else "：${result.detail}"}"
+        }
+        checkingSession.value = false
     }
 
     fun setThemeColor(color: Long) = viewModelScope.launch {
@@ -62,12 +81,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         WidgetData.refreshAll(getApplication())
     }
 
-    fun importFromJwxt(semester: String? = null) = viewModelScope.launch {
+    fun importFromJwxt(semester: String? = null) = importInternal(
+        onlyCurrent = true,
+        semester = semester ?: settings.value.selectedSemester.ifBlank { null },
+    )
+
+    fun importAllYears() = importInternal(onlyCurrent = false)
+
+    private fun importInternal(onlyCurrent: Boolean, semester: String? = null) = viewModelScope.launch {
         importing.value = true
-        runCatching { container.importer.importAll(semester) }
+        importProgress.value = "正在连接教务系统…"
+        runCatching {
+            container.importer.importAllYears(
+                onlyCurrent = onlyCurrent,
+                semesterOverride = semester,
+            ) { importProgress.value = it }
+        }
             .onSuccess {
                 loggedIn.value = true
-                message.value = "已导入 $it 的课表和考试"
+                message.value = if (onlyCurrent) "已导入 $it 的课表和考试" else "已导入前后各 8 学期课表，教务当前学期 $it"
                 refreshAlarms()
                 WidgetData.refreshAll(getApplication())
             }
@@ -79,6 +111,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         importing.value = false
+        importProgress.value = ""
     }
 
     fun importJson(text: String) = viewModelScope.launch {

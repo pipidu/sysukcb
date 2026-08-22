@@ -3,13 +3,11 @@ package cn.sysu.kcb.ui.timetable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,13 +19,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,6 +33,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,7 +46,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,10 +58,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.sysu.kcb.KcbApp
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.PeriodEntity
+import cn.sysu.kcb.data.local.SemesterEntity
+import cn.sysu.kcb.data.local.WeekEntity
+import cn.sysu.kcb.data.prefs.UserSettings
 import cn.sysu.kcb.data.repo.TimetableSnapshot
+import cn.sysu.kcb.domain.SemesterRange
 import cn.sysu.kcb.domain.WeekMask
 import cn.sysu.kcb.notify.ClassAlarmScheduler
 import cn.sysu.kcb.ui.AppViewModel
+import cn.sysu.kcb.ui.course.CourseDetailSheet
 import kotlinx.coroutines.flow.collectLatest
 import java.time.LocalDate
 
@@ -74,12 +81,24 @@ fun TimetableScreen(
     onLogin: () -> Unit,
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
-    val importing by viewModel.importing.collectAsStateWithLifecycle()
     val repo = KcbApp.instance.container.timetable
     val semesters by repo.semesters.collectAsStateWithLifecycle(emptyList())
     var snapshot by remember { mutableStateOf(TimetableSnapshot(null, emptyList(), emptyList(), emptyList())) }
-    val semester = settings.selectedSemester.ifBlank { semesters.firstOrNull()?.acadYearSemester.orEmpty() }
+    val semesterAnchor = remember(settings.selectedSemester, semesters) {
+        semesters.firstOrNull { it.isCurrent }?.acadYearSemester
+            ?: settings.selectedSemester.takeIf { it.isNotBlank() }
+            ?: SemesterRange.guessCurrent()
+    }
+    val semesterOptions = remember(semesterAnchor, semesters) {
+        (SemesterRange.span(semesterAnchor, before = 8, after = 8) + semesters.map { it.acadYearSemester }).distinct()
+    }
+    val semester = remember(settings.selectedSemester, semesters, semesterOptions) {
+        pickSemester(settings, semesters, semesterOptions)
+    }
     LaunchedEffect(semester) {
+        if (semester.isNotBlank() && semester != settings.selectedSemester) {
+            viewModel.setSemester(semester)
+        }
         if (semester.isBlank()) {
             snapshot = TimetableSnapshot(null, emptyList(), emptyList(), emptyList())
             return@LaunchedEffect
@@ -87,181 +106,392 @@ fun TimetableScreen(
         repo.timetableState(semester).collectLatest { snapshot = it }
     }
     var selectedWeek by rememberSaveable { mutableIntStateOf(0) }
-    LaunchedEffect(snapshot.weeks) {
-        if (selectedWeek == 0) {
-            selectedWeek = ClassAlarmScheduler.resolveWeek(LocalDate.now(), snapshot.weeks)
-                ?: snapshot.weeks.firstOrNull()?.weekly
-                ?: 1
+    var userPickedWeek by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(semester) { userPickedWeek = false }
+    LaunchedEffect(semester, snapshot.weeks, snapshot.semester?.startMillis, userPickedWeek) {
+        if (!userPickedWeek) {
+            selectedWeek = ClassAlarmScheduler.resolveWeek(
+                date = LocalDate.now(),
+                weeks = snapshot.weeks,
+                semesterStartMillis = snapshot.semester?.startMillis ?: 0L,
+            ) ?: snapshot.weeks.firstOrNull { it.weekly > 0 }?.weekly ?: 1
         }
     }
     val week = snapshot.weeks.firstOrNull { it.weekly == selectedWeek }
     var semesterMenu by remember { mutableStateOf(false) }
+    var moreMenu by remember { mutableStateOf(false) }
+    var editing by rememberSaveable { mutableStateOf(false) }
+    var viewingCourse by remember { mutableStateOf<CourseEntity?>(null) }
+    val maxWeek = snapshot.weeks.maxOfOrNull { it.weekly } ?: 30
 
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
                 title = {
                     Column {
-                        Text("课表", fontWeight = FontWeight.SemiBold)
                         Text(
-                            listOfNotNull(semester.ifBlank { null }, week?.weeklyName ?: "第${selectedWeek}周").joinToString(" · "),
+                            week?.weeklyName?.ifBlank { null } ?: "第${selectedWeek}周",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            lineHeight = 26.sp,
+                        )
+                        Text(
+                            semester.ifBlank { "课表" },
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
                         )
                     }
                 },
                 actions = {
                     Box {
-                        TextButton(onClick = { semesterMenu = true }) { Text(semester.ifBlank { "学年" }) }
+                        TextButton(onClick = { semesterMenu = true }) {
+                            Text(semester.ifBlank { "学年" }, color = MaterialTheme.colorScheme.onPrimary)
+                        }
                         DropdownMenu(expanded = semesterMenu, onDismissRequest = { semesterMenu = false }) {
-                            if (semesters.isEmpty()) {
-                                DropdownMenuItem(text = { Text("暂无学期数据") }, onClick = { semesterMenu = false })
-                            }
-                            semesters.forEach {
+                            semesterOptions.forEach { option ->
+                                val entity = semesters.firstOrNull { it.acadYearSemester == option }
                                 DropdownMenuItem(
-                                    text = { Text(it.acadYearSemester) },
+                                    text = { Text(buildString {
+                                        append(option)
+                                        if (entity?.isCurrent == true) append("（当前）")
+                                    }) },
                                     onClick = {
-                                        viewModel.setSemester(it.acadYearSemester)
+                                        userPickedWeek = false
+                                        viewModel.setSemester(option)
                                         semesterMenu = false
                                     },
                                 )
                             }
                         }
                     }
-                    IconButton(onClick = { selectedWeek = (selectedWeek - 1).coerceAtLeast(1) }) {
+                    IconButton(onClick = {
+                        userPickedWeek = true
+                        selectedWeek = (selectedWeek - 1).coerceAtLeast(1)
+                    }) {
                         Icon(Icons.Outlined.ChevronLeft, contentDescription = "上一周")
                     }
-                    IconButton(onClick = { selectedWeek = selectedWeek + 1 }) {
+                    IconButton(onClick = {
+                        userPickedWeek = true
+                        selectedWeek = (selectedWeek + 1).coerceAtMost(maxWeek)
+                    }) {
                         Icon(Icons.Outlined.ChevronRight, contentDescription = "下一周")
+                    }
+                    Box {
+                        IconButton(onClick = { moreMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "更多")
+                        }
+                        DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("添加课程") },
+                                leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
+                                onClick = {
+                                    moreMenu = false
+                                    editing = true
+                                    onAdd(LocalDate.now().dayOfWeek.value, 1, semester)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (editing) "退出编辑模式" else "进入编辑模式") },
+                                leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                                onClick = {
+                                    editing = !editing
+                                    moreMenu = false
+                                },
+                            )
+                        }
                     }
                 },
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { onAdd(LocalDate.now().dayOfWeek.value, 1, semester) }) {
-                Icon(Icons.Default.Add, contentDescription = "添加课程")
-            }
-        },
     ) { inner ->
         Box(Modifier.fillMaxSize().padding(inner)) {
-            if (importing) {
-                CircularProgressIndicator(Modifier.align(Alignment.Center))
-            } else if (snapshot.courses.isEmpty() && snapshot.weeks.isEmpty()) {
-                Column(
-                    modifier = Modifier.align(Alignment.Center).padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text("还没有课表", style = MaterialTheme.typography.titleMedium)
-                    Text("登录中山大学教务系统后即可自动导入", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), textAlign = TextAlign.Center)
-                    TextButton(onClick = onLogin) { Text("去登录") }
+            Column(Modifier.fillMaxSize()) {
+                if (editing) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "编辑模式：点击课程修改，点击空白格子添加",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        TextButton(onClick = { editing = false }) { Text("完成") }
+                    }
                 }
-            } else {
-                TimetableGrid(
+                Box(Modifier.weight(1f)) {
+                    if (snapshot.courses.isEmpty() && snapshot.weeks.isEmpty() && snapshot.periods.isEmpty() && !editing) {
+                        Column(
+                            modifier = Modifier.align(Alignment.Center).padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text("还没有课表", style = MaterialTheme.typography.titleMedium)
+                            Text("登录中山大学教务系统后即可自动导入，或打开右上角菜单添加课程", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), textAlign = TextAlign.Center)
+                            TextButton(onClick = onLogin) { Text("去登录") }
+                        }
+                    } else {
+                        TimetableGrid(
+                            periods = snapshot.periods,
+                            courses = snapshot.courses.filter { WeekMask.has(it.weeksMask, selectedWeek) },
+                            weekStart = resolveWeekStart(selectedWeek, week, snapshot.weeks, snapshot.semester?.startMillis ?: 0L),
+                            editing = editing,
+                            onCourse = { course ->
+                                if (editing) onEdit(course.id) else viewingCourse = course
+                            },
+                            onEmpty = if (editing) {
+                                { day, period -> onAdd(day, period, semester) }
+                            } else {
+                                null
+                            },
+                        )
+                    }
+                }
+            }
+            viewingCourse?.let { course ->
+                CourseDetailSheet(
+                    course = course,
                     periods = snapshot.periods,
-                    courses = snapshot.courses.filter { WeekMask.has(it.weeksMask, selectedWeek) },
-                    onCourse = onEdit,
-                    onEmpty = { day, period -> onAdd(day, period, semester) },
+                    onDismiss = { viewingCourse = null },
                 )
             }
         }
     }
 }
 
+private fun pickSemester(settings: UserSettings, semesters: List<SemesterEntity>, options: List<String>): String {
+    val saved = settings.selectedSemester
+    if (saved.isNotBlank() && (options.contains(saved) || semesters.any { it.acadYearSemester == saved })) return saved
+    return semesters.firstOrNull { it.isCurrent }?.acadYearSemester
+        ?: options.firstOrNull().orEmpty()
+        ?: saved
+}
+
+private fun resolveWeekStart(
+    selectedWeek: Int,
+    week: WeekEntity?,
+    weeks: List<WeekEntity>,
+    semesterStartMillis: Long,
+): LocalDate? {
+    week?.startDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { return mondayOf(it) }
+    val dated = weeks.mapNotNull { item ->
+        val start = item.startDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@mapNotNull null
+        item.weekly to mondayOf(start)
+    }
+    dated.minByOrNull { it.first }?.let { (weekly, start) ->
+        return start.plusWeeks((selectedWeek - weekly).toLong())
+    }
+    if (semesterStartMillis > 0) {
+        val start = java.time.Instant.ofEpochMilli(semesterStartMillis)
+            .atZone(java.time.ZoneId.systemDefault())
+            .toLocalDate()
+        return mondayOf(start).plusWeeks((selectedWeek - 1).coerceAtLeast(0).toLong())
+    }
+    return mondayOf(LocalDate.now())
+}
+
+private fun mondayOf(date: LocalDate): LocalDate = date.minusDays((date.dayOfWeek.value - 1).toLong())
+
+private val compactName = TextStyle(
+    fontSize = 10.sp,
+    lineHeight = 12.sp,
+    fontWeight = FontWeight.SemiBold,
+    platformStyle = PlatformTextStyle(includeFontPadding = false),
+    lineHeightStyle = LineHeightStyle(
+        alignment = LineHeightStyle.Alignment.Center,
+        trim = LineHeightStyle.Trim.Both,
+    ),
+)
+private val compactMeta = TextStyle(
+    fontSize = 8.sp,
+    lineHeight = 10.sp,
+    platformStyle = PlatformTextStyle(includeFontPadding = false),
+    lineHeightStyle = LineHeightStyle(
+        alignment = LineHeightStyle.Alignment.Center,
+        trim = LineHeightStyle.Trim.Both,
+    ),
+)
+private val compactPeriod = TextStyle(
+    fontSize = 11.sp,
+    lineHeight = 12.sp,
+    fontWeight = FontWeight.Medium,
+    platformStyle = PlatformTextStyle(includeFontPadding = false),
+    lineHeightStyle = LineHeightStyle(
+        alignment = LineHeightStyle.Alignment.Center,
+        trim = LineHeightStyle.Trim.Both,
+    ),
+)
+private val compactTime = TextStyle(
+    fontSize = 8.sp,
+    lineHeight = 9.sp,
+    platformStyle = PlatformTextStyle(includeFontPadding = false),
+    lineHeightStyle = LineHeightStyle(
+        alignment = LineHeightStyle.Alignment.Center,
+        trim = LineHeightStyle.Trim.Both,
+    ),
+)
+
 @Composable
 private fun TimetableGrid(
     periods: List<PeriodEntity>,
     courses: List<CourseEntity>,
-    onCourse: (Long) -> Unit,
-    onEmpty: (Int, Int) -> Unit,
+    weekStart: LocalDate?,
+    editing: Boolean,
+    onCourse: (CourseEntity) -> Unit,
+    onEmpty: ((Int, Int) -> Unit)?,
 ) {
-    val periodH = 64.dp
-    val headerH = 36.dp
-    val timeW = 42.dp
-    val rows = periods.ifEmpty { (1..11).map { PeriodEntity(sectionNumber = it, acadYearSemester = "", minorName = "第${it}节", startTime = "", endTime = "", bigSection = "", bigSectionName = "") } }
+    val periodH = 58.dp
+    val headerH = 40.dp
+    val timeW = 40.dp
+    val today = LocalDate.now()
+    val rows = periods.ifEmpty {
+        (1..11).map {
+            PeriodEntity(
+                sectionNumber = it,
+                acadYearSemester = "",
+                minorName = "第${it}节",
+                startTime = "",
+                endTime = "",
+                bigSection = "",
+                bigSectionName = "",
+            )
+        }
+    }
     val vScroll = rememberScrollState()
-    val hScroll = rememberScrollState()
-    Column(Modifier.fillMaxSize().verticalScroll(vScroll).horizontalScroll(hScroll).padding(8.dp)) {
-        BoxWithConstraints(Modifier.width(timeW + 72.dp * 7)) {
-            val colW = (maxWidth - timeW) / 7
-            val gridH = headerH + periodH * rows.size
-            Box(Modifier.height(gridH).width(maxWidth)) {
-                Row(Modifier.fillMaxWidth().height(headerH), verticalAlignment = Alignment.CenterVertically) {
-                    Spacer(Modifier.width(timeW))
-                    dayNames.forEachIndexed { index, name ->
-                        val today = LocalDate.now().dayOfWeek.value == index + 1
+    BoxWithConstraints(Modifier.fillMaxSize().verticalScroll(vScroll)) {
+        val colW = (maxWidth - timeW) / 7
+        val gridH = headerH + periodH * rows.size
+        Box(Modifier.height(gridH).fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().height(headerH), verticalAlignment = Alignment.CenterVertically) {
+                Column(
+                    Modifier.width(timeW).height(headerH),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        "${(weekStart ?: today).monthValue}月",
+                        style = compactPeriod,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                dayNames.forEachIndexed { index, name ->
+                    val date = weekStart?.plusDays(index.toLong())
+                    val isToday = date == today
+                    Column(
+                        Modifier.width(colW).height(headerH),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
                         Text(
                             name,
-                            modifier = Modifier.width(colW),
                             textAlign = TextAlign.Center,
-                            fontWeight = if (today) FontWeight.Bold else FontWeight.Medium,
-                            color = if (today) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+                            fontSize = 12.sp,
+                            lineHeight = 14.sp,
+                            color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            date?.dayOfMonth?.toString() ?: "",
+                            textAlign = TextAlign.Center,
+                            fontSize = 10.sp,
+                            lineHeight = 12.sp,
+                            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                         )
                     }
                 }
-                rows.forEachIndexed { index, period ->
-                    val y = headerH + periodH * index
-                    Row(
-                        Modifier
-                            .padding(top = y)
-                            .height(periodH)
-                            .fillMaxWidth(),
+            }
+            rows.forEachIndexed { index, period ->
+                val y = headerH + periodH * index
+                Row(
+                    Modifier
+                        .padding(top = y)
+                        .height(periodH)
+                        .fillMaxWidth(),
+                ) {
+                    Column(
+                        Modifier.width(timeW).height(periodH),
+                        verticalArrangement = Arrangement.spacedBy(0.dp, Alignment.CenterVertically),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Column(
-                            Modifier.width(timeW).height(periodH),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text("${period.sectionNumber}", fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                            if (period.startTime.isNotBlank()) {
-                                Text(period.startTime, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
-                            }
+                        Text("${period.sectionNumber}", style = compactPeriod)
+                        if (period.startTime.isNotBlank()) {
+                            Text(
+                                period.startTime,
+                                style = compactTime,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                            )
                         }
-                        for (day in 1..7) {
-                            Box(
-                                Modifier
-                                    .width(colW)
-                                    .height(periodH)
-                                    .border(0.4.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
-                                    .clickable { onEmpty(day, period.sectionNumber) },
+                        if (period.endTime.isNotBlank()) {
+                            Text(
+                                period.endTime,
+                                style = compactTime,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             )
                         }
                     }
+                    for (day in 1..7) {
+                        Box(
+                            Modifier
+                                .width(colW)
+                                .height(periodH)
+                                .border(0.4.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+                                .then(
+                                    if (onEmpty != null) Modifier.clickable { onEmpty(day, period.sectionNumber) }
+                                    else Modifier,
+                                ),
+                        )
+                    }
                 }
-                courses.forEach { course ->
-                    val startIndex = rows.indexOfFirst { it.sectionNumber == course.startPeriod }.takeIf { it >= 0 }
-                        ?: (course.startPeriod - 1)
-                    val span = (course.endPeriod - course.startPeriod + 1).coerceAtLeast(1)
-                    Box(
-                        Modifier
-                            .padding(
-                                start = timeW + colW * (course.dayOfWeek - 1) + 2.dp,
-                                top = headerH + periodH * startIndex + 2.dp,
-                            )
-                            .size(width = colW - 4.dp, height = periodH * span - 4.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(course.color).copy(alpha = 0.92f))
-                            .clickable { onCourse(course.id) }
-                            .padding(4.dp),
-                    ) {
-                        Column {
+            }
+            courses.forEach { course ->
+                val startIndex = rows.indexOfFirst { it.sectionNumber == course.startPeriod }.takeIf { it >= 0 }
+                    ?: (course.startPeriod - 1)
+                val span = (course.endPeriod - course.startPeriod + 1).coerceAtLeast(1)
+                Box(
+                    Modifier
+                        .padding(
+                            start = timeW + colW * (course.dayOfWeek - 1) + 1.dp,
+                            top = headerH + periodH * startIndex + 1.dp,
+                        )
+                        .size(width = colW - 2.dp, height = periodH * span - 2.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(Color(course.color).copy(alpha = 0.94f))
+                        .clickable { onCourse(course) }
+                        .padding(horizontal = 2.dp, vertical = 2.dp),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                        Text(
+                            course.courseName,
+                            color = Color.White,
+                            style = compactName,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (course.teacher.isNotBlank()) {
                             Text(
-                                course.courseName,
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 3,
+                                course.teacher,
+                                color = Color.White.copy(alpha = 0.92f),
+                                style = compactMeta,
+                                maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            if (course.place.isNotBlank()) {
-                                Text(
-                                    course.place,
-                                    color = Color.White.copy(alpha = 0.9f),
-                                    fontSize = 9.sp,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
+                        }
+                        if (course.place.isNotBlank()) {
+                            Text(
+                                displayPlace(course.place),
+                                color = Color.White.copy(alpha = 0.92f),
+                                style = compactMeta,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                 }
@@ -269,3 +499,6 @@ private fun TimetableGrid(
         }
     }
 }
+
+private fun displayPlace(place: String): String =
+    place.replace(Regex("（\\d+座）|\\(\\d+座\\)"), "").replace("/", "\n").trim()

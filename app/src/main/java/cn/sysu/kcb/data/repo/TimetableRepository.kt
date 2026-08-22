@@ -3,6 +3,7 @@ package cn.sysu.kcb.data.repo
 import cn.sysu.kcb.data.local.AppDatabase
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.ExamEntity
+import cn.sysu.kcb.data.local.ExamWeekEntity
 import cn.sysu.kcb.data.local.PeriodEntity
 import cn.sysu.kcb.data.local.RawImportEntity
 import cn.sysu.kcb.data.local.SemesterEntity
@@ -18,6 +19,8 @@ class TimetableRepository(private val db: AppDatabase) {
 
     fun courses(semester: String): Flow<List<CourseEntity>> = db.courseDao().observe(semester)
     fun exams(semester: String): Flow<List<ExamEntity>> = db.examDao().observe(semester)
+    fun examWeeks(semester: String): Flow<List<ExamWeekEntity>> = db.examWeekDao().observe(semester)
+    fun allExamWeeks(): Flow<List<ExamWeekEntity>> = db.examWeekDao().observeAll()
     fun weeks(semester: String): Flow<List<WeekEntity>> = db.weekDao().observe(semester)
     fun periods(semester: String): Flow<List<PeriodEntity>> = db.periodDao().observe(semester)
     fun allExams(): Flow<List<ExamEntity>> = db.examDao().observeAll()
@@ -50,6 +53,7 @@ class TimetableRepository(private val db: AppDatabase) {
     suspend fun currentSemester() = db.semesterDao().current()
 
     suspend fun upsertSemester(item: SemesterEntity) = db.semesterDao().upsert(item)
+    suspend fun clearCurrentFlag() = db.semesterDao().clearCurrentFlag()
     suspend fun replaceWeeks(semester: String, items: List<WeekEntity>) {
         db.weekDao().deleteSemester(semester)
         if (items.isNotEmpty()) db.weekDao().upsertAll(items)
@@ -78,6 +82,11 @@ class TimetableRepository(private val db: AppDatabase) {
         if (items.isNotEmpty()) db.examDao().upsertAll(items)
     }
 
+    suspend fun replaceExamWeeks(semester: String, items: List<ExamWeekEntity>) {
+        db.examWeekDao().deleteSemester(semester)
+        if (items.isNotEmpty()) db.examWeekDao().upsertAll(items)
+    }
+
     suspend fun saveRaw(item: RawImportEntity) = db.rawImportDao().upsert(item)
 
     suspend fun addCourse(item: CourseEntity): Long = db.courseDao().insert(item)
@@ -102,6 +111,7 @@ class TimetableRepository(private val db: AppDatabase) {
     suspend fun clearAll() {
         db.courseDao().clear()
         db.examDao().clear()
+        db.examWeekDao().clear()
         db.semesterDao().clear()
         db.rawImportDao().clear()
     }

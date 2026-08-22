@@ -25,3 +25,6 @@ app/release/
 output.json
 *.hprof
 .cursor/
+CLAUDE.md
+claude.md
+.claude/

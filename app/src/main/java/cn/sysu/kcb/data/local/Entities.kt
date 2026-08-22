@@ -98,6 +98,20 @@ data class ExamEntity(
     val extraJson: String = "{}",
 )
 
+@Serializable
+@Entity(
+    tableName = "exam_weeks",
+    indices = [Index(value = ["acadYearSemester", "examWeekId"], unique = true)],
+)
+data class ExamWeekEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val acadYearSemester: String,
+    val examWeekId: String,
+    val examWeekName: String,
+    val startDate: String = "",
+    val endDate: String = "",
+)
+
 @Entity(tableName = "raw_imports")
 data class RawImportEntity(
     @PrimaryKey val key: String,

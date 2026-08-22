@@ -12,10 +12,11 @@ import androidx.room.RoomDatabase
         PeriodEntity::class,
         CourseEntity::class,
         ExamEntity::class,
+        ExamWeekEntity::class,
         RawImportEntity::class,
         WeekdayEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -24,6 +25,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun periodDao(): PeriodDao
     abstract fun courseDao(): CourseDao
     abstract fun examDao(): ExamDao
+    abstract fun examWeekDao(): ExamWeekDao
     abstract fun rawImportDao(): RawImportDao
     abstract fun weekdayDao(): WeekdayDao
 

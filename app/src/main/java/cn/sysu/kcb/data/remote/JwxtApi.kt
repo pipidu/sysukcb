@@ -98,6 +98,10 @@ class SessionExpiredException(message: String = "登录已失效，请重新登�
 
 class ImportFailedException(message: String) : Exception(message)
 
+enum class SessionStatus { Valid, LoggedOut, Expired, Unreachable }
+
+data class SessionCheckResult(val status: SessionStatus, val detail: String = "")
+
 fun createJwxtJson(): Json = Json {
     ignoreUnknownKeys = true
     isLenient = true
