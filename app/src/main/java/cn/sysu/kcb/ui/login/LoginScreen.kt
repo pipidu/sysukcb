@@ -7,6 +7,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -47,18 +48,31 @@ fun LoginScreen(
     var webView by remember { mutableStateOf<WebView?>(null) }
     var progress by remember { mutableIntStateOf(0) }
     var checking by remember { mutableStateOf(false) }
+    var finished by remember { mutableStateOf(false) }
+    val cookies = KcbApp.instance.container.cookies
+
+    fun tryFinish(requireJwxtCheck: Boolean) {
+        if (finished || checking) return
+        checking = true
+        cookies.syncFromWebView()
+        scope.launch {
+            val ok = runCatching { KcbApp.instance.container.importer.isLoggedIn() }
+                .getOrDefault(!requireJwxtCheck && cookies.hasSession())
+            if (ok) {
+                finished = true
+                onLoggedIn()
+            } else {
+                checking = false
+            }
+        }
+    }
 
     fun maybeFinish(url: String) {
         val onJwxt = url.startsWith("https://jwxt.sysu.edu.cn") &&
             !url.contains("/esc-sso/") &&
             !url.contains("cas.sysu.edu.cn")
-        if (!onJwxt || checking) return
-        checking = true
-        scope.launch {
-            val ok = runCatching { KcbApp.instance.container.importer.isLoggedIn() }.getOrDefault(false)
-            checking = false
-            if (ok) onLoggedIn()
-        }
+        if (!onJwxt) return
+        tryFinish(requireJwxtCheck = true)
     }
 
     BackHandler {
@@ -75,63 +89,60 @@ fun LoginScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = {
-                        KcbApp.instance.container.cookies.syncFromWebView()
-                        scope.launch {
-                            val ok = runCatching { KcbApp.instance.container.importer.isLoggedIn() }.getOrDefault(false)
-                            if (ok) onLoggedIn()
-                        }
-                    }) { Text("开始导入") }
+                    TextButton(onClick = { tryFinish(requireJwxtCheck = true) }, enabled = !finished && !checking) {
+                        Text("开始导入")
+                    }
                 },
             )
         },
         bottomBar = {
             Button(
-                onClick = {
-                    KcbApp.instance.container.cookies.syncFromWebView()
-                    scope.launch {
-                        val ok = runCatching { KcbApp.instance.container.importer.isLoggedIn() }
-                            .getOrDefault(KcbApp.instance.container.cookies.hasSession())
-                        if (ok) onLoggedIn()
-                    }
-                },
+                onClick = { tryFinish(requireJwxtCheck = false) },
+                enabled = !finished && !checking,
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
-            ) { Text("我已登录，导入课表") }
+            ) { Text(if (checking) "正在确认登录…" else "我已登录，导入课表") }
         },
     ) { inner ->
         Column(Modifier.fillMaxSize().padding(inner)) {
-            if (progress in 1..99) {
+            AnimatedVisibility(visible = progress in 1..99) {
                 LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())
             }
             AndroidView(
                 modifier = Modifier.fillMaxWidth().weight(1f),
-            factory = { context ->
-                WebView(context).apply {
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.javaScriptCanOpenWindowsAutomatically = true
-                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                    settings.useWideViewPort = true
-                    settings.loadWithOverviewMode = true
-                    CookieManager.getInstance().setAcceptCookie(true)
-                    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-                    webChromeClient = object : WebChromeClient() {
-                        override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                            progress = newProgress
+                factory = { context ->
+                    WebView(context).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.javaScriptCanOpenWindowsAutomatically = true
+                        settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                        settings.useWideViewPort = true
+                        settings.loadWithOverviewMode = true
+                        CookieManager.getInstance().setAcceptCookie(true)
+                        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                        cookies.wipeBrowser(this)
+                        webChromeClient = object : WebChromeClient() {
+                            override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                                progress = newProgress
+                            }
                         }
-                    }
-                    webViewClient = object : WebViewClient() {
-                        override fun onPageFinished(view: WebView, url: String) {
-                            CookieManager.getInstance().flush()
-                            KcbApp.instance.container.cookies.syncFromWebView()
-                            maybeFinish(url)
+                        webViewClient = object : WebViewClient() {
+                            override fun onPageFinished(view: WebView, url: String) {
+                                CookieManager.getInstance().flush()
+                                cookies.syncFromWebView()
+                                maybeFinish(url)
+                            }
                         }
+                        loadUrl(CookieStore.LOGIN_URL)
+                        webView = this
                     }
-                    loadUrl(CookieStore.LOGIN_URL)
-                    webView = this
-                }
-            },
-            update = { webView = it },
+                },
+                update = { webView = it },
+                onRelease = { view ->
+                    view.stopLoading()
+                    view.clearHistory()
+                    view.destroy()
+                    if (webView === view) webView = null
+                },
             )
         }
     }

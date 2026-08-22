@@ -3,6 +3,8 @@ package cn.sysu.kcb.data.prefs
 import android.content.Context
 import android.content.SharedPreferences
 import android.webkit.CookieManager
+import android.webkit.WebStorage
+import android.webkit.WebView
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
@@ -30,9 +32,22 @@ class CookieStore(context: Context) {
 
     fun clear() {
         prefs.edit().remove(KEY).apply()
+        wipeBrowser()
+    }
+
+    fun wipeBrowser(webView: WebView? = null) {
         val manager = CookieManager.getInstance()
         manager.removeAllCookies(null)
+        manager.removeSessionCookies(null)
         manager.flush()
+        runCatching { WebStorage.getInstance().deleteAllData() }
+        webView?.apply {
+            stopLoading()
+            clearHistory()
+            clearCache(true)
+            clearFormData()
+            clearSslPreferences()
+        }
     }
 
     fun hasSession(): Boolean {

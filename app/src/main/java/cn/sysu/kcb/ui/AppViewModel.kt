@@ -30,6 +30,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val importProgress = MutableStateFlow("")
     val loggedIn = MutableStateFlow(container.cookies.hasSession())
     val checkingSession = MutableStateFlow(false)
+    val openTimetableAt = MutableStateFlow(0L)
 
     fun consumeMessage() {
         message.value = null
@@ -100,6 +101,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .onSuccess {
                 loggedIn.value = true
                 message.value = if (onlyCurrent) "已导入 $it 的课表和考试" else "已导入前后各 8 学期课表，教务当前学期 $it"
+                openTimetableAt.value = System.currentTimeMillis()
                 refreshAlarms()
                 WidgetData.refreshAll(getApplication())
             }
@@ -120,6 +122,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .onSuccess {
                 if (it.isNotBlank()) container.settings.setSelectedSemester(it)
                 message.value = "已从文件导入课表"
+                openTimetableAt.value = System.currentTimeMillis()
                 refreshAlarms()
                 WidgetData.refreshAll(getApplication())
             }
@@ -132,6 +135,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val file = container.share.exportSemester(semester)
             container.share.shareFile(file)
         }.onFailure { message.value = it.message ?: "导出失败" }
+    }
+
+    fun prepareFreshLogin() {
+        container.cookies.clear()
+        loggedIn.value = false
     }
 
     fun logout() = viewModelScope.launch {

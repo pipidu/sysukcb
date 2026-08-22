@@ -1,5 +1,12 @@
 package cn.sysu.kcb.ui.timetable
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -73,6 +80,7 @@ import cn.sysu.kcb.domain.WeekMask
 import cn.sysu.kcb.notify.ClassAlarmScheduler
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.course.CourseDetailSheet
+import cn.sysu.kcb.ui.theme.KcbMotion
 import kotlinx.coroutines.flow.collectLatest
 import java.time.LocalDate
 
@@ -152,12 +160,17 @@ fun TimetableScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column {
-                            Text(
-                                week?.weeklyName?.ifBlank { null } ?: "第${selectedWeek}周",
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold,
-                                lineHeight = 26.sp,
-                            )
+                            AnimatedContent(
+                                targetState = week?.weeklyName?.ifBlank { null } ?: "第${selectedWeek}周",
+                                label = "weekTitle",
+                            ) { label ->
+                                Text(
+                                    label,
+                                    fontSize = 22.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    lineHeight = 26.sp,
+                                )
+                            }
                             Text(
                                 semester.ifBlank { "课表" },
                                 style = MaterialTheme.typography.labelMedium,
@@ -235,7 +248,11 @@ fun TimetableScreen(
     ) { inner ->
         Box(Modifier.fillMaxSize().padding(inner)) {
             Column(Modifier.fillMaxSize()) {
-                if (editing) {
+                AnimatedVisibility(
+                    visible = editing,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -253,31 +270,51 @@ fun TimetableScreen(
                     }
                 }
                 Box(Modifier.weight(1f)) {
-                    if (snapshot.courses.isEmpty() && snapshot.weeks.isEmpty() && snapshot.periods.isEmpty() && !editing) {
-                        Column(
-                            modifier = Modifier.align(Alignment.Center).padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Text("还没有课表", style = MaterialTheme.typography.titleMedium)
-                            Text("登录中山大学教务系统后即可自动导入，或打开右上角菜单添加课程", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), textAlign = TextAlign.Center)
-                            TextButton(onClick = onLogin) { Text("去登录") }
+                    val empty = snapshot.courses.isEmpty() && snapshot.weeks.isEmpty() && snapshot.periods.isEmpty() && !editing
+                    AnimatedContent(
+                        targetState = empty,
+                        label = "emptyOrGrid",
+                    ) { isEmpty ->
+                        if (isEmpty) {
+                            Column(
+                                modifier = Modifier.fillMaxSize().padding(32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+                            ) {
+                                Text("还没有课表", style = MaterialTheme.typography.titleMedium)
+                                Text("登录中山大学教务系统后即可自动导入，或打开右上角菜单添加课程", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), textAlign = TextAlign.Center)
+                                TextButton(onClick = onLogin) { Text("去登录") }
+                            }
+                        } else {
+                            AnimatedContent(
+                                targetState = selectedWeek,
+                                modifier = Modifier.fillMaxSize(),
+                                transitionSpec = {
+                                    if (initialState == 0 || targetState == 0) {
+                                        fadeIn() togetherWith fadeOut()
+                                    } else {
+                                        KcbMotion.weekPage(targetState > initialState)
+                                    }
+                                },
+                                label = "weekPage",
+                            ) { weekNo ->
+                                val weekEntity = snapshot.weeks.firstOrNull { it.weekly == weekNo }
+                                TimetableGrid(
+                                    periods = snapshot.periods,
+                                    courses = snapshot.courses.filter { WeekMask.has(it.weeksMask, weekNo) },
+                                    weekStart = resolveWeekStart(weekNo, weekEntity, snapshot.weeks, snapshot.semester?.startMillis ?: 0L),
+                                    editing = editing,
+                                    onCourse = { course ->
+                                        if (editing) onEdit(course.id) else viewingCourse = course
+                                    },
+                                    onEmpty = if (editing) {
+                                        { day, period -> onAdd(day, period, semester) }
+                                    } else {
+                                        null
+                                    },
+                                )
+                            }
                         }
-                    } else {
-                        TimetableGrid(
-                            periods = snapshot.periods,
-                            courses = snapshot.courses.filter { WeekMask.has(it.weeksMask, selectedWeek) },
-                            weekStart = resolveWeekStart(selectedWeek, week, snapshot.weeks, snapshot.semester?.startMillis ?: 0L),
-                            editing = editing,
-                            onCourse = { course ->
-                                if (editing) onEdit(course.id) else viewingCourse = course
-                            },
-                            onEmpty = if (editing) {
-                                { day, period -> onAdd(day, period, semester) }
-                            } else {
-                                null
-                            },
-                        )
                     }
                 }
             }

@@ -1,5 +1,10 @@
 package cn.sysu.kcb.ui.exam
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -126,7 +131,11 @@ fun ExamScreen(viewModel: AppViewModel) {
         },
     ) { inner ->
         Column(Modifier.fillMaxSize().padding(inner)) {
-            if (examWeeks.isNotEmpty()) {
+            AnimatedVisibility(
+                visible = examWeeks.isNotEmpty(),
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
                 Row(
                     Modifier
                         .horizontalScroll(rememberScrollState())
@@ -167,7 +176,7 @@ fun ExamScreen(viewModel: AppViewModel) {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(visible, key = { it.id }) { exam ->
-                        Card(Modifier.fillMaxWidth()) {
+                        Card(Modifier.fillMaxWidth().animateItem()) {
                             Row(
                                 Modifier.padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically,

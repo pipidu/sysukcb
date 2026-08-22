@@ -1,6 +1,11 @@
 package cn.sysu.kcb.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,6 +50,7 @@ import cn.sysu.kcb.ui.exam.ExamScreen
 import cn.sysu.kcb.ui.login.LoginScreen
 import cn.sysu.kcb.ui.me.AboutScreen
 import cn.sysu.kcb.ui.me.MeScreen
+import cn.sysu.kcb.ui.theme.KcbMotion
 import cn.sysu.kcb.ui.timetable.TimetableScreen
 
 @Composable
@@ -60,12 +66,27 @@ fun KcbRoot(viewModel: AppViewModel) {
         snackbar.showSnackbar(text)
         viewModel.consumeMessage()
     }
+    fun goHome() {
+        if (!nav.popBackStack("home", false)) {
+            nav.navigate("home") { launchSingleTop = true }
+        }
+    }
     Box(Modifier.fillMaxSize()) {
-        NavHost(navController = nav, startDestination = "home") {
+        NavHost(
+            navController = nav,
+            startDestination = "home",
+            enterTransition = { KcbMotion.fadeSlideIn() },
+            exitTransition = { fadeOut(tween(KcbMotion.fast)) },
+            popEnterTransition = { KcbMotion.fadeSlideIn(forward = false) },
+            popExitTransition = { KcbMotion.fadeSlideOut(forward = false) },
+        ) {
             composable("home") {
                 HomeTabs(
                     viewModel = viewModel,
-                    onLogin = { nav.navigate("login") },
+                    onLogin = {
+                        viewModel.prepareFreshLogin()
+                        nav.navigate("login")
+                    },
                     onAbout = { nav.navigate("about") },
                     onEdit = { id -> nav.navigate("edit/$id") },
                     onAdd = { day, period, semester ->
@@ -78,9 +99,9 @@ fun KcbRoot(viewModel: AppViewModel) {
             }
             composable("login") {
                 LoginScreen(
-                    onClose = { nav.popBackStack() },
+                    onClose = { goHome() },
                     onLoggedIn = {
-                        nav.popBackStack()
+                        goHome()
                         viewModel.importAllYears()
                     },
                 )
@@ -116,7 +137,11 @@ fun KcbRoot(viewModel: AppViewModel) {
                 )
             }
         }
-        if (importing) {
+        AnimatedVisibility(
+            visible = importing,
+            enter = KcbMotion.overlayEnter,
+            exit = KcbMotion.overlayExit,
+        ) {
             ImportOverlay(progress = progress)
         }
         SnackbarHost(
@@ -147,11 +172,16 @@ private fun ImportOverlay(progress: String) {
         ) {
             CircularProgressIndicator()
             Text("正在导入课表", style = MaterialTheme.typography.titleMedium)
-            Text(
-                progress.ifBlank { "请稍候，不要离开此页面" },
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                textAlign = TextAlign.Center,
-            )
+            AnimatedContent(
+                targetState = progress.ifBlank { "请稍候，不要离开此页面" },
+                label = "importProgress",
+            ) { text ->
+                Text(
+                    text,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center,
+                )
+            }
             Text(
                 "导入完成后会自动回到课表",
                 style = MaterialTheme.typography.bodySmall,
@@ -173,6 +203,14 @@ private fun HomeTabs(
     val tabNav = rememberNavController()
     val current by tabNav.currentBackStackEntryAsState()
     val route = current?.destination?.route ?: "timetable"
+    val openTimetableAt by viewModel.openTimetableAt.collectAsStateWithLifecycle()
+    LaunchedEffect(openTimetableAt) {
+        if (openTimetableAt == 0L) return@LaunchedEffect
+        tabNav.navigate("timetable") {
+            popUpTo("timetable") { inclusive = false }
+            launchSingleTop = true
+        }
+    }
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
@@ -206,6 +244,10 @@ private fun HomeTabs(
             navController = tabNav,
             startDestination = "timetable",
             modifier = Modifier.padding(inner),
+            enterTransition = { fadeIn(tween(200)) },
+            exitTransition = { fadeOut(tween(160)) },
+            popEnterTransition = { fadeIn(tween(200)) },
+            popExitTransition = { fadeOut(tween(160)) },
         ) {
             composable("timetable") {
                 TimetableScreen(viewModel = viewModel, onEdit = onEdit, onAdd = onAdd, onLogin = onLogin)

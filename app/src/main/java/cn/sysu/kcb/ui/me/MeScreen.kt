@@ -8,6 +8,11 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -180,15 +185,21 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
                     )
                 },
             )
-            if (settings.reminderEnabled) {
-                Text("提前 ${settings.reminderMinutes} 分钟", modifier = Modifier.padding(horizontal = 16.dp))
-                Slider(
-                    value = settings.reminderMinutes.toFloat(),
-                    onValueChange = { viewModel.setReminderMinutes(it.toInt().coerceIn(5, 60)) },
-                    valueRange = 5f..60f,
-                    steps = 10,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
+            AnimatedVisibility(
+                visible = settings.reminderEnabled,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
+                Column {
+                    Text("提前 ${settings.reminderMinutes} 分钟", modifier = Modifier.padding(horizontal = 16.dp))
+                    Slider(
+                        value = settings.reminderMinutes.toFloat(),
+                        onValueChange = { viewModel.setReminderMinutes(it.toInt().coerceIn(5, 60)) },
+                        valueRange = 5f..60f,
+                        steps = 10,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
             }
             ListItem(
                 headlineContent = { Text("考试提醒") },
@@ -199,15 +210,21 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
                     )
                 },
             )
-            if (settings.examReminderEnabled) {
-                Text("提前 ${settings.examReminderMinutes} 分钟", modifier = Modifier.padding(horizontal = 16.dp))
-                Slider(
-                    value = settings.examReminderMinutes.toFloat(),
-                    onValueChange = { viewModel.setExamReminderMinutes(it.toInt().coerceIn(15, 180)) },
-                    valueRange = 15f..180f,
-                    steps = 10,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
+            AnimatedVisibility(
+                visible = settings.examReminderEnabled,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
+                Column {
+                    Text("提前 ${settings.examReminderMinutes} 分钟", modifier = Modifier.padding(horizontal = 16.dp))
+                    Slider(
+                        value = settings.examReminderMinutes.toFloat(),
+                        onValueChange = { viewModel.setExamReminderMinutes(it.toInt().coerceIn(15, 180)) },
+                        valueRange = 15f..180f,
+                        steps = 10,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
             }
             Spacer(Modifier.height(12.dp))
             TextButton(onClick = { confirmClear = true }, modifier = Modifier.padding(horizontal = 8.dp)) {
