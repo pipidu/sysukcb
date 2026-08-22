@@ -1,0 +1,4 @@
+-keepattributes *Annotation*, InnerClasses
+-dontwarn okhttp3.**
+-dontwarn retrofit2.**
+-keep class cn.sysu.kcb.** { *; }
