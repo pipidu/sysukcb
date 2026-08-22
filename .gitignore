@@ -18,6 +18,8 @@ captures/
 *.keystore
 !debug.keystore
 *.jks
+keystore.properties
+keystore/
 google-services.json
 secrets.properties
 app/release/
