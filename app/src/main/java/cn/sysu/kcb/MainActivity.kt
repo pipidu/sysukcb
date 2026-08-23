@@ -1,6 +1,8 @@
 package cn.sysu.kcb
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -9,6 +11,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.KcbRoot
@@ -28,6 +32,27 @@ class MainActivity : ComponentActivity() {
                 KcbRoot(viewModel)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        requestNotificationPermissionIfNeeded()
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < 33) return
+        if (notificationPermissionRequested) return
+        val granted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) return
+        notificationPermissionRequested = true
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            REQUEST_POST_NOTIFICATIONS,
+        )
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -52,5 +77,10 @@ class MainActivity : ComponentActivity() {
         runCatching {
             contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
         }.getOrNull()?.let { viewModel.importJson(it) }
+    }
+
+    companion object {
+        private const val REQUEST_POST_NOTIFICATIONS = 1001
+        private var notificationPermissionRequested = false
     }
 }

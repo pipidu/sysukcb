@@ -3,6 +3,7 @@ package cn.sysu.kcb.ui.me
 import android.Manifest
 import android.app.AlarmManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -63,6 +64,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.theme.PresetThemeColors
@@ -88,6 +90,17 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
         }
     }
     val notifyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    LaunchedEffect(settings.reminderEnabled, settings.examReminderEnabled) {
+        if (Build.VERSION.SDK_INT < 33) return@LaunchedEffect
+        if (!settings.reminderEnabled && !settings.examReminderEnabled) return@LaunchedEffect
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     Scaffold(topBar = { TopAppBar(title = { Text("我的", fontWeight = FontWeight.SemiBold) }) }) { inner ->
         Column(
@@ -206,7 +219,12 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
                 trailingContent = {
                     Switch(
                         checked = settings.examReminderEnabled,
-                        onCheckedChange = { viewModel.setExamReminderEnabled(it) },
+                        onCheckedChange = {
+                            if (it && Build.VERSION.SDK_INT >= 33) {
+                                notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                            viewModel.setExamReminderEnabled(it)
+                        },
                     )
                 },
             )

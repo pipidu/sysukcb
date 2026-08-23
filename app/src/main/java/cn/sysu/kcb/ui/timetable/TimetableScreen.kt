@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -138,7 +139,6 @@ fun TimetableScreen(
             ) ?: snapshot.weeks.firstOrNull { it.weekly > 0 }?.weekly ?: 1
         }
     }
-    val week = snapshot.weeks.firstOrNull { it.weekly == selectedWeek }
     var semesterMenu by remember { mutableStateOf(false) }
     var weekPicker by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
@@ -160,9 +160,14 @@ fun TimetableScreen(
     var syncingPager by remember { mutableStateOf(false) }
     LaunchedEffect(selectedWeek, pageCount) {
         val target = (selectedWeek - 1).coerceIn(0, pageCount - 1)
-        if (pagerState.currentPage != target) {
-            syncingPager = true
+        if (pagerState.currentPage == target) {
+            syncingPager = false
+            return@LaunchedEffect
+        }
+        syncingPager = true
+        try {
             if (userPickedWeek) pagerState.animateScrollToPage(target) else pagerState.scrollToPage(target)
+        } finally {
             syncingPager = false
         }
     }
@@ -197,17 +202,12 @@ fun TimetableScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column {
-                            AnimatedContent(
-                                targetState = week?.weeklyName?.ifBlank { null } ?: "第${selectedWeek}周",
-                                label = "weekTitle",
-                            ) { label ->
-                                Text(
-                                    label,
-                                    fontSize = 22.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    lineHeight = 26.sp,
-                                )
-                            }
+                            WeekTitleText(
+                                pagerState = pagerState,
+                                weeks = snapshot.weeks,
+                                selectedWeek = selectedWeek,
+                                syncingPager = syncingPager,
+                            )
                             Text(
                                 semester.ifBlank { "课表" },
                                 style = MaterialTheme.typography.labelMedium,
@@ -244,14 +244,20 @@ fun TimetableScreen(
                         }
                     }
                     IconButton(onClick = {
+                        val next = (selectedWeek - 1).coerceAtLeast(1)
+                        if (next == selectedWeek) return@IconButton
                         userPickedWeek = true
-                        selectedWeek = (selectedWeek - 1).coerceAtLeast(1)
+                        syncingPager = true
+                        selectedWeek = next
                     }) {
                         Icon(Icons.Outlined.ChevronLeft, contentDescription = "上一周")
                     }
                     IconButton(onClick = {
+                        val next = (selectedWeek + 1).coerceAtMost(maxWeek)
+                        if (next == selectedWeek) return@IconButton
                         userPickedWeek = true
-                        selectedWeek = (selectedWeek + 1).coerceAtMost(maxWeek)
+                        syncingPager = true
+                        selectedWeek = next
                     }) {
                         Icon(Icons.Outlined.ChevronRight, contentDescription = "下一周")
                     }
@@ -367,12 +373,44 @@ fun TimetableScreen(
             maxWeek = maxWeek,
             onPick = { weekNo ->
                 userPickedWeek = true
+                syncingPager = true
                 selectedWeek = weekNo
                 weekPicker = false
             },
             onDismiss = { weekPicker = false },
         )
     }
+}
+
+@Composable
+private fun WeekTitleText(
+    pagerState: PagerState,
+    weeks: List<WeekEntity>,
+    selectedWeek: Int,
+    syncingPager: Boolean,
+) {
+    val currentPage = pagerState.currentPage
+    val offset = pagerState.currentPageOffsetFraction
+    val settled = pagerState.settledPage
+    val displayWeek = if (syncingPager) {
+        selectedWeek.coerceAtLeast(1)
+    } else {
+        val pos = currentPage + offset
+        val page = when {
+            pos > settled + 0.01f -> settled + 1
+            pos < settled - 0.01f -> settled - 1
+            else -> settled
+        }
+        (page + 1).coerceIn(1, pagerState.pageCount.coerceAtLeast(1))
+    }
+    val label = weeks.firstOrNull { it.weekly == displayWeek }?.weeklyName?.ifBlank { null }
+        ?: "第${displayWeek}周"
+    Text(
+        label,
+        fontSize = 22.sp,
+        fontWeight = FontWeight.Bold,
+        lineHeight = 26.sp,
+    )
 }
 
 private fun pickSemester(settings: UserSettings, semesters: List<SemesterEntity>, options: List<String>): String {
