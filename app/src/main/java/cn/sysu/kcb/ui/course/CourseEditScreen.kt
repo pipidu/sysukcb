@@ -25,7 +25,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import cn.sysu.kcb.ui.theme.KcbTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -72,14 +72,12 @@ fun CourseEditScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(if (existing == null) "添加课程" else "编辑课程") },
-                navigationIcon = {
-                    IconButton(onClick = onDone) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
-                    }
-                },
-            )
+            KcbTopBar {
+                IconButton(onClick = onDone) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
+                }
+                Text(if (existing == null) "添加课程" else "编辑课程")
+            }
         },
     ) { inner ->
         Column(

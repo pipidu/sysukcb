@@ -52,8 +52,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import cn.sysu.kcb.ui.theme.KcbTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -190,82 +189,80 @@ fun TimetableScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                ),
-                title = {
-                    Row(
-                        modifier = Modifier.clickable { weekPicker = true },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column {
-                            WeekTitleText(
-                                pagerState = pagerState,
-                                weeks = snapshot.weeks,
-                                selectedWeek = selectedWeek,
-                                syncingPager = syncingPager,
-                            )
-                            Text(
-                                semester.ifBlank { "课表" },
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
-                            )
-                        }
-                        Icon(
-                            Icons.Filled.ArrowDropDown,
-                            contentDescription = "选择周次",
-                            tint = MaterialTheme.colorScheme.onPrimary,
+            KcbTopBar(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { weekPicker = true }
+                        .padding(start = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f, fill = false)) {
+                        WeekTitleText(
+                            pagerState = pagerState,
+                            weeks = snapshot.weeks,
+                            selectedWeek = selectedWeek,
+                            syncingPager = syncingPager,
+                        )
+                        Text(
+                            semester.ifBlank { "课表" },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
                         )
                     }
-                },
-                actions = {
-                    Box {
-                        TextButton(onClick = { semesterMenu = true }) {
-                            Text(semester.ifBlank { "学年" }, color = MaterialTheme.colorScheme.onPrimary)
-                        }
-                        DropdownMenu(expanded = semesterMenu, onDismissRequest = { semesterMenu = false }) {
-                            semesterOptions.forEach { option ->
-                                val entity = semesters.firstOrNull { it.acadYearSemester == option }
-                                DropdownMenuItem(
-                                    text = { Text(buildString {
-                                        append(option)
-                                        if (entity?.isCurrent == true) append("（当前）")
-                                    }) },
-                                    onClick = {
-                                        userPickedWeek = false
-                                        viewModel.setSemester(option)
-                                        semesterMenu = false
-                                    },
-                                )
-                            }
+                    Icon(
+                        Icons.Filled.ArrowDropDown,
+                        contentDescription = "选择周次",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                    )
+                }
+                Box {
+                    TextButton(onClick = { semesterMenu = true }) {
+                        Text(semester.ifBlank { "学年" }, color = MaterialTheme.colorScheme.onPrimary)
+                    }
+                    DropdownMenu(expanded = semesterMenu, onDismissRequest = { semesterMenu = false }) {
+                        semesterOptions.forEach { option ->
+                            val entity = semesters.firstOrNull { it.acadYearSemester == option }
+                            DropdownMenuItem(
+                                text = { Text(buildString {
+                                    append(option)
+                                    if (entity?.isCurrent == true) append("（当前）")
+                                }) },
+                                onClick = {
+                                    userPickedWeek = false
+                                    viewModel.setSemester(option)
+                                    semesterMenu = false
+                                },
+                            )
                         }
                     }
-                    IconButton(onClick = {
-                        val next = (selectedWeek - 1).coerceAtLeast(1)
-                        if (next == selectedWeek) return@IconButton
-                        userPickedWeek = true
-                        syncingPager = true
-                        selectedWeek = next
-                    }) {
-                        Icon(Icons.Outlined.ChevronLeft, contentDescription = "上一周")
+                }
+                IconButton(onClick = {
+                    val next = (selectedWeek - 1).coerceAtLeast(1)
+                    if (next == selectedWeek) return@IconButton
+                    userPickedWeek = true
+                    syncingPager = true
+                    selectedWeek = next
+                }) {
+                    Icon(Icons.Outlined.ChevronLeft, contentDescription = "上一周")
+                }
+                IconButton(onClick = {
+                    val next = (selectedWeek + 1).coerceAtMost(maxWeek)
+                    if (next == selectedWeek) return@IconButton
+                    userPickedWeek = true
+                    syncingPager = true
+                    selectedWeek = next
+                }) {
+                    Icon(Icons.Outlined.ChevronRight, contentDescription = "下一周")
+                }
+                Box {
+                    IconButton(onClick = { moreMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "更多")
                     }
-                    IconButton(onClick = {
-                        val next = (selectedWeek + 1).coerceAtMost(maxWeek)
-                        if (next == selectedWeek) return@IconButton
-                        userPickedWeek = true
-                        syncingPager = true
-                        selectedWeek = next
-                    }) {
-                        Icon(Icons.Outlined.ChevronRight, contentDescription = "下一周")
-                    }
-                    Box {
-                        IconButton(onClick = { moreMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "更多")
-                        }
-                        DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
+                    DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                             DropdownMenuItem(
                                 text = { Text("添加课程") },
                                 leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -285,8 +282,7 @@ fun TimetableScreen(
                             )
                         }
                     }
-                },
-            )
+            }
         },
     ) { inner ->
         Box(Modifier.fillMaxSize().padding(inner)) {
@@ -409,7 +405,7 @@ private fun WeekTitleText(
         label,
         fontSize = 22.sp,
         fontWeight = FontWeight.Bold,
-        lineHeight = 26.sp,
+        lineHeight = 22.sp,
     )
 }
 

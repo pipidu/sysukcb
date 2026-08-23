@@ -32,6 +32,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val importing = MutableStateFlow(false)
     val importProgress = MutableStateFlow("")
     val loggedIn = MutableStateFlow(container.cookies.hasSession())
+    val sessionStatus = MutableStateFlow(
+        if (container.cookies.hasSession()) SessionStatus.Valid else SessionStatus.LoggedOut,
+    )
     val checkingSession = MutableStateFlow(false)
     val openTimetableAt = MutableStateFlow(0L)
     val updateState = MutableStateFlow<UpdateCheckState>(UpdateCheckState.Idle)
@@ -66,18 +69,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
     }
 
-    fun checkSession(silentIfValid: Boolean = false) = viewModelScope.launch {
+    fun checkSession() = viewModelScope.launch {
         checkingSession.value = true
         val result = runCatching { container.importer.checkSession() }.getOrElse {
             SessionCheckResult(SessionStatus.Unreachable, it.message.orEmpty())
         }
+        sessionStatus.value = result.status
         loggedIn.value = result.status == SessionStatus.Valid
-        message.value = when (result.status) {
-            SessionStatus.Valid -> if (silentIfValid) null else "登录有效"
-            SessionStatus.LoggedOut -> if (silentIfValid) null else "尚未登录教务系统"
-            SessionStatus.Expired -> "登录已过期，请重新登录"
-            SessionStatus.Unreachable -> "无法检查登录${if (result.detail.isBlank()) "" else "：${result.detail}"}"
-        }
         checkingSession.value = false
     }
 
@@ -130,6 +128,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
             .onSuccess {
                 loggedIn.value = true
+                sessionStatus.value = SessionStatus.Valid
                 message.value = if (onlyCurrent) "已导入 $it 的课表和考试" else "已导入前后各 8 学期课表，教务当前学期 $it"
                 openTimetableAt.value = System.currentTimeMillis()
                 refreshAlarms()
@@ -137,6 +136,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             .onFailure {
                 loggedIn.value = container.cookies.hasSession()
+                if (it is SessionExpiredException) sessionStatus.value = SessionStatus.Expired
                 message.value = when (it) {
                     is SessionExpiredException -> it.message
                     else -> it.message ?: "导入失败"
@@ -170,11 +170,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun prepareFreshLogin() {
         container.cookies.clear()
         loggedIn.value = false
+        sessionStatus.value = SessionStatus.LoggedOut
     }
 
     fun logout() = viewModelScope.launch {
         container.cookies.clear()
         loggedIn.value = false
+        sessionStatus.value = SessionStatus.LoggedOut
         message.value = "已退出登录（本地课表仍保留）"
     }
 

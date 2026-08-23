@@ -65,5 +65,14 @@ class CookieStore(context: Context) {
         const val JWXT_ORIGIN = "https://jwxt.sysu.edu.cn"
         const val LOGIN_URL =
             "https://jwxt.sysu.edu.cn/jwxt/api/sso/cas/login?pattern=student-login"
+
+        fun isJwxtLanding(url: String): Boolean {
+            val path = url.substringBefore('#').substringBefore('?').trimEnd('/')
+            if (!path.startsWith(JWXT_ORIGIN)) return false
+            if (path.contains("/esc-sso") || path.contains("/api/sso/")) return false
+            return path == JWXT_ORIGIN ||
+                path == "$JWXT_ORIGIN/jwxt" ||
+                path.startsWith("$JWXT_ORIGIN/jwxt/mk")
+        }
     }
 }

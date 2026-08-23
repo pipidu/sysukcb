@@ -48,7 +48,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -66,8 +65,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cn.sysu.kcb.data.remote.SessionStatus
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.UpdateCheckState
+import cn.sysu.kcb.ui.theme.KcbTopBar
 import cn.sysu.kcb.ui.theme.PresetThemeColors
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -76,13 +77,14 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val importing by viewModel.importing.collectAsStateWithLifecycle()
     val loggedIn by viewModel.loggedIn.collectAsStateWithLifecycle()
+    val sessionStatus by viewModel.sessionStatus.collectAsStateWithLifecycle()
     val checkingSession by viewModel.checkingSession.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showColor by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) {
-        viewModel.checkSession(silentIfValid = true)
+        viewModel.checkSession()
         viewModel.checkForUpdate(manual = false)
     }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -105,7 +107,17 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
         }
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("我的", fontWeight = FontWeight.SemiBold) }) }) { inner ->
+    Scaffold(
+        topBar = {
+            KcbTopBar {
+                Text(
+                    "我的",
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 16.dp),
+                )
+            }
+        },
+    ) { inner ->
         Column(
             Modifier
                 .padding(inner)
@@ -118,10 +130,15 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
                     Text(
                         when {
                             checkingSession -> "正在检查登录…"
-                            loggedIn -> "登录有效，可导入课表"
+                            sessionStatus == SessionStatus.Valid -> "登录有效，可导入课表"
+                            sessionStatus == SessionStatus.Unreachable -> "无法检查登录，请稍后重试"
                             else -> "未登录或已过期，请重新登录后再导入"
                         },
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        color = when {
+                            checkingSession -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                            sessionStatus == SessionStatus.Valid -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                            else -> MaterialTheme.colorScheme.error
+                        },
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = onLogin) { Text(if (loggedIn) "重新登录" else "登录") }

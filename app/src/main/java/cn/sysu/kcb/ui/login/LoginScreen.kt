@@ -1,8 +1,11 @@
 package cn.sysu.kcb.ui.login
 
 import android.annotation.SuppressLint
+import android.content.Intent
+import android.os.Message
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -15,14 +18,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -35,9 +36,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import cn.sysu.kcb.KcbApp
 import cn.sysu.kcb.data.prefs.CookieStore
+import cn.sysu.kcb.ui.theme.KcbTopBar
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun LoginScreen(
@@ -68,11 +69,19 @@ fun LoginScreen(
     }
 
     fun maybeFinish(url: String) {
-        val onJwxt = url.startsWith("https://jwxt.sysu.edu.cn") &&
-            !url.contains("/esc-sso/") &&
-            !url.contains("cas.sysu.edu.cn")
-        if (!onJwxt) return
+        if (!CookieStore.isJwxtLanding(url)) return
         tryFinish(requireJwxtCheck = true)
+    }
+
+    fun handleUrl(view: WebView, url: String): Boolean {
+        return if (url.startsWith("http://") || url.startsWith("https://")) {
+            false
+        } else {
+            runCatching {
+                view.context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+            }
+            true
+        }
     }
 
     BackHandler {
@@ -81,19 +90,15 @@ fun LoginScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("教务登录") },
-                navigationIcon = {
-                    IconButton(onClick = onClose) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "关闭")
-                    }
-                },
-                actions = {
-                    TextButton(onClick = { tryFinish(requireJwxtCheck = true) }, enabled = !finished && !checking) {
-                        Text("开始导入")
-                    }
-                },
-            )
+            KcbTopBar {
+                IconButton(onClick = onClose) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "关闭")
+                }
+                Text("教务登录", modifier = Modifier.weight(1f))
+                TextButton(onClick = { tryFinish(requireJwxtCheck = true) }, enabled = !finished && !checking) {
+                    Text("开始导入")
+                }
+            }
         },
         bottomBar = {
             Button(
@@ -113,7 +118,9 @@ fun LoginScreen(
                     WebView(context).apply {
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
+                        settings.databaseEnabled = true
                         settings.javaScriptCanOpenWindowsAutomatically = true
+                        settings.setSupportMultipleWindows(true)
                         settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                         settings.useWideViewPort = true
                         settings.loadWithOverviewMode = true
@@ -124,8 +131,41 @@ fun LoginScreen(
                             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                                 progress = newProgress
                             }
+
+                            override fun onCreateWindow(
+                                view: WebView?,
+                                isDialog: Boolean,
+                                isUserGesture: Boolean,
+                                resultMsg: Message?,
+                            ): Boolean {
+                                val host = view ?: return false
+                                val extra = WebView(host.context).apply {
+                                    webViewClient = object : WebViewClient() {
+                                        override fun shouldOverrideUrlLoading(
+                                            v: WebView,
+                                            request: WebResourceRequest,
+                                        ): Boolean {
+                                            host.loadUrl(request.url.toString())
+                                            return true
+                                        }
+                                    }
+                                }
+                                val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+                                transport.webView = extra
+                                resultMsg.sendToTarget()
+                                return true
+                            }
                         }
                         webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(
+                                view: WebView,
+                                request: WebResourceRequest,
+                            ): Boolean = handleUrl(view, request.url.toString())
+
+                            @Deprecated("Deprecated in Java")
+                            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean =
+                                handleUrl(view, url)
+
                             override fun onPageFinished(view: WebView, url: String) {
                                 CookieManager.getInstance().flush()
                                 cookies.syncFromWebView()

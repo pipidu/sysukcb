@@ -22,7 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import cn.sysu.kcb.ui.theme.KcbTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,14 +56,12 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     }
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("关于", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
-                    }
-                },
-            )
+            KcbTopBar {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
+                }
+                Text("关于", fontWeight = FontWeight.SemiBold)
+            }
         },
     ) { inner ->
         Column(
