@@ -3,12 +3,15 @@ package cn.sysu.kcb.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import cn.sysu.kcb.BuildConfig
 import cn.sysu.kcb.KcbApp
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.prefs.UserSettings
+import cn.sysu.kcb.data.remote.AppUpdate
 import cn.sysu.kcb.data.remote.SessionCheckResult
 import cn.sysu.kcb.data.remote.SessionExpiredException
 import cn.sysu.kcb.data.remote.SessionStatus
+import cn.sysu.kcb.data.remote.isNewerThan
 import cn.sysu.kcb.widget.WidgetData
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -31,9 +34,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val loggedIn = MutableStateFlow(container.cookies.hasSession())
     val checkingSession = MutableStateFlow(false)
     val openTimetableAt = MutableStateFlow(0L)
+    val updateState = MutableStateFlow<UpdateCheckState>(UpdateCheckState.Idle)
+    private var lastUpdateCheckAt = 0L
 
     fun consumeMessage() {
         message.value = null
+    }
+
+    fun checkForUpdate(manual: Boolean = false) = viewModelScope.launch {
+        val now = System.currentTimeMillis()
+        if (!manual && updateState.value is UpdateCheckState.Available) return@launch
+        if (!manual && now - lastUpdateCheckAt < 10 * 60 * 1000L && updateState.value !is UpdateCheckState.Idle) {
+            return@launch
+        }
+        updateState.value = UpdateCheckState.Checking
+        runCatching { container.updates.fetchLatest() }
+            .onSuccess { latest ->
+                lastUpdateCheckAt = System.currentTimeMillis()
+                updateState.value = if (latest != null && latest.isNewerThan(BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME)) {
+                    UpdateCheckState.Available(latest)
+                } else {
+                    UpdateCheckState.UpToDate
+                }
+            }
+            .onFailure {
+                updateState.value = if (manual) {
+                    UpdateCheckState.Failed(it.message ?: "检查更新失败")
+                } else {
+                    UpdateCheckState.Idle
+                }
+            }
     }
 
     fun checkSession(silentIfValid: Boolean = false) = viewModelScope.launch {
@@ -182,4 +212,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             settings = snap,
         )
     }
+}
+
+sealed class UpdateCheckState {
+    data object Idle : UpdateCheckState()
+    data object Checking : UpdateCheckState()
+    data object UpToDate : UpdateCheckState()
+    data class Available(val update: AppUpdate) : UpdateCheckState()
+    data class Failed(val message: String) : UpdateCheckState()
 }

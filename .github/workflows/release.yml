@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: ver
+        run: |
+          CODE=$(awk -F'=' '/versionCode/ { gsub(/ /,"",$2); print $2; exit }' app/build.gradle.kts)
+          NAME=$(awk -F'"' '/versionName/ { print $2; exit }' app/build.gradle.kts)
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Check existing release
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${{ steps.ver.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release ${{ steps.ver.outputs.tag }} already exists, skip."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-java@v4
+        if: steps.existing.outputs.exists != 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+        if: steps.existing.outputs.exists != 'true'
+
+      - name: Disable local proxy for CI
+        if: steps.existing.outputs.exists != 'true'
+        run: |
+          sed -i '/[Pp]roxy/d' gradle.properties
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      - name: Write signing files
+        if: steps.existing.outputs.exists != 'true'
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$RELEASE_KEYSTORE_BASE64" ] || [ -z "$RELEASE_STORE_PASSWORD" ] || [ -z "$RELEASE_KEY_ALIAS" ] || [ -z "$RELEASE_KEY_PASSWORD" ]; then
+            echo "缺少 GitHub Secrets：RELEASE_KEYSTORE_BASE64 / RELEASE_STORE_PASSWORD / RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD"
+            exit 1
+          fi
+          mkdir -p keystore
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > keystore/kcb-release.jks
+          printf 'storeFile=keystore/kcb-release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$RELEASE_STORE_PASSWORD" "$RELEASE_KEY_ALIAS" "$RELEASE_KEY_PASSWORD" > keystore.properties
+
+      - name: Build release APK
+        if: steps.existing.outputs.exists != 'true'
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Publish GitHub Release
+        if: steps.existing.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APK="app/build/outputs/apk/release/app-release.apk"
+          OUT="sysukcb-${{ steps.ver.outputs.name }}.apk"
+          cp "$APK" "$OUT"
+          printf 'versionCode=%s\nversionName=%s\n\n从 GitHub Releases 下载 APK 安装。签名包可覆盖本机已装的正式版。\n' \
+            "${{ steps.ver.outputs.code }}" "${{ steps.ver.outputs.name }}" > release-notes.txt
+          gh release create "${{ steps.ver.outputs.tag }}" "$OUT" \
+            --title "课程表D ${{ steps.ver.outputs.name }}" \
+            --latest \
+            --notes-file release-notes.txt

@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.sysu.kcb.ui.AppViewModel
+import cn.sysu.kcb.ui.UpdateCheckState
 import cn.sysu.kcb.ui.theme.PresetThemeColors
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -79,8 +80,10 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
     val context = LocalContext.current
     var showColor by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) {
         viewModel.checkSession(silentIfValid = true)
+        viewModel.checkForUpdate(manual = false)
     }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -256,7 +259,13 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
             )
             ListItem(
                 headlineContent = { Text("关于") },
-                supportingContent = { Text("课程表D · GitHub") },
+                supportingContent = {
+                    val available = updateState as? UpdateCheckState.Available
+                    Text(
+                        if (available != null) "发现新版本 ${available.update.versionName}"
+                        else "课程表D · GitHub",
+                    )
+                },
                 leadingContent = {
                     Icon(Icons.Outlined.Info, contentDescription = null)
                 },

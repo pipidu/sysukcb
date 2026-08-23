@@ -95,7 +95,7 @@ fun KcbRoot(viewModel: AppViewModel) {
                 )
             }
             composable("about") {
-                AboutScreen(onBack = { nav.popBackStack() })
+                AboutScreen(viewModel = viewModel, onBack = { nav.popBackStack() })
             }
             composable("login") {
                 LoginScreen(

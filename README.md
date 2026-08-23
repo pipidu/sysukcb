@@ -15,7 +15,7 @@
 - 导出 / 导入 JSON，方便同学互导
 - 今日课程、本周课表桌面小组件
 - 上课与考试通知，主题色可改（默认中大红）
-- 「我的」底部有关于页
+- 「我的」底部有关于页；可检查 GitHub Releases 更新
 
 数据全部存在本地 SQLite（Room），不经过第三方服务器。
 
@@ -55,6 +55,14 @@ gradlew.bat :app:assembleRelease
 ```
 
 签名密钥只放在本机：根目录 `keystore.properties` + `keystore/kcb-release.jks`（均已 gitignore）。没有这两份文件时，release 产物会是未签名包。
+
+推送到 `master` 且 `versionName` 还没有对应 tag 时，GitHub Actions 会签名并发布 Release。仓库 Secrets（不要写进 git）：
+
+- `RELEASE_KEYSTORE_BASE64`：本机 `keystore/kcb-release.jks` 的 base64
+- `RELEASE_STORE_PASSWORD` / `RELEASE_KEY_PASSWORD`
+- `RELEASE_KEY_ALIAS`（当前为 `kcb`）
+
+应用内「关于 → 检查更新」读取最新 Release 的 `versionCode`。
 
 ## 使用
 

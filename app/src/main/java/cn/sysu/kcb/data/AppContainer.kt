@@ -4,6 +4,7 @@ import android.content.Context
 import cn.sysu.kcb.data.local.AppDatabase
 import cn.sysu.kcb.data.prefs.CookieStore
 import cn.sysu.kcb.data.prefs.SettingsRepository
+import cn.sysu.kcb.data.remote.GithubUpdateService
 import cn.sysu.kcb.data.remote.JwxtImportService
 import cn.sysu.kcb.data.remote.createJwxtApi
 import cn.sysu.kcb.data.remote.createJwxtJson
@@ -19,6 +20,7 @@ class AppContainer(context: Context) {
     val timetable = TimetableRepository(db)
     val api = createJwxtApi(cookies, json)
     val importer = JwxtImportService(api, json, cookies, timetable, settings)
+    val updates = GithubUpdateService(json)
     val share = ShareService(context, timetable, json)
     val alarms = ClassAlarmScheduler(context)
 }
