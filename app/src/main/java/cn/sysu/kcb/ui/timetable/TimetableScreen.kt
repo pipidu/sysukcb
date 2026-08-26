@@ -116,13 +116,18 @@ fun TimetableScreen(
     val semester = remember(settings.selectedSemester, semesters, semesterOptions) {
         pickSemester(settings, semesters, semesterOptions)
     }
-    LaunchedEffect(semester) {
-        if (semester.isNotBlank() && semester != settings.selectedSemester) {
-            viewModel.setSemester(semester)
-        }
+    LaunchedEffect(semester, settings.selectedSemester, semesters) {
         if (semester.isBlank()) {
             snapshot = TimetableSnapshot(null, emptyList(), emptyList(), emptyList())
             return@LaunchedEffect
+        }
+        // Only persist a semester that actually exists in the DB. Cold start used to
+        // write a guessed empty future term over the saved selection, so the grid
+        // looked like imported data had vanished.
+        if (settings.selectedSemester.isBlank() &&
+            semesters.any { it.acadYearSemester == semester }
+        ) {
+            viewModel.setSemester(semester)
         }
         repo.timetableState(semester).collectLatest { snapshot = it }
     }
@@ -409,12 +414,16 @@ private fun WeekTitleText(
     )
 }
 
-private fun pickSemester(settings: UserSettings, semesters: List<SemesterEntity>, options: List<String>): String {
+private fun pickSemester(
+    settings: UserSettings,
+    semesters: List<SemesterEntity>,
+    options: List<String>,
+): String {
     val saved = settings.selectedSemester
-    if (saved.isNotBlank() && (options.contains(saved) || semesters.any { it.acadYearSemester == saved })) return saved
+    if (saved.isNotBlank()) return saved
     return semesters.firstOrNull { it.isCurrent }?.acadYearSemester
+        ?: semesters.firstOrNull()?.acadYearSemester
         ?: options.firstOrNull().orEmpty()
-        ?: saved
 }
 
 @OptIn(ExperimentalLayoutApi::class)

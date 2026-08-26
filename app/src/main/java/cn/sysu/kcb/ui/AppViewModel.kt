@@ -24,7 +24,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     val settings: StateFlow<UserSettings> = container.settings.settings.stateIn(
         viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
+        SharingStarted.Eagerly,
         UserSettings(),
     )
 
@@ -105,6 +105,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setSemester(semester: String) = viewModelScope.launch {
+        if (semester.isBlank()) return@launch
+        val current = container.settings.snapshot().selectedSemester
+        if (current == semester) return@launch
         container.settings.setSelectedSemester(semester)
         refreshAlarms()
         WidgetData.refreshAll(getApplication())
