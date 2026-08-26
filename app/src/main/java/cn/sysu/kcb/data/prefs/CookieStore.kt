@@ -35,12 +35,7 @@ class CookieStore(context: Context) {
         wipeBrowser()
     }
 
-    fun wipeBrowser(webView: WebView? = null) {
-        val manager = CookieManager.getInstance()
-        manager.removeAllCookies(null)
-        manager.removeSessionCookies(null)
-        manager.flush()
-        runCatching { WebStorage.getInstance().deleteAllData() }
+    fun wipeBrowser(webView: WebView? = null, onDone: (() -> Unit)? = null) {
         webView?.apply {
             stopLoading()
             clearHistory()
@@ -48,6 +43,13 @@ class CookieStore(context: Context) {
             clearFormData()
             clearSslPreferences()
         }
+        runCatching { WebStorage.getInstance().deleteAllData() }
+        val manager = CookieManager.getInstance()
+        manager.removeAllCookies {
+            manager.flush()
+            onDone?.invoke()
+        }
+        if (onDone == null) manager.flush()
     }
 
     fun hasSession(): Boolean {

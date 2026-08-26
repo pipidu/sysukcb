@@ -2,13 +2,16 @@ package cn.sysu.kcb.ui.login
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.net.Uri
 import android.os.Message
+import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Column
@@ -47,6 +50,7 @@ fun LoginScreen(
 ) {
     val scope = rememberCoroutineScope()
     var webView by remember { mutableStateOf<WebView?>(null) }
+    var popupWebView by remember { mutableStateOf<WebView?>(null) }
     var progress by remember { mutableIntStateOf(0) }
     var checking by remember { mutableStateOf(false) }
     var finished by remember { mutableStateOf(false) }
@@ -73,19 +77,18 @@ fun LoginScreen(
         tryFinish(requireJwxtCheck = true)
     }
 
-    fun handleUrl(view: WebView, url: String): Boolean {
-        return if (url.startsWith("http://") || url.startsWith("https://")) {
-            false
-        } else {
-            runCatching {
-                view.context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
-            }
-            true
-        }
-    }
-
     BackHandler {
-        if (webView?.canGoBack() == true) webView?.goBack() else onClose()
+        val popup = popupWebView
+        when {
+            popup != null && popup.canGoBack() -> popup.goBack()
+            popup != null -> {
+                (popup.parent as? ViewGroup)?.removeView(popup)
+                popup.destroy()
+                popupWebView = null
+            }
+            webView?.canGoBack() == true -> webView?.goBack()
+            else -> onClose()
+        }
     }
 
     Scaffold(
@@ -115,19 +118,30 @@ fun LoginScreen(
             AndroidView(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 factory = { context ->
-                    WebView(context).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.databaseEnabled = true
-                        settings.javaScriptCanOpenWindowsAutomatically = true
-                        settings.setSupportMultipleWindows(true)
-                        settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                        settings.useWideViewPort = true
-                        settings.loadWithOverviewMode = true
-                        CookieManager.getInstance().setAcceptCookie(true)
-                        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-                        cookies.wipeBrowser(this)
-                        webChromeClient = object : WebChromeClient() {
+                    FrameLayout(context).apply {
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                        )
+                        val host = WebView(context)
+                        lateinit var chrome: WebChromeClient
+                        val client = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(
+                                view: WebView,
+                                request: WebResourceRequest,
+                            ): Boolean = shouldLeaveWebView(view, request.url.toString())
+
+                            @Deprecated("Deprecated in Java")
+                            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean =
+                                shouldLeaveWebView(view, url)
+
+                            override fun onPageFinished(view: WebView, url: String) {
+                                CookieManager.getInstance().flush()
+                                cookies.syncFromWebView()
+                                maybeFinish(url)
+                            }
+                        }
+                        chrome = object : WebChromeClient() {
                             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                                 progress = newProgress
                             }
@@ -138,52 +152,109 @@ fun LoginScreen(
                                 isUserGesture: Boolean,
                                 resultMsg: Message?,
                             ): Boolean {
-                                val host = view ?: return false
-                                val extra = WebView(host.context).apply {
-                                    webViewClient = object : WebViewClient() {
-                                        override fun shouldOverrideUrlLoading(
-                                            v: WebView,
-                                            request: WebResourceRequest,
-                                        ): Boolean {
-                                            host.loadUrl(request.url.toString())
-                                            return true
-                                        }
-                                    }
+                                val parent = this@apply
+                                val extra = WebView(parent.context).apply {
+                                    layoutParams = FrameLayout.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                    )
+                                    applyLoginSettings()
+                                    webViewClient = client
                                 }
+                                extra.webChromeClient = this
+                                popupWebView?.let { old ->
+                                    parent.removeView(old)
+                                    old.destroy()
+                                }
+                                parent.addView(extra)
+                                popupWebView = extra
                                 val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
                                 transport.webView = extra
                                 resultMsg.sendToTarget()
                                 return true
                             }
-                        }
-                        webViewClient = object : WebViewClient() {
-                            override fun shouldOverrideUrlLoading(
-                                view: WebView,
-                                request: WebResourceRequest,
-                            ): Boolean = handleUrl(view, request.url.toString())
 
-                            @Deprecated("Deprecated in Java")
-                            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean =
-                                handleUrl(view, url)
-
-                            override fun onPageFinished(view: WebView, url: String) {
-                                CookieManager.getInstance().flush()
-                                cookies.syncFromWebView()
-                                maybeFinish(url)
+                            override fun onCloseWindow(window: WebView?) {
+                                val closing = window ?: popupWebView ?: return
+                                (closing.parent as? ViewGroup)?.removeView(closing)
+                                closing.destroy()
+                                if (popupWebView === closing) popupWebView = null
                             }
                         }
-                        loadUrl(CookieStore.LOGIN_URL)
-                        webView = this
+                        host.apply {
+                            layoutParams = FrameLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                            )
+                            applyLoginSettings()
+                            webViewClient = client
+                            webChromeClient = chrome
+                        }
+                        addView(host)
+                        webView = host
+                        cookies.wipeBrowser(host) {
+                            host.post {
+                                if (!finished) host.loadUrl(CookieStore.LOGIN_URL)
+                            }
+                        }
                     }
                 },
-                update = { webView = it },
+                update = { frame ->
+                    webView = frame.getChildAt(0) as? WebView ?: webView
+                },
                 onRelease = { view ->
-                    view.stopLoading()
-                    view.clearHistory()
-                    view.destroy()
-                    if (webView === view) webView = null
+                    val frame = view as? FrameLayout
+                    val children = buildList {
+                        if (frame != null) {
+                            for (index in 0 until frame.childCount) {
+                                (frame.getChildAt(index) as? WebView)?.let(::add)
+                            }
+                        }
+                    }
+                    children.forEach { child ->
+                        child.stopLoading()
+                        child.destroy()
+                    }
+                    if (webView in children) webView = null
+                    popupWebView = null
                 },
             )
         }
     }
+}
+
+private fun shouldLeaveWebView(view: WebView, url: String): Boolean {
+    val lower = url.lowercase()
+    if (lower.startsWith("http://") ||
+        lower.startsWith("https://") ||
+        lower.startsWith("about:") ||
+        lower.startsWith("javascript:") ||
+        lower.startsWith("data:") ||
+        lower.startsWith("blob:")
+    ) {
+        return false
+    }
+    runCatching {
+        view.context.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+    return true
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+private fun WebView.applyLoginSettings() {
+    settings.javaScriptEnabled = true
+    settings.domStorageEnabled = true
+    settings.databaseEnabled = true
+    settings.javaScriptCanOpenWindowsAutomatically = true
+    settings.setSupportMultipleWindows(true)
+    settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+    settings.useWideViewPort = true
+    settings.loadWithOverviewMode = true
+    settings.cacheMode = WebSettings.LOAD_DEFAULT
+    settings.mediaPlaybackRequiresUserGesture = false
+    settings.userAgentString = settings.userAgentString.replace("; wv", "")
+    CookieManager.getInstance().setAcceptCookie(true)
+    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 }

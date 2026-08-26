@@ -1,5 +1,6 @@
 package cn.sysu.kcb.data.repo
 
+import androidx.room.withTransaction
 import cn.sysu.kcb.data.local.AppDatabase
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.ExamEntity
@@ -12,7 +13,6 @@ import cn.sysu.kcb.data.local.WeekdayEntity
 import cn.sysu.kcb.domain.DefaultPeriods
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 
 class TimetableRepository(private val db: AppDatabase) {
     val semesters: Flow<List<SemesterEntity>> = db.semesterDao().observeAll()
@@ -55,36 +55,54 @@ class TimetableRepository(private val db: AppDatabase) {
     suspend fun upsertSemester(item: SemesterEntity) = db.semesterDao().upsert(item)
     suspend fun clearCurrentFlag() = db.semesterDao().clearCurrentFlag()
     suspend fun replaceWeeks(semester: String, items: List<WeekEntity>) {
-        db.weekDao().deleteSemester(semester)
-        if (items.isNotEmpty()) db.weekDao().upsertAll(items)
+        if (items.isEmpty()) return
+        db.withTransaction {
+            db.weekDao().deleteSemester(semester)
+            db.weekDao().upsertAll(items)
+        }
     }
     suspend fun replacePeriods(semester: String, items: List<PeriodEntity>) {
-        db.periodDao().deleteSemester(semester)
-        if (items.isNotEmpty()) db.periodDao().upsertAll(items)
+        if (items.isEmpty()) return
+        db.withTransaction {
+            db.periodDao().deleteSemester(semester)
+            db.periodDao().upsertAll(items)
+        }
     }
     suspend fun replaceWeekdays(items: List<WeekdayEntity>) {
         if (items.isNotEmpty()) db.weekdayDao().upsertAll(items)
     }
 
     suspend fun replaceImportedCourses(semester: String, imported: List<CourseEntity>) {
-        val existing = db.courseDao().list(semester)
-        val editedIds = existing
-            .filter { it.locallyEdited && !it.classesId.isNullOrBlank() }
-            .map { it.classesId }
-            .toSet()
-        db.courseDao().deleteUneditedImported(semester)
-        imported.filter { it.classesId == null || it.classesId !in editedIds }
-            .forEach { db.courseDao().insert(it.copy(id = 0)) }
+        db.withTransaction {
+            val existing = db.courseDao().list(semester)
+            if (imported.isEmpty()) {
+                // Keep previously imported courses if 教务 returned an empty table.
+                return@withTransaction
+            }
+            val editedIds = existing
+                .filter { it.locallyEdited && !it.classesId.isNullOrBlank() }
+                .map { it.classesId }
+                .toSet()
+            db.courseDao().deleteUneditedImported(semester)
+            imported.filter { it.classesId == null || it.classesId !in editedIds }
+                .forEach { db.courseDao().insert(it.copy(id = 0)) }
+        }
     }
 
     suspend fun replaceExams(semester: String, items: List<ExamEntity>) {
-        db.examDao().deleteSemester(semester)
-        if (items.isNotEmpty()) db.examDao().upsertAll(items)
+        if (items.isEmpty()) return
+        db.withTransaction {
+            db.examDao().deleteSemester(semester)
+            db.examDao().upsertAll(items)
+        }
     }
 
     suspend fun replaceExamWeeks(semester: String, items: List<ExamWeekEntity>) {
-        db.examWeekDao().deleteSemester(semester)
-        if (items.isNotEmpty()) db.examWeekDao().upsertAll(items)
+        if (items.isEmpty()) return
+        db.withTransaction {
+            db.examWeekDao().deleteSemester(semester)
+            db.examWeekDao().upsertAll(items)
+        }
     }
 
     suspend fun saveRaw(item: RawImportEntity) = db.rawImportDao().upsert(item)
@@ -100,12 +118,17 @@ class TimetableRepository(private val db: AppDatabase) {
         courses: List<CourseEntity>,
         exams: List<ExamEntity>,
     ) {
-        db.semesterDao().upsert(semester)
-        replaceWeeks(semester.acadYearSemester, weeks)
-        replacePeriods(semester.acadYearSemester, periods)
-        db.courseDao().deleteSemester(semester.acadYearSemester)
-        courses.forEach { db.courseDao().insert(it.copy(id = 0)) }
-        replaceExams(semester.acadYearSemester, exams)
+        db.withTransaction {
+            db.semesterDao().upsert(semester)
+            db.weekDao().deleteSemester(semester.acadYearSemester)
+            if (weeks.isNotEmpty()) db.weekDao().upsertAll(weeks)
+            db.periodDao().deleteSemester(semester.acadYearSemester)
+            if (periods.isNotEmpty()) db.periodDao().upsertAll(periods)
+            db.courseDao().deleteSemester(semester.acadYearSemester)
+            courses.forEach { db.courseDao().insert(it.copy(id = 0)) }
+            db.examDao().deleteSemester(semester.acadYearSemester)
+            if (exams.isNotEmpty()) db.examDao().upsertAll(exams)
+        }
     }
 
     suspend fun clearAll() {

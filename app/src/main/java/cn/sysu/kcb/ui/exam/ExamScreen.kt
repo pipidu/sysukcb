@@ -69,7 +69,7 @@ fun ExamScreen(viewModel: AppViewModel) {
 
     LaunchedEffect(settings.selectedSemester, semesters, allExams, userPickedSemester, semesterOptions) {
         if (userPickedSemester && examSemester.isNotBlank()) return@LaunchedEffect
-        val current = settings.selectedSemester.takeIf { saved -> semesterOptions.contains(saved) }
+        val current = settings.selectedSemester.takeIf { it.isNotBlank() }
             ?: semesters.firstOrNull { it.isCurrent }?.acadYearSemester
             ?: currentAnchor
         examSemester = when {
