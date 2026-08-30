@@ -11,11 +11,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -36,10 +40,54 @@ import cn.sysu.kcb.domain.WeekMask
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CourseDetailSheet(
-    course: CourseEntity,
+    courses: List<CourseEntity>,
     periods: List<PeriodEntity>,
     onDismiss: () -> Unit,
+    onEdit: ((CourseEntity) -> Unit)? = null,
     bottomInset: Dp = 0.dp,
+) {
+    if (courses.isEmpty()) return
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .padding(bottom = bottomInset.coerceAtLeast(48.dp) + 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (courses.size > 1) {
+                Text(
+                    "该时段有 ${courses.size} 门课",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 16.sp,
+                    lineHeight = 22.sp,
+                    style = compactText,
+                )
+            }
+            courses.forEachIndexed { index, course ->
+                if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                CourseDetailBlock(course, periods, onEdit)
+            }
+            Spacer(Modifier.height(4.dp))
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("关闭")
+            }
+        }
+    }
+}
+
+@Composable
+private fun CourseDetailBlock(
+    course: CourseEntity,
+    periods: List<PeriodEntity>,
+    onEdit: ((CourseEntity) -> Unit)?,
 ) {
     val start = periods.firstOrNull { it.sectionNumber == course.startPeriod }?.startTime.orEmpty()
     val end = periods.firstOrNull { it.sectionNumber == course.endPeriod }?.endTime.orEmpty()
@@ -48,47 +96,36 @@ fun CourseDetailSheet(
         start.takeIf { it.isNotBlank() },
         end.takeIf { it.isNotBlank() },
     ).joinToString("-").ifBlank { "第${course.startPeriod}-${course.endPeriod}节" }
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-    ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = bottomInset.coerceAtLeast(48.dp) + 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .padding(end = 10.dp)
-                        .width(5.dp)
-                        .height(26.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(Color(course.color)),
-                )
-                Text(
-                    course.courseName,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 20.sp,
-                    lineHeight = 26.sp,
-                    style = compactText,
-                )
-            }
-            DetailLine("时间", "$day  第${course.startPeriod}-${course.endPeriod}节  $timeRange")
-            if (course.teacher.isNotBlank()) DetailLine("教师", course.teacher)
-            if (course.place.isNotBlank()) DetailLine("地点", course.place)
-            val weeks = WeekMask.describe(course.weeksMask).ifBlank { course.timeDetail }
-            if (weeks.isNotBlank()) DetailLine("周次", weeks)
-            if (course.notes.isNotBlank()) DetailLine("备注", course.notes)
-            Spacer(Modifier.height(4.dp))
-            Button(
-                onClick = onDismiss,
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .padding(end = 10.dp)
+                    .width(5.dp)
+                    .height(26.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(Color(course.color)),
+            )
+            Text(
+                course.courseName,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 20.sp,
+                lineHeight = 26.sp,
+                style = compactText,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        DetailLine("时间", "$day  第${course.startPeriod}-${course.endPeriod}节  $timeRange")
+        if (course.teacher.isNotBlank()) DetailLine("教师", course.teacher)
+        if (course.place.isNotBlank()) DetailLine("地点", course.place)
+        if (course.notes.isNotBlank()) DetailLine("备注", course.notes)
+        val weeks = WeekMask.describe(course.weeksMask).ifBlank { course.timeDetail }
+        if (weeks.isNotBlank()) DetailLine("周次", weeks)
+        if (onEdit != null) {
+            OutlinedButton(
+                onClick = { onEdit(course) },
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("关闭")
-            }
+            ) { Text("编辑这门课") }
         }
     }
 }

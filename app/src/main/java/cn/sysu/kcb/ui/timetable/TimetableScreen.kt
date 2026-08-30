@@ -147,7 +147,8 @@ fun TimetableScreen(
     var weekPicker by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf(false) }
-    var viewingCourse by remember { mutableStateOf<CourseEntity?>(null) }
+    var termOverview by rememberSaveable { mutableStateOf(false) }
+    var viewingCourses by remember { mutableStateOf<List<CourseEntity>?>(null) }
     val maxWeek = snapshot.weeks.maxOfOrNull { it.weekly } ?: 30
     val academicWeek = remember(snapshot.weeks, snapshot.semester?.startMillis) {
         ClassAlarmScheduler.resolveWeek(
@@ -206,17 +207,35 @@ fun TimetableScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f, fill = false)) {
-                        WeekTitleText(
-                            pagerState = pagerState,
-                            weeks = snapshot.weeks,
-                            selectedWeek = selectedWeek,
-                            syncingPager = syncingPager,
-                        )
-                        Text(
-                            semester.ifBlank { "课表" },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
-                        )
+                        if (termOverview) {
+                            Text(
+                                "学期课表",
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                lineHeight = 22.sp,
+                            )
+                            Text(
+                                "全部周次",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
+                            )
+                        } else {
+                            WeekTitleText(
+                                pagerState = pagerState,
+                                weeks = snapshot.weeks,
+                                selectedWeek = selectedWeek,
+                                syncingPager = syncingPager,
+                            )
+                            Text(
+                                weekRangeLabel(
+                                    weekNo = displayedWeekNo(pagerState, selectedWeek, syncingPager),
+                                    weeks = snapshot.weeks,
+                                    semesterStartMillis = snapshot.semester?.startMillis ?: 0L,
+                                ),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
+                            )
+                        }
                     }
                     Icon(
                         Icons.Filled.ArrowDropDown,
@@ -246,6 +265,11 @@ fun TimetableScreen(
                     }
                 }
                 IconButton(onClick = {
+                    if (termOverview) {
+                        termOverview = false
+                        userPickedWeek = true
+                        return@IconButton
+                    }
                     val next = (selectedWeek - 1).coerceAtLeast(1)
                     if (next == selectedWeek) return@IconButton
                     userPickedWeek = true
@@ -255,6 +279,11 @@ fun TimetableScreen(
                     Icon(Icons.Outlined.ChevronLeft, contentDescription = "上一周")
                 }
                 IconButton(onClick = {
+                    if (termOverview) {
+                        termOverview = false
+                        userPickedWeek = true
+                        return@IconButton
+                    }
                     val next = (selectedWeek + 1).coerceAtMost(maxWeek)
                     if (next == selectedWeek) return@IconButton
                     userPickedWeek = true
@@ -268,6 +297,13 @@ fun TimetableScreen(
                         Icon(Icons.Default.MoreVert, contentDescription = "更多")
                     }
                     DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(if (termOverview) "查看周课表" else "学期总课表") },
+                                onClick = {
+                                    termOverview = !termOverview
+                                    moreMenu = false
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("添加课程") },
                                 leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -329,6 +365,26 @@ fun TimetableScreen(
                                 Text("登录教务后即可自动导入课表和考试，或打开右上角菜单添加课程", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), textAlign = TextAlign.Center)
                                 TextButton(onClick = onLogin) { Text("去登录") }
                             }
+                        } else if (termOverview) {
+                            TimetableGrid(
+                                periods = snapshot.periods,
+                                courses = snapshot.courses,
+                                weekStart = resolveWeekStart(
+                                    academicWeek ?: selectedWeek,
+                                    snapshot.weeks.firstOrNull { it.weekly == (academicWeek ?: selectedWeek) },
+                                    snapshot.weeks,
+                                    snapshot.semester?.startMillis ?: 0L,
+                                ),
+                                onCourses = { group ->
+                                    if (editing && group.size == 1) onEdit(group.first().id)
+                                    else viewingCourses = group
+                                },
+                                onEmpty = if (editing) {
+                                    { day, period -> onAdd(day, period, semester) }
+                                } else {
+                                    null
+                                },
+                            )
                         } else {
                             HorizontalPager(
                                 state = pagerState,
@@ -341,9 +397,9 @@ fun TimetableScreen(
                                     periods = snapshot.periods,
                                     courses = snapshot.courses.filter { WeekMask.has(it.weeksMask, weekNo) },
                                     weekStart = resolveWeekStart(weekNo, weekEntity, snapshot.weeks, snapshot.semester?.startMillis ?: 0L),
-                                    editing = editing,
-                                    onCourse = { course ->
-                                        if (editing) onEdit(course.id) else viewingCourse = course
+                                    onCourses = { group ->
+                                        if (editing && group.size == 1) onEdit(group.first().id)
+                                        else viewingCourses = group
                                     },
                                     onEmpty = if (editing) {
                                         { day, period -> onAdd(day, period, semester) }
@@ -356,11 +412,19 @@ fun TimetableScreen(
                     }
                 }
             }
-            viewingCourse?.let { course ->
+            viewingCourses?.let { courses ->
                 CourseDetailSheet(
-                    course = course,
+                    courses = courses,
                     periods = snapshot.periods,
-                    onDismiss = { viewingCourse = null },
+                    onDismiss = { viewingCourses = null },
+                    onEdit = if (editing) {
+                        { course ->
+                            viewingCourses = null
+                            onEdit(course.id)
+                        }
+                    } else {
+                        null
+                    },
                     bottomInset = sheetBottomInset,
                 )
             }
@@ -372,10 +436,16 @@ fun TimetableScreen(
             selectedWeek = selectedWeek,
             currentWeek = academicWeek,
             maxWeek = maxWeek,
+            termOverview = termOverview,
             onPick = { weekNo ->
+                termOverview = false
                 userPickedWeek = true
                 syncingPager = true
                 selectedWeek = weekNo
+                weekPicker = false
+            },
+            onPickAll = {
+                termOverview = true
                 weekPicker = false
             },
             onDismiss = { weekPicker = false },
@@ -390,10 +460,26 @@ private fun WeekTitleText(
     selectedWeek: Int,
     syncingPager: Boolean,
 ) {
+    val displayWeek = displayedWeekNo(pagerState, selectedWeek, syncingPager)
+    val label = weeks.firstOrNull { it.weekly == displayWeek }?.weeklyName?.ifBlank { null }
+        ?: "第${displayWeek}周"
+    Text(
+        label,
+        fontSize = 22.sp,
+        fontWeight = FontWeight.Bold,
+        lineHeight = 22.sp,
+    )
+}
+
+private fun displayedWeekNo(
+    pagerState: PagerState,
+    selectedWeek: Int,
+    syncingPager: Boolean,
+): Int {
     val currentPage = pagerState.currentPage
     val offset = pagerState.currentPageOffsetFraction
     val settled = pagerState.settledPage
-    val displayWeek = if (syncingPager) {
+    return if (syncingPager) {
         selectedWeek.coerceAtLeast(1)
     } else {
         val pos = currentPage + offset
@@ -404,14 +490,21 @@ private fun WeekTitleText(
         }
         (page + 1).coerceIn(1, pagerState.pageCount.coerceAtLeast(1))
     }
-    val label = weeks.firstOrNull { it.weekly == displayWeek }?.weeklyName?.ifBlank { null }
-        ?: "第${displayWeek}周"
-    Text(
-        label,
-        fontSize = 22.sp,
-        fontWeight = FontWeight.Bold,
-        lineHeight = 22.sp,
-    )
+}
+
+private fun weekRangeLabel(
+    weekNo: Int,
+    weeks: List<WeekEntity>,
+    semesterStartMillis: Long,
+): String {
+    val start = resolveWeekStart(
+        weekNo,
+        weeks.firstOrNull { it.weekly == weekNo },
+        weeks,
+        semesterStartMillis,
+    ) ?: return ""
+    val end = start.plusDays(6)
+    return "${start.monthValue}/${start.dayOfMonth}–${end.monthValue}/${end.dayOfMonth}"
 }
 
 private fun pickSemester(
@@ -433,7 +526,9 @@ private fun WeekPickerDialog(
     selectedWeek: Int,
     currentWeek: Int?,
     maxWeek: Int,
+    termOverview: Boolean,
     onPick: (Int) -> Unit,
+    onPickAll: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val last = maxOf(maxWeek, weeks.maxOfOrNull { it.weekly } ?: 0, selectedWeek).coerceAtLeast(1)
@@ -448,10 +543,17 @@ private fun WeekPickerDialog(
                     .verticalScroll(rememberScrollState()),
             ) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = termOverview,
+                        onClick = onPickAll,
+                        label = {
+                            Text("全部", fontSize = 13.sp, lineHeight = 16.sp)
+                        },
+                    )
                     for (weekNo in 1..last) {
                         val isCurrent = weekNo == currentWeek
                         FilterChip(
-                            selected = weekNo == selectedWeek,
+                            selected = !termOverview && weekNo == selectedWeek,
                             onClick = { onPick(weekNo) },
                             label = {
                                 Text(
@@ -491,7 +593,9 @@ private fun resolveWeekStart(
             .toLocalDate()
         return mondayOf(start).plusWeeks((selectedWeek - 1).coerceAtLeast(0).toLong())
     }
-    return mondayOf(LocalDate.now())
+    val todayMonday = mondayOf(LocalDate.now())
+    val currentNo = ClassAlarmScheduler.resolveWeek(LocalDate.now(), weeks, semesterStartMillis) ?: 1
+    return todayMonday.plusWeeks((selectedWeek - currentNo).toLong())
 }
 
 private fun mondayOf(date: LocalDate): LocalDate = date.minusDays((date.dayOfWeek.value - 1).toLong())
@@ -540,8 +644,7 @@ private fun TimetableGrid(
     periods: List<PeriodEntity>,
     courses: List<CourseEntity>,
     weekStart: LocalDate?,
-    editing: Boolean,
-    onCourse: (CourseEntity) -> Unit,
+    onCourses: (List<CourseEntity>) -> Unit,
     onEmpty: ((Int, Int) -> Unit)?,
 ) {
     val periodH = 58.dp
@@ -561,26 +664,41 @@ private fun TimetableGrid(
             )
         }
     }
+    val groups = remember(courses) { overlapGroups(courses) }
     val vScroll = rememberScrollState()
     BoxWithConstraints(Modifier.fillMaxSize().verticalScroll(vScroll)) {
         val colW = (maxWidth - timeW) / 7
         val gridH = headerH + periodH * rows.size
         Box(Modifier.height(gridH).fillMaxWidth()) {
             Row(Modifier.fillMaxWidth().height(headerH), verticalAlignment = Alignment.CenterVertically) {
+                val dayDates = (0..6).map { weekStart?.plusDays(it.toLong()) }
+                val months = dayDates.mapNotNull { it?.monthValue }.distinct()
+                val cornerMonth = when {
+                    months.size >= 2 -> "${months.first()}/${months.last()}月"
+                    months.size == 1 -> "${months.first()}月"
+                    else -> "${(weekStart ?: today).monthValue}月"
+                }
                 Column(
                     Modifier.width(timeW).height(headerH),
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        "${(weekStart ?: today).monthValue}月",
+                        cornerMonth,
                         style = compactPeriod,
                         color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
                     )
                 }
                 dayNames.forEachIndexed { index, name ->
-                    val date = weekStart?.plusDays(index.toLong())
+                    val date = dayDates[index]
                     val isToday = date == today
+                    val dateLabel = when {
+                        date == null -> ""
+                        weekStart != null && date.monthValue != weekStart.monthValue ->
+                            "${date.monthValue}/${date.dayOfMonth}"
+                        else -> date.dayOfMonth.toString()
+                    }
                     Column(
                         Modifier.width(colW).height(headerH),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -595,7 +713,7 @@ private fun TimetableGrid(
                             color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            date?.dayOfMonth?.toString() ?: "",
+                            dateLabel,
                             textAlign = TextAlign.Center,
                             fontSize = 10.sp,
                             lineHeight = 12.sp,
@@ -648,10 +766,13 @@ private fun TimetableGrid(
                     }
                 }
             }
-            courses.forEach { course ->
-                val startIndex = rows.indexOfFirst { it.sectionNumber == course.startPeriod }.takeIf { it >= 0 }
-                    ?: (course.startPeriod - 1)
-                val span = (course.endPeriod - course.startPeriod + 1).coerceAtLeast(1)
+            groups.forEach { group ->
+                val course = group.first()
+                val startPeriod = group.minOf { it.startPeriod }
+                val endPeriod = group.maxOf { it.endPeriod }
+                val startIndex = rows.indexOfFirst { it.sectionNumber == startPeriod }.takeIf { it >= 0 }
+                    ?: (startPeriod - 1)
+                val span = (endPeriod - startPeriod + 1).coerceAtLeast(1)
                 Box(
                     Modifier
                         .padding(
@@ -661,7 +782,7 @@ private fun TimetableGrid(
                         .size(width = colW - 2.dp, height = periodH * span - 2.dp)
                         .clip(RoundedCornerShape(5.dp))
                         .background(Color(course.color).copy(alpha = 0.94f))
-                        .clickable { onCourse(course) }
+                        .clickable { onCourses(group) }
                         .padding(horizontal = 2.dp, vertical = 2.dp),
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
@@ -688,11 +809,61 @@ private fun TimetableGrid(
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
+                        if (course.notes.isNotBlank()) {
+                            Text(
+                                course.notes,
+                                color = Color.White.copy(alpha = 0.92f),
+                                style = compactMeta,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    if (group.size > 1) {
+                        Text(
+                            "${group.size}",
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(Color.Black.copy(alpha = 0.28f))
+                                .padding(horizontal = 3.dp, vertical = 1.dp),
+                            color = Color.White,
+                            fontSize = 8.sp,
+                            lineHeight = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            style = compactMeta,
+                        )
                     }
                 }
             }
         }
     }
+}
+
+private fun overlapGroups(courses: List<CourseEntity>): List<List<CourseEntity>> {
+    val result = mutableListOf<List<CourseEntity>>()
+    for ((_, dayCourses) in courses.groupBy { it.dayOfWeek }) {
+        val remaining = dayCourses
+            .sortedWith(compareBy({ it.startPeriod }, { it.endPeriod }, { it.courseName }, { it.id }))
+            .toMutableList()
+        while (remaining.isNotEmpty()) {
+            val group = mutableListOf(remaining.removeAt(0))
+            var changed = true
+            while (changed) {
+                changed = false
+                val start = group.minOf { it.startPeriod }
+                val end = group.maxOf { it.endPeriod }
+                val hit = remaining.filter { it.startPeriod <= end && it.endPeriod >= start }
+                if (hit.isNotEmpty()) {
+                    remaining.removeAll(hit.toSet())
+                    group += hit
+                    changed = true
+                }
+            }
+            result += group
+        }
+    }
+    return result
 }
 
 private fun displayPlace(place: String): String =
