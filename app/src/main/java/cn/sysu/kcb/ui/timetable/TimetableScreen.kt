@@ -326,7 +326,7 @@ fun TimetableScreen(
                                 verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
                             ) {
                                 Text("还没有课表", style = MaterialTheme.typography.titleMedium)
-                                Text("登录中山大学教务系统后即可自动导入，或打开右上角菜单添加课程", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), textAlign = TextAlign.Center)
+                                Text("登录教务后即可自动导入课表和考试，或打开右上角菜单添加课程", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), textAlign = TextAlign.Center)
                                 TextButton(onClick = onLogin) { Text("去登录") }
                             }
                         } else {

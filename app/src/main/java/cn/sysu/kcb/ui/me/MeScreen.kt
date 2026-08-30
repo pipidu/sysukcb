@@ -142,7 +142,7 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
                     Text(
                         when {
                             checkingSession -> "正在检查登录…"
-                            sessionStatus == SessionStatus.Valid -> "登录有效，可导入课表"
+                            sessionStatus == SessionStatus.Valid -> "登录有效，可导入课表和考试"
                             sessionStatus == SessionStatus.Unreachable -> "无法检查登录，请稍后重试"
                             else -> "未登录或已过期，请重新登录后再导入"
                         },
@@ -160,9 +160,9 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
             }
             Card(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("导入课表", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("导入课表和考试", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "选中学期只导入当前课表页所选学年；全部导入会拉取当前学期前后各 8 个学期（含已公布的未来课表）。",
+                        "选中学期只导入当前课表页所选学年的课表和考试；全部导入会拉取当前学期前后各 8 个学期（含已公布的未来课表与考试）。",
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

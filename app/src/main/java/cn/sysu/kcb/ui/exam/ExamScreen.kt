@@ -160,7 +160,7 @@ fun ExamScreen(viewModel: AppViewModel) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
                         when {
-                            examWeeks.isEmpty() -> "暂无考试周，请到「我的」重新导入"
+                            examWeeks.isEmpty() -> "暂无考试，请到「我的」导入课表和考试"
                             otherSemesterWithExams != null -> "该学期暂无考试，可切换到 $otherSemesterWithExams"
                             else -> "该考试周暂无安排"
                         },

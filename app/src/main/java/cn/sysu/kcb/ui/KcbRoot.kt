@@ -172,7 +172,7 @@ private fun ImportOverlay(progress: String) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             CircularProgressIndicator()
-            Text("正在导入课表", style = MaterialTheme.typography.titleMedium)
+            Text("正在导入课表和考试", style = MaterialTheme.typography.titleMedium)
             AnimatedContent(
                 targetState = progress.ifBlank { "请稍候，不要离开此页面" },
                 label = "importProgress",

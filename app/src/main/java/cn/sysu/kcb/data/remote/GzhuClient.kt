@@ -128,7 +128,7 @@ class GzhuClient(private val cookies: CookieStore) {
         const val MENU = "/jwglxt/xtgl/index_initMenu.html"
         const val EXAM_PAGE = "/jwglxt/design/viewFunc_cxDesignFuncPageIndex.html"
         const val EXAM_LIST = "/jwglxt/design/funcData_cxFuncDataList.html"
-        const val EXAM_FALLBACK = "/jwglxt/kwgl/kscx_cxXsksxxIndex.html"
+        const val EXAM_WIDGET_GUID = "EC4C2CEBA4825066E0530100007FBC11"
         const val DESKTOP_UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 

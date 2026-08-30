@@ -114,7 +114,7 @@ fun LoginScreen(
                 onClick = { tryFinish(requireJwxtCheck = false) },
                 enabled = !finished && !checking,
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
-            ) { Text(if (checking) "正在确认登录…" else "我已登录，导入课表") }
+            ) { Text(if (checking) "正在确认登录…" else "我已登录，导入课表和考试") }
         },
     ) { inner ->
         Column(Modifier.fillMaxSize().padding(inner)) {

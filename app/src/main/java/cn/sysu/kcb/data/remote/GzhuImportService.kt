@@ -152,6 +152,12 @@ class GzhuImportService(
 
         repo.replaceWeeks(semester, weeksFromCourses(semester, courses))
         runCatching { importExams(semester, xnm, xqm, csrf) }
+        if (isCurrent) {
+            previousSemester(semester)?.let { prev ->
+                val (pxnm, pxqm) = toXnmXqm(prev)
+                runCatching { importExams(prev, pxnm, pxqm, csrf) }
+            }
+        }
     }
 
     private suspend fun fetchPeriods(
@@ -192,82 +198,133 @@ class GzhuImportService(
         if (exams.isEmpty()) return
         val mapped = exams.mapNotNull { parseExam(semester, it) }
         if (mapped.isEmpty()) return
-        val weeks = mapped.map { it.examWeekName }.filter { it.isNotBlank() }.distinct()
-            .ifEmpty { listOf("考试") }
+        val weeks = mapped
+            .map { it.examWeekId.orEmpty() to it.examWeekName }
+            .filter { it.first.isNotBlank() || it.second.isNotBlank() }
+            .distinctBy { it.first.ifBlank { it.second } }
+            .ifEmpty { listOf("exam" to "考试") }
         repo.replaceExamWeeks(
             semester,
-            weeks.map { name ->
+            weeks.map { (id, name) ->
                 ExamWeekEntity(
                     acadYearSemester = semester,
-                    examWeekId = name,
-                    examWeekName = name,
+                    examWeekId = id.ifBlank { name },
+                    examWeekName = name.ifBlank { "考试" },
                 )
             },
         )
-        repo.replaceExams(semester, mapped)
+        repo.replaceExams(
+            semester,
+            mapped.distinctBy { it.examIndex ?: "${it.subjectName}|${it.examDate}|${it.startTime}" },
+        )
     }
 
     private suspend fun fetchExams(xnm: String, xqm: String, csrf: String): List<JsonObject> {
-        val fallback = runCatching {
-            val raw = client.postForm(
-                GzhuClient.EXAM_FALLBACK,
-                fields = queryModelFields(xnm, xqm, csrf),
-                query = mapOf("doType" to "query", "gnmkdm" to GzhuClient.GNMKDM_EXAM),
-            )
-            itemsOf(raw)
-        }.getOrDefault(emptyList())
-        if (fallback.isNotEmpty()) return fallback
         val page = runCatching {
             client.get(
                 GzhuClient.EXAM_PAGE,
                 query = mapOf("gnmkdm" to GzhuClient.GNMKDM_EXAM, "layout" to "default"),
+                referer = "${school.apiOrigin}/jwglxt/xtgl/index_initMenu.html?jsdm=xs",
             )
-        }.getOrNull() ?: return emptyList()
-        val guid = Regex("""func_widget_guid=([A-Za-z0-9]+)""").find(page)?.groupValues?.get(1).orEmpty()
+        }.getOrNull().orEmpty()
+        val guid = parseExamWidgetGuid(page).ifBlank { GzhuClient.EXAM_WIDGET_GUID }
         if (guid.isBlank()) return emptyList()
-        val raw = client.postForm(
-            GzhuClient.EXAM_LIST,
-            fields = queryModelFields(xnm, xqm, csrf),
-            query = mapOf("func_widget_guid" to guid, "gnmkdm" to GzhuClient.GNMKDM_EXAM),
-        )
-        saveRaw("funcData_cxFuncDataList", "$xnm-$xqm", raw)
-        return itemsOf(raw)
+        saveRaw("viewFunc_exam", "$xnm-$xqm", page.take(20_000))
+        val referer = "${school.apiOrigin}${GzhuClient.EXAM_PAGE}?gnmkdm=${GzhuClient.GNMKDM_EXAM}&layout=default"
+        val all = mutableListOf<JsonObject>()
+        var pageNo = 1
+        while (pageNo <= 20) {
+            val fields = queryModelFields(xnm, xqm, csrf, pageNo)
+            val raw = runCatching {
+                client.postForm(
+                    GzhuClient.EXAM_LIST,
+                    fields = fields,
+                    query = mapOf("func_widget_guid" to guid, "gnmkdm" to GzhuClient.GNMKDM_EXAM),
+                    referer = referer,
+                )
+            }.getOrNull() ?: break
+            if (pageNo == 1) saveRaw("funcData_cxFuncDataList", "$xnm-$xqm", raw)
+            val chunk = itemsOf(raw)
+            if (chunk.isEmpty()) break
+            all += chunk
+            val total = parseObject(raw)?.str("totalResult")?.toIntOrNull()
+                ?: parseObject(raw)?.str("totalCount")?.toIntOrNull()
+                ?: chunk.size
+            if (all.size >= total || chunk.size < 500) break
+            pageNo++
+        }
+        return all
     }
 
-    private fun queryModelFields(xnm: String, xqm: String, csrf: String) = linkedMapOf(
+    private fun parseExamWidgetGuid(html: String): String {
+        val patterns = listOf(
+            Regex("""func_widget_guid\s*[:=]\s*['"]([A-Za-z0-9]+)['"]"""),
+            Regex("""func_widget_guid=([A-Za-z0-9]+)"""),
+        )
+        for (pattern in patterns) {
+            val value = pattern.find(html)?.groupValues?.get(1).orEmpty()
+            if (value.isNotBlank()) return value
+        }
+        return ""
+    }
+
+    private fun queryModelFields(xnm: String, xqm: String, csrf: String, page: Int = 1) = linkedMapOf(
         "xnm" to xnm,
         "xqm" to xqm,
         "_search" to "false",
         "nd" to System.currentTimeMillis().toString(),
         "queryModel.showCount" to "500",
-        "queryModel.currentPage" to "1",
-        "queryModel.sortName" to "",
+        "queryModel.currentPage" to page.toString(),
+        "queryModel.sortName" to " ",
         "queryModel.sortOrder" to "asc",
-        "time" to "0",
     ).also { if (csrf.isNotBlank()) it["csrftoken"] = csrf }
 
     private fun parseExam(semester: String, o: JsonObject): ExamEntity? {
-        val name = o.firstStr("kcmc", "kcm", "ksmc", "examSubjectName")
+        val rawName = o.firstStr("sjbh", "kcmc", "kcm", "examSubjectName")
+        val name = rawName.replace(Regex("""\([^)]*\)\s*$"""), "").trim().ifBlank { rawName.trim() }
         if (name.isBlank()) return null
-        val date = o.firstStr("ksrq", "qsrq", "examDate", "ksrqstr")
-        val time = o.firstStr("kssj", "ksqssj")
-        val (start, end) = splitTimeRange(time.ifBlank { listOf(o.firstStr("qssj"), o.firstStr("jssj")).filter { it.isNotBlank() }.joinToString("-") })
-        val weekName = o.firstStr("ksxzmc", "ksxz", "examWeekName").ifBlank { "考试" }
+        val (date, start, end) = parseExamTime(o.firstStr("kssj", "ksrq", "examDate"))
+        val weekName = o.firstStr("ksmc", "ksxzmc", "ksxz", "examWeekName").ifBlank { "考试" }
+        val weekId = o.firstStr("ksmcdmb_id", "ksid").ifBlank { weekName }
+        val place = listOf(o.firstStr("ksxq", "xqmc"), o.firstStr("ksdd", "cdmc", "jsmc", "classroomNumber"))
+            .filter { it.isNotBlank() }
+            .joinToString(" ")
         return ExamEntity(
             acadYearSemester = semester,
-            examIndex = o.firstStr("ksid", "jxb_id").ifBlank { null },
+            examIndex = listOf(o.firstStr("jxbmc"), weekId, date, start)
+                .filter { it.isNotBlank() }
+                .joinToString("|")
+                .ifBlank { null },
             subjectName = name,
             examDate = date,
             startTime = start,
             endTime = end,
             duration = o.firstStr("ksxs", "duration"),
-            classroom = o.firstStr("cdmc", "ksdd", "jsmc", "classroomNumber"),
+            classroom = place,
             examMode = o.firstStr("ksfs", "ksfsmc", "examMode"),
-            examStage = o.firstStr("ksxz", "ksxzmc"),
+            examStage = "",
             examWeekName = weekName,
-            examWeekId = weekName,
+            examWeekId = weekId,
             extraJson = o.toString(),
         )
+    }
+
+    private fun parseExamTime(raw: String): Triple<String, String, String> {
+        val date = raw.substringBefore("(").trim()
+        val span = raw.substringAfter("(", "").substringBefore(")").trim()
+        if (span.isBlank()) {
+            val parts = splitTimeRange(raw)
+            return Triple(date.take(10), parts.first, parts.second)
+        }
+        val times = span.split("-", "–", "—").map { it.trim() }.filter { it.isNotBlank() }
+        return Triple(date.take(10), times.getOrNull(0).orEmpty(), times.getOrNull(1).orEmpty())
+    }
+
+    private fun previousSemester(sem: String): String? {
+        val parts = sem.split("-")
+        if (parts.size != 2) return null
+        val year = parts[0].toIntOrNull() ?: return null
+        return if (parts[1] == "2") "$year-1" else "${year - 1}-2"
     }
 
     private fun parseCourses(semester: String, data: JsonObject): List<CourseEntity> {

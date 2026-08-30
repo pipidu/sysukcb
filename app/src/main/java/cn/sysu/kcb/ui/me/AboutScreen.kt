@@ -78,7 +78,7 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                     modifier = Modifier.padding(top = 4.dp),
                 )
                 Text(
-                    "中山大学、广州大学本科教务课表客户端。课表与考试保存在本机，不经第三方服务器。",
+                    "中山大学、广州大学本科教务课表客户端。登录后可导入课表与考试，数据保存在本机，不经第三方服务器。",
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     modifier = Modifier.padding(top = 12.dp),
                 )
