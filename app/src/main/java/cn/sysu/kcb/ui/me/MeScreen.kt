@@ -166,10 +166,16 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { viewModel.importFromJwxt() }, enabled = !importing && loggedIn) {
+                        Button(
+                            onClick = { viewModel.importFromJwxt() },
+                            enabled = !importing && (loggedIn || sessionStatus == SessionStatus.Expired || sessionStatus == SessionStatus.Unreachable),
+                        ) {
                             Text(if (importing) "导入中…" else "导入选中学期")
                         }
-                        Button(onClick = { viewModel.importAllYears() }, enabled = !importing && loggedIn) {
+                        Button(
+                            onClick = { viewModel.importAllYears() },
+                            enabled = !importing && (loggedIn || sessionStatus == SessionStatus.Expired || sessionStatus == SessionStatus.Unreachable),
+                        ) {
                             Text("全部导入")
                         }
                     }

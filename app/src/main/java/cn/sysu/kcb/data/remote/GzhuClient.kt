@@ -2,7 +2,10 @@ package cn.sysu.kcb.data.remote
 
 import cn.sysu.kcb.data.prefs.CookieStore
 import cn.sysu.kcb.data.school.School
+import okhttp3.Cookie
+import okhttp3.CookieJar
 import okhttp3.FormBody
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -17,6 +20,7 @@ class GzhuClient(private val cookies: CookieStore) {
         .readTimeout(30, TimeUnit.SECONDS)
         .followRedirects(false)
         .followSslRedirects(false)
+        .cookieJar(StoreCookieJar(cookies))
         .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
         .build()
 
@@ -56,33 +60,57 @@ class GzhuClient(private val cookies: CookieStore) {
                 else "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             )
             .header("Origin", school.apiOrigin)
-            .header(
-                "User-Agent",
-                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
-            )
+            .header("User-Agent", DESKTOP_UA)
         if (ajax) builder.header("X-Requested-With", "XMLHttpRequest")
         builder.header(
             "Referer",
             referer ?: "${school.apiOrigin}$TIMETABLE_INDEX?gnmkdm=$GNMKDM_KB&layout=default",
         )
-        val cookie = cookies.cookieHeader()
-        if (cookie.isNotBlank()) builder.header("Cookie", cookie)
         return builder
     }
 
     private fun execute(request: Request): String {
-        http.newCall(request).execute().use { response ->
-            val location = response.header("Location").orEmpty()
-            if (response.code in 301..308 || response.code in listOf(401, 403)) {
-                if (isLoginRedirect(location) || response.code in listOf(401, 403)) {
+        var current = request
+        var hops = 0
+        while (hops < 6) {
+            hops++
+            http.newCall(current).execute().use { response ->
+                mergeSetCookie(response.headers("Set-Cookie"), response.request.url)
+                if (response.code in 301..308) {
+                    val location = response.header("Location").orEmpty()
+                    val next = response.request.url.resolve(location)
+                        ?: throw SessionExpiredException()
+                    if (isLoginUrl(next)) throw SessionExpiredException()
+                    if (!isJwxtHost(next.host)) throw SessionExpiredException()
+                    current = current.newBuilder().url(next).build()
+                    return@use
+                }
+                val body = response.body?.string().orEmpty()
+                if (response.code in listOf(401, 403) || looksLikeLoginPage(body)) {
                     throw SessionExpiredException()
                 }
-                if (response.code in 301..308) throw SessionExpiredException()
+                if (response.code !in 200..299) {
+                    throw ImportFailedException("广大教务接口 ${response.code}")
+                }
+                return body
             }
-            val body = response.body?.string().orEmpty()
-            if (looksLikeLoginPage(body)) throw SessionExpiredException()
-            return body
         }
+        throw SessionExpiredException("登录跳转过多")
+    }
+
+    private fun mergeSetCookie(setCookies: List<String>, url: HttpUrl) {
+        if (setCookies.isEmpty()) return
+        val merged = linkedMapOf<String, String>()
+        for (part in cookies.cookieHeader().split(";")) {
+            val kv = part.trim()
+            val name = kv.substringBefore("=")
+            if (name.isNotBlank()) merged[name] = kv
+        }
+        for (raw in setCookies) {
+            val parsed = Cookie.parse(url, raw) ?: continue
+            merged[parsed.name] = "${parsed.name}=${parsed.value}"
+        }
+        cookies.save(merged.values.joinToString("; "))
     }
 
     private fun String.toAbsolute() = when {
@@ -101,19 +129,53 @@ class GzhuClient(private val cookies: CookieStore) {
         const val EXAM_PAGE = "/jwglxt/design/viewFunc_cxDesignFuncPageIndex.html"
         const val EXAM_LIST = "/jwglxt/design/funcData_cxFuncDataList.html"
         const val EXAM_FALLBACK = "/jwglxt/kwgl/kscx_cxXsksxxIndex.html"
+        const val DESKTOP_UA =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
-        fun isLoginRedirect(location: String): Boolean {
-            val lower = location.lowercase()
-            return lower.contains("login_slogin") ||
-                lower.contains("newcas.gzhu.edu.cn") ||
-                lower.contains("/cas/login")
+        fun isJwxtHost(host: String): Boolean =
+            host.equals("jwxt.gzhu.edu.cn", ignoreCase = true)
+
+        fun isLoginUrl(url: HttpUrl): Boolean {
+            val path = url.encodedPath.lowercase()
+            val host = url.host.lowercase()
+            return path.contains("login_slogin") ||
+                host.contains("newcas.gzhu.edu.cn") ||
+                path.contains("/cas/login")
         }
 
         fun looksLikeLoginPage(body: String): Boolean {
-            if (body.contains("clickMenu(")) return false
-            return body.contains("login_slogin") ||
-                body.contains("name=\"yhm\"") ||
-                body.contains("id=\"yhm\"")
+            val trimmed = body.trimStart()
+            if (trimmed.startsWith("{") || trimmed.startsWith("[")) return false
+            if (body.contains("id=\"xnm\"") || body.contains("id='xnm'")) return false
+            if (body.contains("clickMenu(") || body.contains("\"kbList\"")) return false
+            val hasUser = body.contains("name=\"yhm\"") || body.contains("id=\"yhm\"")
+            val hasPassword = body.contains("type=\"password\"") || body.contains("name=\"mm\"")
+            return hasUser && hasPassword
         }
+    }
+}
+
+private class StoreCookieJar(private val cookies: CookieStore) : CookieJar {
+    override fun loadForRequest(url: HttpUrl): List<Cookie> {
+        if (!url.host.endsWith("gzhu.edu.cn")) return emptyList()
+        return cookies.cookieHeader().split(";").mapNotNull { part ->
+            val kv = part.trim()
+            if (kv.isEmpty() || "=" !in kv) return@mapNotNull null
+            Cookie.parse(url, kv)
+        }
+    }
+
+    override fun saveFromResponse(url: HttpUrl, cookieList: List<Cookie>) {
+        if (cookieList.isEmpty()) return
+        val merged = linkedMapOf<String, String>()
+        for (part in cookies.cookieHeader().split(";")) {
+            val kv = part.trim()
+            val name = kv.substringBefore("=")
+            if (name.isNotBlank()) merged[name] = kv
+        }
+        for (cookie in cookieList) {
+            merged[cookie.name] = "${cookie.name}=${cookie.value}"
+        }
+        cookies.save(merged.values.joinToString("; "))
     }
 }

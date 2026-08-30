@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import cn.sysu.kcb.KcbApp
+import cn.sysu.kcb.data.remote.GzhuClient
 import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.ui.theme.KcbTopBar
 import kotlinx.coroutines.launch
@@ -63,8 +64,11 @@ fun LoginScreen(
         checking = true
         cookies.syncFromWebView(school)
         scope.launch {
-            val ok = runCatching { KcbApp.instance.container.importer.isLoggedIn() }
-                .getOrDefault(!requireJwxtCheck && cookies.hasSession(school))
+            val checked = runCatching { KcbApp.instance.container.importer.isLoggedIn() }.getOrDefault(false)
+            val ok = checked || (
+                cookies.hasSession(school) &&
+                    (!requireJwxtCheck || school.id == School.ID_GZHU)
+                )
             if (ok) {
                 finished = true
                 onLoggedIn()
@@ -160,7 +164,7 @@ fun LoginScreen(
                                         ViewGroup.LayoutParams.MATCH_PARENT,
                                         ViewGroup.LayoutParams.MATCH_PARENT,
                                     )
-                                    applyLoginSettings()
+                                    applyLoginSettings(desktopUa = schoolId == School.ID_GZHU)
                                     webViewClient = client
                                 }
                                 extra.webChromeClient = this
@@ -188,7 +192,7 @@ fun LoginScreen(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                             )
-                            applyLoginSettings()
+                            applyLoginSettings(desktopUa = schoolId == School.ID_GZHU)
                             webViewClient = client
                             webChromeClient = chrome
                         }
@@ -252,7 +256,7 @@ private fun shouldLeaveWebView(view: WebView, url: String): Boolean {
 }
 
 @SuppressLint("SetJavaScriptEnabled")
-private fun WebView.applyLoginSettings() {
+private fun WebView.applyLoginSettings(desktopUa: Boolean = false) {
     settings.javaScriptEnabled = true
     settings.domStorageEnabled = true
     settings.databaseEnabled = true
@@ -263,7 +267,11 @@ private fun WebView.applyLoginSettings() {
     settings.loadWithOverviewMode = true
     settings.cacheMode = WebSettings.LOAD_DEFAULT
     settings.mediaPlaybackRequiresUserGesture = false
-    settings.userAgentString = settings.userAgentString.replace("; wv", "")
+    settings.userAgentString = if (desktopUa) {
+        GzhuClient.DESKTOP_UA
+    } else {
+        settings.userAgentString.replace("; wv", "")
+    }
     CookieManager.getInstance().setAcceptCookie(true)
     CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 }

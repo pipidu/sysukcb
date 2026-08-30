@@ -62,6 +62,7 @@ class CookieStore(context: Context) {
 
     fun syncFromWebView(school: School) {
         val manager = CookieManager.getInstance()
+        manager.flush()
         val merged = linkedMapOf<String, String>()
         for (origin in school.cookieOrigins) {
             val header = manager.getCookie(origin).orEmpty()

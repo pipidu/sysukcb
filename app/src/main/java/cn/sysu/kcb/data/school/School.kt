@@ -63,7 +63,9 @@ data class School(
             apiOrigin = "https://jwxt.gzhu.edu.cn",
             cookieOrigins = listOf(
                 "https://jwxt.gzhu.edu.cn",
+                "https://jwxt.gzhu.edu.cn/jwglxt/",
                 "http://jwxt.gzhu.edu.cn",
+                "http://jwxt.gzhu.edu.cn/jwglxt/",
                 "https://newcas.gzhu.edu.cn",
             ),
             sessionTokens = listOf("JSESSIONID"),

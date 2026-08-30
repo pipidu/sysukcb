@@ -39,11 +39,17 @@ class GzhuImportService(
         if (!cookies.hasSession(school)) return@withContext SessionCheckResult(SessionStatus.LoggedOut)
         runCatching {
             val html = client.get(
-                GzhuClient.MENU,
-                query = mapOf("jsdm" to "xs", "_t" to System.currentTimeMillis().toString()),
-                referer = "${school.apiOrigin}/jwglxt/",
+                GzhuClient.TIMETABLE_INDEX,
+                query = mapOf(
+                    "gnmkdm" to GzhuClient.GNMKDM_KB,
+                    "layout" to "default",
+                ),
+                referer = "${school.apiOrigin}/jwglxt/xtgl/index_initMenu.html?jsdm=xs",
             )
-            if (!html.contains("clickMenu(")) throw SessionExpiredException()
+            val logged = html.contains("id=\"xnm\"") ||
+                html.contains("id='xnm'") ||
+                html.contains("clickMenu(")
+            if (!logged) throw SessionExpiredException()
             SessionCheckResult(SessionStatus.Valid)
         }.getOrElse { error ->
             when (error) {
@@ -68,8 +74,12 @@ class GzhuImportService(
         )
         saveRaw("xskbcxIndex", "", indexHtml)
         val csrf = parseCsrf(indexHtml)
-        val currentXnm = parseSelected(indexHtml, "xnm").ifBlank { error("无法读取当前学年") }
-        val currentXqm = parseSelected(indexHtml, "xqm").ifBlank { "3" }
+        val currentXnm = parseSelected(indexHtml, "xnm")
+            .ifBlank { SemesterRange.guessCurrent().substringBefore("-") }
+        val currentXqm = parseSelected(indexHtml, "xqm").ifBlank {
+            val term = SemesterRange.guessCurrent().substringAfter("-")
+            if (term == "2") "12" else "3"
+        }
         val jwxtCurrent = toAppSemester(currentXnm, currentXqm)
         val focus = semesterOverride?.ifBlank { null } ?: jwxtCurrent
         val listed = parseYearOptions(indexHtml).flatMap { xnm ->
@@ -122,6 +132,7 @@ class GzhuImportService(
             "xsdm" to "",
             "kclbdm" to "",
             "kclxdm" to "",
+            "gnmkdm" to GzhuClient.GNMKDM_KB,
         )
         if (csrf.isNotBlank()) fields["csrftoken"] = csrf
         val raw = client.postForm(
