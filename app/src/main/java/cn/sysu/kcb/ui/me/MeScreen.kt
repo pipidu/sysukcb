@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -58,11 +57,9 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -403,42 +400,51 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ColorPickerDialog(
     current: Long,
     onDismiss: () -> Unit,
     onPick: (Long) -> Unit,
 ) {
-    val hsv = remember {
-        val arr = FloatArray(3)
-        android.graphics.Color.colorToHSV(current.toInt(), arr)
-        arr
+    val rgb = remember(current) { rgbOf(current) }
+    var r by remember { mutableFloatStateOf(rgb[0]) }
+    var g by remember { mutableFloatStateOf(rgb[1]) }
+    var b by remember { mutableFloatStateOf(rgb[2]) }
+    var hex by remember { mutableStateOf(hexOf(r, g, b)) }
+    fun setRgb(nr: Float, ng: Float, nb: Float) {
+        r = nr.coerceIn(0f, 255f)
+        g = ng.coerceIn(0f, 255f)
+        b = nb.coerceIn(0f, 255f)
+        hex = hexOf(r, g, b)
     }
-    var h by remember { mutableFloatStateOf(hsv[0]) }
-    var s by remember { mutableFloatStateOf(hsv[1]) }
-    var v by remember { mutableFloatStateOf(hsv[2]) }
-    var hex by remember {
-        mutableStateOf("%06X".format(current and 0xFFFFFF))
-    }
-    val live = Color(android.graphics.Color.HSVToColor(floatArrayOf(h, s, v)))
+    val live = Color(r / 255f, g / 255f, b / 255f)
+    val livePacked = packedRgb(r, g, b)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("主题色") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    PresetThemeColors.forEach { (color, name) ->
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    PresetThemeColors.forEach { (color, _) ->
                         Box(
                             Modifier
                                 .size(28.dp)
                                 .clip(CircleShape)
                                 .background(Color(color))
                                 .border(
-                                    width = if (current == color) 2.dp else 0.dp,
+                                    width = if ((color and 0xFFFFFFL) == livePacked) 2.dp else 0.dp,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     shape = CircleShape,
                                 )
-                                .clickable { onPick(color) },
+                                .clickable {
+                                    val next = rgbOf(color)
+                                    setRgb(next[0], next[1], next[2])
+                                },
                         )
                     }
                 }
@@ -449,18 +455,17 @@ private fun ColorPickerDialog(
                         .clip(CircleShape)
                         .background(live),
                 )
-                LabelSlider("色相", h, 0f, 360f) { h = it }
-                LabelSlider("饱和", s, 0f, 1f) { s = it }
-                LabelSlider("明度", v, 0.15f, 1f) { v = it }
+                LabelSlider("R", r, 0f, 255f) { setRgb(it, g, b) }
+                LabelSlider("G", g, 0f, 255f) { setRgb(r, it, b) }
+                LabelSlider("B", b, 0f, 255f) { setRgb(r, g, it) }
                 TextField(
                     value = hex,
                     onValueChange = {
                         hex = it.removePrefix("#").take(6)
                         if (hex.length == 6) {
                             hex.toLongOrNull(16)?.let { v16 ->
-                                val arr = FloatArray(3)
-                                android.graphics.Color.colorToHSV((0xFF000000 or v16).toInt(), arr)
-                                h = arr[0]; s = arr[1]; v = arr[2]
+                                val next = rgbOf(0xFF000000L or v16)
+                                r = next[0]; g = next[1]; b = next[2]
                             }
                         }
                     },
@@ -470,11 +475,28 @@ private fun ColorPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onPick(0xFF000000L or (live.toArgb().toLong() and 0xFFFFFF)) }) { Text("应用") }
+            TextButton(onClick = { onPick(0xFF000000L or livePacked) }) { Text("应用") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }
+
+private fun rgbOf(color: Long): FloatArray {
+    val n = (color and 0xFFFFFFL).toInt()
+    return floatArrayOf(
+        ((n shr 16) and 0xFF).toFloat(),
+        ((n shr 8) and 0xFF).toFloat(),
+        (n and 0xFF).toFloat(),
+    )
+}
+
+private fun packedRgb(r: Float, g: Float, b: Float): Long =
+    ((r.toInt() and 0xFF).toLong() shl 16) or
+        ((g.toInt() and 0xFF).toLong() shl 8) or
+        (b.toInt() and 0xFF).toLong()
+
+private fun hexOf(r: Float, g: Float, b: Float): String =
+    "%02X%02X%02X".format(r.toInt().coerceIn(0, 255), g.toInt().coerceIn(0, 255), b.toInt().coerceIn(0, 255))
 
 @Composable
 private fun LabelSlider(label: String, value: Float, from: Float, to: Float, onChange: (Float) -> Unit) {
