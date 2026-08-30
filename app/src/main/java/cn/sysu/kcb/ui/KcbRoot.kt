@@ -99,6 +99,7 @@ fun KcbRoot(viewModel: AppViewModel) {
             }
             composable("login") {
                 LoginScreen(
+                    schoolId = settings.schoolId,
                     onClose = { goHome() },
                     onLoggedIn = {
                         goHome()

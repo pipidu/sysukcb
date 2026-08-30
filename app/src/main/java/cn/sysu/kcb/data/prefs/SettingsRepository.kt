@@ -21,6 +21,7 @@ data class UserSettings(
     val examReminderEnabled: Boolean = true,
     val examReminderMinutes: Int = 60,
     val selectedSemester: String = "",
+    val schoolId: String = SettingsRepository.DEFAULT_SCHOOL_ID,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -52,6 +53,10 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.selectedSemester] = semester }
     }
 
+    suspend fun setSchoolId(schoolId: String) {
+        context.dataStore.edit { it[Keys.schoolId] = schoolId }
+    }
+
     private fun Preferences.toSettings() = UserSettings(
         themeColor = this[Keys.themeColor] ?: SettingsRepository.DEFAULT_THEME_COLOR,
         reminderEnabled = this[Keys.reminderEnabled] ?: true,
@@ -59,6 +64,7 @@ class SettingsRepository(private val context: Context) {
         examReminderEnabled = this[Keys.examReminderEnabled] ?: true,
         examReminderMinutes = this[Keys.examReminderMinutes] ?: 60,
         selectedSemester = this[Keys.selectedSemester].orEmpty(),
+        schoolId = this[Keys.schoolId] ?: SettingsRepository.DEFAULT_SCHOOL_ID,
     )
 
     private object Keys {
@@ -68,9 +74,11 @@ class SettingsRepository(private val context: Context) {
         val examReminderEnabled = booleanPreferencesKey("exam_reminder_enabled")
         val examReminderMinutes = intPreferencesKey("exam_reminder_minutes")
         val selectedSemester = stringPreferencesKey("selected_semester")
+        val schoolId = stringPreferencesKey("school_id")
     }
 
     companion object {
         const val DEFAULT_THEME_COLOR = 0xFF8C1A1AL
+        const val DEFAULT_SCHOOL_ID = "sysu"
     }
 }

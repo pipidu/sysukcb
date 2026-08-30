@@ -7,6 +7,7 @@ import android.webkit.WebStorage
 import android.webkit.WebView
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import cn.sysu.kcb.data.school.School
 
 class CookieStore(context: Context) {
     private val prefs: SharedPreferences = runCatching {
@@ -52,14 +53,26 @@ class CookieStore(context: Context) {
         if (onDone == null) manager.flush()
     }
 
-    fun hasSession(): Boolean {
+    fun hasSession(school: School): Boolean = school.hasSession(cookieHeader())
+
+    fun hasAnySession(): Boolean {
         val value = cookieHeader()
-        return value.contains("LYSESSIONID") && value.contains("user=")
+        return School.All.any { it.hasSession(value) }
     }
 
-    fun syncFromWebView() {
-        val fromWeb = CookieManager.getInstance().getCookie(JWXT_ORIGIN).orEmpty()
-        if (fromWeb.isNotBlank()) save(fromWeb)
+    fun syncFromWebView(school: School) {
+        val manager = CookieManager.getInstance()
+        val merged = linkedMapOf<String, String>()
+        for (origin in school.cookieOrigins) {
+            val header = manager.getCookie(origin).orEmpty()
+            if (header.isBlank()) continue
+            for (part in header.split(";")) {
+                val kv = part.trim()
+                val name = kv.substringBefore("=")
+                if (name.isNotBlank()) merged[name] = kv
+            }
+        }
+        if (merged.isNotEmpty()) save(merged.values.joinToString("; "))
     }
 
     companion object {
@@ -67,14 +80,5 @@ class CookieStore(context: Context) {
         const val JWXT_ORIGIN = "https://jwxt.sysu.edu.cn"
         const val LOGIN_URL =
             "https://jwxt.sysu.edu.cn/jwxt/api/sso/cas/login?pattern=student-login"
-
-        fun isJwxtLanding(url: String): Boolean {
-            val path = url.substringBefore('#').substringBefore('?').trimEnd('/')
-            if (!path.startsWith(JWXT_ORIGIN)) return false
-            if (path.contains("/esc-sso") || path.contains("/api/sso/")) return false
-            return path == JWXT_ORIGIN ||
-                path == "$JWXT_ORIGIN/jwxt" ||
-                path.startsWith("$JWXT_ORIGIN/jwxt/mk")
-        }
     }
 }

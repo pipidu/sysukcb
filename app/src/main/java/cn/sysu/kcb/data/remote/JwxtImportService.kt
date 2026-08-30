@@ -11,6 +11,7 @@ import cn.sysu.kcb.data.local.WeekdayEntity
 import cn.sysu.kcb.data.prefs.CookieStore
 import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.repo.TimetableRepository
+import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.domain.CourseColors
 import cn.sysu.kcb.domain.SemesterRange
 import cn.sysu.kcb.domain.WeekMask
@@ -38,12 +39,12 @@ class JwxtImportService(
     private val cookies: CookieStore,
     private val repo: TimetableRepository,
     private val settings: SettingsRepository,
-) {
-    suspend fun isLoggedIn(): Boolean = checkSession().status == SessionStatus.Valid
+) : SchoolImporter {
+    override suspend fun isLoggedIn(): Boolean = checkSession().status == SessionStatus.Valid
 
-    suspend fun checkSession(): SessionCheckResult = withContext(Dispatchers.IO) {
-        cookies.syncFromWebView()
-        if (!cookies.hasSession()) return@withContext SessionCheckResult(SessionStatus.LoggedOut)
+    override suspend fun checkSession(): SessionCheckResult = withContext(Dispatchers.IO) {
+        cookies.syncFromWebView(School.Sysu)
+        if (!cookies.hasSession(School.Sysu)) return@withContext SessionCheckResult(SessionStatus.LoggedOut)
         runCatching {
             val body = api.showNewAcadlist()
             requireOk(body)
@@ -59,13 +60,13 @@ class JwxtImportService(
     suspend fun importAll(semesterOverride: String? = null): String =
         importAllYears(onlyCurrent = semesterOverride != null, semesterOverride = semesterOverride)
 
-    suspend fun importAllYears(
-        onlyCurrent: Boolean = false,
-        semesterOverride: String? = null,
-        onProgress: suspend (String) -> Unit = {},
+    override suspend fun importAllYears(
+        onlyCurrent: Boolean,
+        semesterOverride: String?,
+        onProgress: suspend (String) -> Unit,
     ): String = withContext(Dispatchers.IO) {
-        cookies.syncFromWebView()
-        if (!cookies.hasSession()) throw SessionExpiredException()
+        cookies.syncFromWebView(School.Sysu)
+        if (!cookies.hasSession(School.Sysu)) throw SessionExpiredException()
         onProgress("正在验证登录…")
         val current = api.showNewAcadlist()
         saveRaw("showNewAcadlist", "", current)

@@ -38,16 +38,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import cn.sysu.kcb.KcbApp
-import cn.sysu.kcb.data.prefs.CookieStore
+import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.ui.theme.KcbTopBar
 import kotlinx.coroutines.launch
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun LoginScreen(
+    schoolId: String,
     onClose: () -> Unit,
     onLoggedIn: () -> Unit,
 ) {
+    var school by remember(schoolId) { mutableStateOf(School.of(schoolId)) }
     val scope = rememberCoroutineScope()
     var webView by remember { mutableStateOf<WebView?>(null) }
     var popupWebView by remember { mutableStateOf<WebView?>(null) }
@@ -59,10 +61,10 @@ fun LoginScreen(
     fun tryFinish(requireJwxtCheck: Boolean) {
         if (finished || checking) return
         checking = true
-        cookies.syncFromWebView()
+        cookies.syncFromWebView(school)
         scope.launch {
             val ok = runCatching { KcbApp.instance.container.importer.isLoggedIn() }
-                .getOrDefault(!requireJwxtCheck && cookies.hasSession())
+                .getOrDefault(!requireJwxtCheck && cookies.hasSession(school))
             if (ok) {
                 finished = true
                 onLoggedIn()
@@ -73,7 +75,7 @@ fun LoginScreen(
     }
 
     fun maybeFinish(url: String) {
-        if (!CookieStore.isJwxtLanding(url)) return
+        if (!school.isLanding(url)) return
         tryFinish(requireJwxtCheck = true)
     }
 
@@ -97,7 +99,7 @@ fun LoginScreen(
                 IconButton(onClick = onClose) {
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "关闭")
                 }
-                Text("教务登录", modifier = Modifier.weight(1f))
+                Text("${school.shortName}教务登录", modifier = Modifier.weight(1f))
                 TextButton(onClick = { tryFinish(requireJwxtCheck = true) }, enabled = !finished && !checking) {
                     Text("开始导入")
                 }
@@ -137,7 +139,7 @@ fun LoginScreen(
 
                             override fun onPageFinished(view: WebView, url: String) {
                                 CookieManager.getInstance().flush()
-                                cookies.syncFromWebView()
+                                cookies.syncFromWebView(school)
                                 maybeFinish(url)
                             }
                         }
@@ -194,7 +196,14 @@ fun LoginScreen(
                         webView = host
                         cookies.wipeBrowser(host) {
                             host.post {
-                                if (!finished) host.loadUrl(CookieStore.LOGIN_URL)
+                                if (finished) return@post
+                                scope.launch {
+                                    val latest = School.of(
+                                        KcbApp.instance.container.settings.snapshot().schoolId,
+                                    )
+                                    school = latest
+                                    host.loadUrl(latest.loginUrl)
+                                }
                             }
                         }
                     }

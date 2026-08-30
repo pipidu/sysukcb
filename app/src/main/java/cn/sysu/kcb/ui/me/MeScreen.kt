@@ -35,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -66,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.sysu.kcb.data.remote.SessionStatus
+import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.UpdateCheckState
 import cn.sysu.kcb.ui.theme.KcbTopBar
@@ -127,6 +129,16 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
             Card(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("教务登录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        School.All.forEach { school ->
+                            FilterChip(
+                                selected = settings.schoolId == school.id,
+                                onClick = { viewModel.setSchool(school.id) },
+                                enabled = !importing,
+                                label = { Text(school.displayName) },
+                            )
+                        }
+                    }
                     Text(
                         when {
                             checkingSession -> "正在检查登录…"

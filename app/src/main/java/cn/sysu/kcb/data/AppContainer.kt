@@ -5,6 +5,9 @@ import cn.sysu.kcb.data.local.AppDatabase
 import cn.sysu.kcb.data.prefs.CookieStore
 import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.remote.GithubUpdateService
+import cn.sysu.kcb.data.remote.GzhuClient
+import cn.sysu.kcb.data.remote.GzhuImportService
+import cn.sysu.kcb.data.remote.ImportRouter
 import cn.sysu.kcb.data.remote.JwxtImportService
 import cn.sysu.kcb.data.remote.createJwxtApi
 import cn.sysu.kcb.data.remote.createJwxtJson
@@ -19,7 +22,9 @@ class AppContainer(context: Context) {
     val settings = SettingsRepository(context)
     val timetable = TimetableRepository(db)
     val api = createJwxtApi(cookies, json)
-    val importer = JwxtImportService(api, json, cookies, timetable, settings)
+    private val sysuImporter = JwxtImportService(api, json, cookies, timetable, settings)
+    private val gzhuImporter = GzhuImportService(GzhuClient(cookies), json, cookies, timetable, settings)
+    val importer = ImportRouter(settings, sysuImporter, gzhuImporter)
     val updates = GithubUpdateService(json)
     val share = ShareService(context, timetable, json)
     val alarms = ClassAlarmScheduler(context)

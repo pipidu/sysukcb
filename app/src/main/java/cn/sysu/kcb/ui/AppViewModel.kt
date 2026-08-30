@@ -12,6 +12,7 @@ import cn.sysu.kcb.data.remote.SessionCheckResult
 import cn.sysu.kcb.data.remote.SessionExpiredException
 import cn.sysu.kcb.data.remote.SessionStatus
 import cn.sysu.kcb.data.remote.isNewerThan
+import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.widget.WidgetData
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -31,9 +32,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val message = MutableStateFlow<String?>(null)
     val importing = MutableStateFlow(false)
     val importProgress = MutableStateFlow("")
-    val loggedIn = MutableStateFlow(container.cookies.hasSession())
+    val loggedIn = MutableStateFlow(container.cookies.hasAnySession())
     val sessionStatus = MutableStateFlow(
-        if (container.cookies.hasSession()) SessionStatus.Valid else SessionStatus.LoggedOut,
+        if (container.cookies.hasAnySession()) SessionStatus.Valid else SessionStatus.LoggedOut,
     )
     val checkingSession = MutableStateFlow(false)
     val openTimetableAt = MutableStateFlow(0L)
@@ -104,6 +105,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         refreshAlarms()
     }
 
+    fun setSchool(schoolId: String) = viewModelScope.launch {
+        if (schoolId.isBlank()) return@launch
+        val current = container.settings.snapshot().schoolId
+        if (current == schoolId) return@launch
+        container.settings.setSchoolId(schoolId)
+        container.cookies.clear()
+        loggedIn.value = false
+        sessionStatus.value = SessionStatus.LoggedOut
+        message.value = "已切换到${School.of(schoolId).displayName}，请重新登录"
+    }
+
     fun setSemester(semester: String) = viewModelScope.launch {
         if (semester.isBlank()) return@launch
         val current = container.settings.snapshot().selectedSemester
@@ -138,7 +150,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 WidgetData.refreshAll(getApplication())
             }
             .onFailure {
-                loggedIn.value = container.cookies.hasSession()
+                loggedIn.value = container.cookies.hasAnySession()
                 if (it is SessionExpiredException) sessionStatus.value = SessionStatus.Expired
                 message.value = when (it) {
                     is SessionExpiredException -> it.message
