@@ -41,6 +41,7 @@ import cn.sysu.kcb.MainActivity
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.PeriodEntity
 import cn.sysu.kcb.data.local.WeekEntity
+import cn.sysu.kcb.domain.CourseColors
 import cn.sysu.kcb.domain.WeekMask
 import cn.sysu.kcb.notify.ClassAlarmScheduler
 import java.time.LocalDate
@@ -139,7 +140,7 @@ object WidgetData {
             weekCourses = courses.filter { WeekMask.has(it.weeksMask, weekNo) },
             periods = periods,
             weekNo = weekNo,
-            upcoming = upcomingClasses(courses, periods, weeks, current?.startMillis ?: 0L, 2),
+            upcoming = upcomingClasses(courses, periods, weeks, current?.startMillis ?: 0L, 2, settings.themeColor),
         )
     }
 
@@ -157,6 +158,7 @@ object WidgetData {
         weeks: List<WeekEntity>,
         semesterStart: Long,
         limit: Int,
+        theme: Long,
     ): List<UpcomingItem> {
         val now = java.time.LocalDateTime.now()
         val today = now.toLocalDate()
@@ -191,7 +193,7 @@ object WidgetData {
                     place = course.place,
                     timeLabel = if (ongoing) "$timeRange${if (course.place.isNotBlank()) " · ${course.place}" else ""}" else
                         listOf(dayLabel, course.place).filter { it.isNotBlank() }.joinToString(" · "),
-                    color = course.color,
+                    color = CourseColors.display(course.color, course.courseName, theme),
                     ongoing = ongoing,
                 )
                 if (result.size >= limit) break
@@ -243,12 +245,13 @@ private fun TodayContent(state: WidgetState) {
             state.today.take(4).forEach { course ->
                 val start = state.periods.firstOrNull { it.sectionNumber == course.startPeriod }?.startTime.orEmpty()
                 val end = state.periods.firstOrNull { it.sectionNumber == course.endPeriod }?.endTime.orEmpty()
+                val cardColor = CourseColors.display(course.color, course.courseName, state.theme)
                 Row(
                     modifier = GlanceModifier
                         .fillMaxWidth()
                         .padding(bottom = 8.dp)
                         .cornerRadius(12.dp)
-                        .background(ColorProvider(Color(course.color).copy(alpha = 0.12f)))
+                        .background(ColorProvider(Color(cardColor).copy(alpha = 0.12f)))
                         .padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -257,7 +260,7 @@ private fun TodayContent(state: WidgetState) {
                             .width(4.dp)
                             .height(36.dp)
                             .cornerRadius(4.dp)
-                            .background(ColorProvider(Color(course.color))),
+                            .background(ColorProvider(Color(cardColor))),
                     ) {
                         Spacer(GlanceModifier.width(4.dp))
                     }
@@ -337,7 +340,7 @@ private fun WeekContent(state: WidgetState) {
                             .cornerRadius(4.dp)
                             .background(
                                 ColorProvider(
-                                    if (course != null) Color(course.color) else Color(0xFFF2F4F7),
+                                    if (course != null) Color(CourseColors.display(course.color, course.courseName, state.theme)) else Color(0xFFF2F4F7),
                                 ),
                             )
                             .padding(2.dp),

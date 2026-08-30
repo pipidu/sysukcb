@@ -83,6 +83,7 @@ import cn.sysu.kcb.data.local.SemesterEntity
 import cn.sysu.kcb.data.local.WeekEntity
 import cn.sysu.kcb.data.prefs.UserSettings
 import cn.sysu.kcb.data.repo.TimetableSnapshot
+import cn.sysu.kcb.domain.CourseColors
 import cn.sysu.kcb.domain.SemesterRange
 import cn.sysu.kcb.domain.WeekMask
 import cn.sysu.kcb.notify.ClassAlarmScheduler
@@ -385,6 +386,7 @@ fun TimetableScreen(
                                 } else {
                                     null
                                 },
+                                themeColor = settings.themeColor,
                             )
                         } else {
                             HorizontalPager(
@@ -407,6 +409,7 @@ fun TimetableScreen(
                                     } else {
                                         null
                                     },
+                                    themeColor = settings.themeColor,
                                 )
                             }
                         }
@@ -417,6 +420,7 @@ fun TimetableScreen(
                 CourseDetailSheet(
                     courses = courses,
                     periods = snapshot.periods,
+                    themeColor = settings.themeColor,
                     onDismiss = { viewingCourses = null },
                     onEdit = if (editing) {
                         { course ->
@@ -647,6 +651,7 @@ private fun TimetableGrid(
     weekStart: LocalDate?,
     onCourses: (List<CourseEntity>) -> Unit,
     onEmpty: ((Int, Int) -> Unit)?,
+    themeColor: Long,
 ) {
     val periodH = 58.dp
     val headerH = 40.dp
@@ -769,6 +774,7 @@ private fun TimetableGrid(
             }
             groups.forEach { group ->
                 val course = group.first()
+                val cardColor = CourseColors.display(course.color, course.courseName, themeColor)
                 val startPeriod = group.minOf { it.startPeriod }
                 val endPeriod = group.maxOf { it.endPeriod }
                 val startIndex = rows.indexOfFirst { it.sectionNumber == startPeriod }.takeIf { it >= 0 }
@@ -782,7 +788,7 @@ private fun TimetableGrid(
                         )
                         .size(width = colW - 2.dp, height = periodH * span - 2.dp)
                         .clip(RoundedCornerShape(5.dp))
-                        .background(Color(course.color).copy(alpha = 0.94f))
+                        .background(Color(cardColor).copy(alpha = 0.94f))
                         .clickable { onCourses(group) }
                         .padding(horizontal = 2.dp, vertical = 2.dp),
                 ) {

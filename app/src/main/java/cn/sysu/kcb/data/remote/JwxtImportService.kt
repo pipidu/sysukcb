@@ -224,7 +224,7 @@ class JwxtImportService(
         val table = api.studentQuery(queryBody)
         saveRaw("studentQuery", semester, table)
         requireOk(table)
-        repo.replaceImportedCourses(semester, parseCourses(semester, dataObject(table)))
+        repo.replaceImportedCourses(semester, parseCourses(semester, dataObject(table), settings.snapshot().themeColor))
         runCatching { importExams(semester) }
         if (isCurrent) {
             previousSemester(semester)?.let { prev ->
@@ -305,7 +305,7 @@ class JwxtImportService(
         }
     }
 
-    private fun parseCourses(semester: String, data: JsonObject): List<CourseEntity> {
+    private fun parseCourses(semester: String, data: JsonObject, themeColor: Long): List<CourseEntity> {
         val timetable = data["timetable"]?.jsonObject ?: return emptyList()
         val result = mutableListOf<CourseEntity>()
         for ((_, value) in timetable) {
@@ -334,7 +334,7 @@ class JwxtImportService(
                     startWeek = startWeek,
                     weeksMask = WeekMask.parse(o.str("timeDetail"), startWeek),
                     timeDetail = o.str("timeDetail").cleanJwxt(),
-                    color = CourseColors.of(name),
+                    color = CourseColors.of(name, themeColor),
                     extraJson = o.toString(),
                 )
             }

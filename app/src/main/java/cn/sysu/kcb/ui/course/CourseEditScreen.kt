@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.domain.CourseColors
 import cn.sysu.kcb.domain.WeekMask
@@ -55,6 +56,8 @@ fun CourseEditScreen(
     semester: String,
     onDone: () -> Unit,
 ) {
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val palette = remember(settings.themeColor) { CourseColors.paletteFor(settings.themeColor) }
     var loaded by remember { mutableStateOf<CourseEntity?>(null) }
     LaunchedEffect(courseId) {
         loaded = courseId?.let { viewModel.getCourse(it) }
@@ -67,7 +70,9 @@ fun CourseEditScreen(
     var day by remember(existing) { mutableIntStateOf(existing?.dayOfWeek ?: presetDay.coerceIn(1, 7)) }
     var start by remember(existing) { mutableIntStateOf(existing?.startPeriod ?: presetPeriod.coerceIn(1, 11)) }
     var end by remember(existing) { mutableIntStateOf(existing?.endPeriod ?: presetPeriod.coerceIn(1, 11)) }
-    var color by remember(existing) { mutableLongStateOf(existing?.color ?: CourseColors.of(name.ifBlank { "课" })) }
+    var color by remember(existing, settings.themeColor) {
+        mutableLongStateOf(existing?.color ?: CourseColors.of(name.ifBlank { "课" }, settings.themeColor))
+    }
     var weeksMask by remember(existing) { mutableLongStateOf(existing?.weeksMask ?: WeekMask.fromRange(1, 18)) }
 
     Scaffold(
@@ -87,7 +92,7 @@ fun CourseEditScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            OutlinedTextField(name, { name = it; if (existing == null) color = CourseColors.of(it.ifBlank { "课" }) }, label = { Text("课程名称") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(name, { name = it; if (existing == null) color = CourseColors.of(it.ifBlank { "课" }, settings.themeColor) }, label = { Text("课程名称") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(teacher, { teacher = it }, label = { Text("教师") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(place, { place = it }, label = { Text("地点") }, modifier = Modifier.fillMaxWidth())
             Text("星期")
@@ -128,7 +133,7 @@ fun CourseEditScreen(
             }
             Text("颜色")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CourseColors.palette.forEach { c ->
+                palette.forEach { c ->
                     Box(
                         Modifier
                             .size(28.dp)

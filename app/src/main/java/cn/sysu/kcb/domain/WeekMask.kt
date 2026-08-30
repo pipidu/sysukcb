@@ -83,7 +83,9 @@ object WeekMask {
 fun String.cleanJwxt(): String = trim().trimEnd('/').trim()
 
 object CourseColors {
-    val palette = listOf(
+    const val DEFAULT_THEME = 0xFF8C1A1AL
+
+    private val legacyPalette = listOf(
         0xFFC62828, 0xFFAD1457, 0xFFC2185B, 0xFF880E4F, 0xFF6A1B9A,
         0xFF4527A0, 0xFF512DA8, 0xFF283593, 0xFF1A237E, 0xFF1565C0,
         0xFF0277BD, 0xFF0288D1, 0xFF00838F, 0xFF00695C, 0xFF004D40,
@@ -93,9 +95,59 @@ object CourseColors {
         0xFF5E35B1, 0xFF3949AB,
     )
 
-    fun of(name: String): Long {
-        val index = (name.hashCode().toUInt() % palette.size.toUInt()).toInt()
-        return palette[index]
+    val palette: List<Long> get() = paletteFor(DEFAULT_THEME)
+
+    fun paletteFor(theme: Long): List<Long> {
+        val hsv = FloatArray(3)
+        android.graphics.Color.colorToHSV(theme.toInt(), hsv)
+        val seedH = hsv[0]
+        val seedS = hsv[1].coerceIn(0.42f, 0.88f)
+        val seedV = hsv[2].coerceIn(0.36f, 0.56f)
+        val offsets = floatArrayOf(
+            0f, 16f, 32f, -18f, -34f,
+            48f, 150f, 165f, 180f, 196f,
+            210f, 120f, 240f, 72f, 288f, 96f,
+        )
+        return offsets.mapIndexed { index, delta ->
+            val h = (seedH + delta + 360f) % 360f
+            val s = (seedS + when (index % 3) {
+                0 -> 0.06f
+                1 -> -0.08f
+                else -> 0.02f
+            }).coerceIn(0.40f, 0.90f)
+            val v = (seedV + if (index % 2 == 0) 0.05f else -0.04f).coerceIn(0.34f, 0.58f)
+            argb(h, s, v)
+        }.distinct()
+    }
+
+    fun of(name: String, theme: Long = DEFAULT_THEME): Long {
+        val pal = paletteFor(theme)
+        val index = (name.hashCode().toUInt() % pal.size.toUInt()).toInt()
+        return pal[index]
+    }
+
+    fun display(stored: Long, name: String, theme: Long): Long {
+        val pal = paletteFor(theme)
+        if (pal.any { it == stored }) return stored
+        return of(name, theme)
+    }
+
+    fun remap(stored: Long, fromTheme: Long, toTheme: Long, name: String): Long {
+        val dest = paletteFor(toTheme)
+        val slot = slotOf(stored, fromTheme, name, dest.size)
+        return dest[slot]
+    }
+
+    private fun slotOf(stored: Long, fromTheme: Long, name: String, destSize: Int): Int {
+        val themed = paletteFor(fromTheme)
+        themed.indexOf(stored).takeIf { it >= 0 }?.let { return it % destSize }
+        legacyPalette.indexOf(stored).takeIf { it >= 0 }?.let { return it % destSize }
+        return (name.hashCode().toUInt() % destSize.toUInt()).toInt()
+    }
+
+    private fun argb(h: Float, s: Float, v: Float): Long {
+        val color = android.graphics.Color.HSVToColor(floatArrayOf(h, s, v))
+        return color.toLong() and 0xFFFFFFFFL
     }
 }
 

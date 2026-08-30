@@ -83,7 +83,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setThemeColor(color: Long) = viewModelScope.launch {
+        val previous = container.settings.snapshot().themeColor
         container.settings.setThemeColor(color)
+        if (previous != color) container.timetable.recolorToTheme(previous, color)
         WidgetData.refreshAll(getApplication())
     }
 

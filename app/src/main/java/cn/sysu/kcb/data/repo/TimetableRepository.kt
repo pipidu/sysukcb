@@ -10,6 +10,7 @@ import cn.sysu.kcb.data.local.RawImportEntity
 import cn.sysu.kcb.data.local.SemesterEntity
 import cn.sysu.kcb.data.local.WeekEntity
 import cn.sysu.kcb.data.local.WeekdayEntity
+import cn.sysu.kcb.domain.CourseColors
 import cn.sysu.kcb.domain.DefaultPeriods
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -115,6 +116,17 @@ class TimetableRepository(private val db: AppDatabase) {
     suspend fun addCourse(item: CourseEntity): Long = db.courseDao().insert(item)
     suspend fun updateCourse(item: CourseEntity) = db.courseDao().update(item)
     suspend fun deleteCourse(item: CourseEntity) = db.courseDao().delete(item)
+
+    suspend fun recolorToTheme(fromTheme: Long, toTheme: Long) {
+        if (fromTheme == toTheme) return
+        val all = db.courseDao().listAll()
+        db.withTransaction {
+            for (course in all) {
+                val next = CourseColors.remap(course.color, fromTheme, toTheme, course.courseName)
+                if (next != course.color) db.courseDao().update(course.copy(color = next))
+            }
+        }
+    }
 
     suspend fun replaceSemesterPack(
         semester: SemesterEntity,

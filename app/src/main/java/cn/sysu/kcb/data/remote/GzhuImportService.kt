@@ -142,7 +142,7 @@ class GzhuImportService(
         )
         saveRaw("xskbcx_cxXsgrkb", semester, raw)
         val data = parseObject(raw) ?: throw ImportFailedException("课表返回不是 JSON")
-        val courses = parseCourses(semester, data)
+        val courses = parseCourses(semester, data, settings.snapshot().themeColor)
         repo.replaceImportedCourses(semester, courses)
 
         val campusId = campusIdOf(data)
@@ -327,7 +327,7 @@ class GzhuImportService(
         return if (parts[1] == "2") "$year-1" else "${year - 1}-2"
     }
 
-    private fun parseCourses(semester: String, data: JsonObject): List<CourseEntity> {
+    private fun parseCourses(semester: String, data: JsonObject, themeColor: Long): List<CourseEntity> {
         val kbList = data["kbList"] as? JsonArray ?: JsonArray(emptyList())
         val result = mutableListOf<CourseEntity>()
         for (item in kbList) {
@@ -356,7 +356,7 @@ class GzhuImportService(
                 startWeek = startWeek,
                 weeksMask = weeksMask,
                 timeDetail = listOf(zcd, o.str("jc")).filter { it.isNotBlank() }.joinToString(" "),
-                color = CourseColors.of(name),
+                color = CourseColors.of(name, themeColor),
                 extraJson = o.toString(),
             )
         }

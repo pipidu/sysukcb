@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.PeriodEntity
+import cn.sysu.kcb.domain.CourseColors
 import cn.sysu.kcb.domain.WeekMask
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,6 +43,7 @@ import cn.sysu.kcb.domain.WeekMask
 fun CourseDetailSheet(
     courses: List<CourseEntity>,
     periods: List<PeriodEntity>,
+    themeColor: Long = CourseColors.DEFAULT_THEME,
     onDismiss: () -> Unit,
     onEdit: ((CourseEntity) -> Unit)? = null,
     bottomInset: Dp = 0.dp,
@@ -70,7 +72,7 @@ fun CourseDetailSheet(
             }
             courses.forEachIndexed { index, course ->
                 if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-                CourseDetailBlock(course, periods, onEdit)
+                CourseDetailBlock(course, periods, themeColor, onEdit)
             }
             Spacer(Modifier.height(4.dp))
             Button(
@@ -87,6 +89,7 @@ fun CourseDetailSheet(
 private fun CourseDetailBlock(
     course: CourseEntity,
     periods: List<PeriodEntity>,
+    themeColor: Long,
     onEdit: ((CourseEntity) -> Unit)?,
 ) {
     val start = periods.firstOrNull { it.sectionNumber == course.startPeriod }?.startTime.orEmpty()
@@ -104,7 +107,7 @@ private fun CourseDetailBlock(
                     .width(5.dp)
                     .height(26.dp)
                     .clip(RoundedCornerShape(3.dp))
-                    .background(Color(course.color)),
+                    .background(Color(CourseColors.display(course.color, course.courseName, themeColor))),
             )
             Text(
                 course.courseName,

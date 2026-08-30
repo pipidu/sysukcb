@@ -268,7 +268,7 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
             }
             ListItem(
                 headlineContent = { Text("主题色") },
-                supportingContent = { Text("默认中大红，可随时更换") },
+                supportingContent = { Text("更换后课表卡片会换成同色系配色") },
                 trailingContent = {
                     Box(
                         Modifier
