@@ -118,7 +118,10 @@ private fun CourseDetailBlock(
         DetailLine("时间", "$day  第${course.startPeriod}-${course.endPeriod}节  $timeRange")
         if (course.teacher.isNotBlank()) DetailLine("教师", course.teacher)
         if (course.place.isNotBlank()) DetailLine("地点", course.place)
-        if (course.notes.isNotBlank()) DetailLine("备注", course.notes)
+        if (course.notes.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            DetailLine("备注", course.notes)
+        }
         val weeks = WeekMask.describe(course.weeksMask).ifBlank { course.timeDetail }
         if (weeks.isNotBlank()) DetailLine("周次", weeks)
         if (onEdit != null) {
