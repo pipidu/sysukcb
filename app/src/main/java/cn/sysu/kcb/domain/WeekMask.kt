@@ -95,29 +95,34 @@ object CourseColors {
         0xFF5E35B1, 0xFF3949AB,
     )
 
+    // 马卡龙浅色（WakeUp / 小爱同款思路）：色相随主题旋转，浅底深字。
+    private data class Swatch(val hue: Float, val s: Float, val l: Float)
+
+    private val macaron = listOf(
+        Swatch(4f, 0.58f, 0.72f),
+        Swatch(18f, 0.64f, 0.70f),
+        Swatch(36f, 0.62f, 0.68f),
+        Swatch(148f, 0.40f, 0.68f),
+        Swatch(174f, 0.44f, 0.66f),
+        Swatch(196f, 0.56f, 0.70f),
+        Swatch(220f, 0.52f, 0.68f),
+        Swatch(252f, 0.42f, 0.70f),
+        Swatch(320f, 0.44f, 0.72f),
+        Swatch(340f, 0.54f, 0.70f),
+        Swatch(88f, 0.28f, 0.68f),
+        Swatch(200f, 0.26f, 0.66f),
+    )
+
     val palette: List<Long> get() = paletteFor(DEFAULT_THEME)
 
     fun paletteFor(theme: Long): List<Long> {
         val hsv = FloatArray(3)
-        android.graphics.Color.colorToHSV(theme.toInt(), hsv)
-        val seedH = hsv[0]
-        val seedS = hsv[1].coerceIn(0.42f, 0.88f)
-        val seedV = hsv[2].coerceIn(0.36f, 0.56f)
-        val offsets = floatArrayOf(
-            0f, 16f, 32f, -18f, -34f,
-            48f, 150f, 165f, 180f, 196f,
-            210f, 120f, 240f, 72f, 288f, 96f,
-        )
-        return offsets.mapIndexed { index, delta ->
-            val h = (seedH + delta + 360f) % 360f
-            val s = (seedS + when (index % 3) {
-                0 -> 0.06f
-                1 -> -0.08f
-                else -> 0.02f
-            }).coerceIn(0.40f, 0.90f)
-            val v = (seedV + if (index % 2 == 0) 0.05f else -0.04f).coerceIn(0.34f, 0.58f)
-            argb(h, s, v)
-        }.distinct()
+        android.graphics.Color.colorToHSV((theme and 0xFFFFFFFFL).toInt(), hsv)
+        val shift = hsv[0] - macaron.first().hue
+        return macaron.map { swatch ->
+            val h = (swatch.hue + shift + 360f) % 360f
+            hsl(h, swatch.s, swatch.l)
+        }
     }
 
     fun of(name: String, theme: Long = DEFAULT_THEME): Long {
@@ -138,6 +143,16 @@ object CourseColors {
         return dest[slot]
     }
 
+    fun ink(bg: Long): Long {
+        val c = (bg and 0xFFFFFFFFL).toInt()
+        val r = android.graphics.Color.red(c) / 255.0
+        val g = android.graphics.Color.green(c) / 255.0
+        val b = android.graphics.Color.blue(c) / 255.0
+        fun lin(x: Double) = if (x <= 0.04045) x / 12.92 else Math.pow((x + 0.055) / 1.055, 2.4)
+        val y = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+        return if (y > 0.42) 0xFF2C2C2CL else 0xFFFFFFFFL
+    }
+
     private fun slotOf(stored: Long, fromTheme: Long, name: String, destSize: Int): Int {
         val themed = paletteFor(fromTheme)
         themed.indexOf(stored).takeIf { it >= 0 }?.let { return it % destSize }
@@ -145,9 +160,21 @@ object CourseColors {
         return (name.hashCode().toUInt() % destSize.toUInt()).toInt()
     }
 
-    private fun argb(h: Float, s: Float, v: Float): Long {
-        val color = android.graphics.Color.HSVToColor(floatArrayOf(h, s, v))
-        return color.toLong() and 0xFFFFFFFFL
+    private fun hsl(h: Float, s: Float, l: Float): Long {
+        val c = (1f - kotlin.math.abs(2f * l - 1f)) * s
+        val hp = ((h % 360f + 360f) % 360f) / 60f
+        val x = c * (1f - kotlin.math.abs(hp % 2f - 1f))
+        val (r1, g1, b1) = when {
+            hp < 1f -> Triple(c, x, 0f)
+            hp < 2f -> Triple(x, c, 0f)
+            hp < 3f -> Triple(0f, c, x)
+            hp < 4f -> Triple(0f, x, c)
+            hp < 5f -> Triple(x, 0f, c)
+            else -> Triple(c, 0f, x)
+        }
+        val m = l - c / 2f
+        fun ch(v: Float) = ((v + m) * 255f).toInt().coerceIn(0, 255).toLong()
+        return 0xFF000000L or (ch(r1) shl 16) or (ch(g1) shl 8) or ch(b1)
     }
 }
 

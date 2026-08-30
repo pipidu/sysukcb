@@ -251,7 +251,7 @@ private fun TodayContent(state: WidgetState) {
                         .fillMaxWidth()
                         .padding(bottom = 8.dp)
                         .cornerRadius(12.dp)
-                        .background(ColorProvider(Color(cardColor).copy(alpha = 0.12f)))
+                        .background(ColorProvider(Color(cardColor).copy(alpha = 0.55f)))
                         .padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -332,6 +332,7 @@ private fun WeekContent(state: WidgetState) {
                     val course = state.weekCourses.firstOrNull {
                         it.dayOfWeek == day && period >= it.startPeriod && period <= it.endPeriod
                     }
+                    val shown = course?.let { CourseColors.display(it.color, it.courseName, state.theme) }
                     Box(
                         modifier = GlanceModifier
                             .defaultWeight()
@@ -340,16 +341,20 @@ private fun WeekContent(state: WidgetState) {
                             .cornerRadius(4.dp)
                             .background(
                                 ColorProvider(
-                                    if (course != null) Color(CourseColors.display(course.color, course.courseName, state.theme)) else Color(0xFFF2F4F7),
+                                    if (shown != null) Color(shown) else Color(0xFFF2F4F7),
                                 ),
                             )
                             .padding(2.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (course != null && period == course.startPeriod) {
+                        if (course != null && shown != null && period == course.startPeriod) {
                             Text(
                                 course.courseName.take(6),
-                                style = TextStyle(color = ColorProvider(Color.White), fontSize = 9.sp, textAlign = TextAlign.Center),
+                                style = TextStyle(
+                                    color = ColorProvider(Color(CourseColors.ink(shown))),
+                                    fontSize = 9.sp,
+                                    textAlign = TextAlign.Center,
+                                ),
                                 maxLines = 2,
                             )
                         } else {
@@ -399,7 +404,7 @@ private fun NextContent(state: WidgetState) {
                         .defaultWeight()
                         .padding(bottom = 4.dp)
                         .cornerRadius(10.dp)
-                        .background(ColorProvider(Color(item.color).copy(alpha = 0.12f)))
+                        .background(ColorProvider(Color(item.color).copy(alpha = 0.55f)))
                         .padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
