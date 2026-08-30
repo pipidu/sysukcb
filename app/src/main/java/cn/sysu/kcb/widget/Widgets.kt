@@ -350,11 +350,7 @@ private fun WeekContent(state: WidgetState) {
                         if (course != null && shown != null && period == course.startPeriod) {
                             Text(
                                 course.courseName.take(6),
-                                style = TextStyle(
-                                    color = ColorProvider(Color(CourseColors.ink(shown))),
-                                    fontSize = 9.sp,
-                                    textAlign = TextAlign.Center,
-                                ),
+                                style = TextStyle(color = ColorProvider(Color.White), fontSize = 9.sp, textAlign = TextAlign.Center),
                                 maxLines = 2,
                             )
                         } else {

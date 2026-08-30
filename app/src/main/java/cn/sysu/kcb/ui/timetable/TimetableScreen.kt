@@ -775,7 +775,6 @@ private fun TimetableGrid(
             groups.forEach { group ->
                 val course = group.first()
                 val cardColor = CourseColors.display(course.color, course.courseName, themeColor)
-                val ink = Color(CourseColors.ink(cardColor))
                 val startPeriod = group.minOf { it.startPeriod }
                 val endPeriod = group.maxOf { it.endPeriod }
                 val startIndex = rows.indexOfFirst { it.sectionNumber == startPeriod }.takeIf { it >= 0 }
@@ -796,14 +795,14 @@ private fun TimetableGrid(
                     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
                         Text(
                             course.courseName,
-                            color = ink,
+                            color = Color.White,
                             style = compactName,
                             overflow = TextOverflow.Ellipsis,
                         )
                         if (course.teacher.isNotBlank()) {
                             Text(
                                 course.teacher,
-                                color = ink.copy(alpha = 0.78f),
+                                color = Color.White.copy(alpha = 0.92f),
                                 style = compactMeta,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -812,7 +811,7 @@ private fun TimetableGrid(
                         if (course.place.isNotBlank()) {
                             Text(
                                 displayPlace(course.place),
-                                color = ink.copy(alpha = 0.78f),
+                                color = Color.White.copy(alpha = 0.92f),
                                 style = compactMeta,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -821,7 +820,7 @@ private fun TimetableGrid(
                             Spacer(Modifier.height(10.dp))
                             Text(
                                 course.notes,
-                                color = ink.copy(alpha = 0.78f),
+                                color = Color.White.copy(alpha = 0.92f),
                                 style = compactMeta,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
@@ -834,9 +833,9 @@ private fun TimetableGrid(
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
                                 .clip(RoundedCornerShape(3.dp))
-                                .background(ink.copy(alpha = 0.16f))
+                                .background(Color.Black.copy(alpha = 0.28f))
                                 .padding(horizontal = 3.dp, vertical = 1.dp),
-                            color = ink,
+                            color = Color.White,
                             fontSize = 8.sp,
                             lineHeight = 9.sp,
                             fontWeight = FontWeight.Bold,
