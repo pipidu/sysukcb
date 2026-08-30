@@ -39,6 +39,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val checkingSession = MutableStateFlow(false)
     val openTimetableAt = MutableStateFlow(0L)
     val updateState = MutableStateFlow<UpdateCheckState>(UpdateCheckState.Idle)
+    val webdavBusy = MutableStateFlow(false)
+    val webdavHasPassword = MutableStateFlow(container.webdavSecrets.hasPassword())
     private var lastUpdateCheckAt = 0L
 
     fun consumeMessage() {
@@ -180,6 +182,43 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val file = container.share.exportSemester(semester)
             container.share.shareFile(file)
         }.onFailure { message.value = it.message ?: "导出失败" }
+    }
+
+    fun saveWebDav(url: String, user: String, password: String) = viewModelScope.launch {
+        persistWebDav(url, user, password)
+        message.value = "已保存 WebDAV 设置"
+    }
+
+    fun uploadWebDav(url: String, user: String, password: String) = viewModelScope.launch {
+        persistWebDav(url, user, password)
+        webdavBusy.value = true
+        runCatching { container.webdav.upload() }
+            .onSuccess { message.value = "已上传课表到 WebDAV" }
+            .onFailure { message.value = it.message ?: "上传失败" }
+        webdavBusy.value = false
+    }
+
+    fun downloadWebDav(url: String, user: String, password: String) = viewModelScope.launch {
+        persistWebDav(url, user, password)
+        webdavBusy.value = true
+        importing.value = true
+        runCatching { container.webdav.download() }
+            .onSuccess {
+                if (it.isNotBlank()) container.settings.setSelectedSemester(it)
+                message.value = "已从 WebDAV 导入课表"
+                openTimetableAt.value = System.currentTimeMillis()
+                refreshAlarms()
+                WidgetData.refreshAll(getApplication())
+            }
+            .onFailure { message.value = it.message ?: "下载失败" }
+        importing.value = false
+        webdavBusy.value = false
+    }
+
+    private suspend fun persistWebDav(url: String, user: String, password: String) {
+        container.settings.setWebDav(url, user)
+        if (password.isNotBlank()) container.webdavSecrets.save(password)
+        webdavHasPassword.value = container.webdavSecrets.hasPassword()
     }
 
     fun prepareFreshLogin() {

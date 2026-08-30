@@ -6,6 +6,7 @@
     <string name="tab_me">我的</string>
     <string name="widget_today">今日课程</string>
     <string name="widget_week">本周课表</string>
+    <string name="widget_next">最近两节课</string>
     <string name="channel_class">上课提醒</string>
     <string name="channel_exam">考试提醒</string>
 </resources>

@@ -48,6 +48,11 @@ class TimetableRepository(private val db: AppDatabase) {
     }
     suspend fun listExams(semester: String) = db.examDao().list(semester)
     suspend fun listAllExams() = db.examDao().listAll()
+    suspend fun listAllCourses() = db.courseDao().listAll()
+    suspend fun listAllWeeks() = db.weekDao().listAll()
+    suspend fun listAllPeriods() = db.periodDao().listAll()
+    suspend fun listExamWeeks(semester: String) = db.examWeekDao().list(semester)
+    suspend fun listAllExamWeeks() = db.examWeekDao().listAll()
     suspend fun listSemesters() = db.semesterDao().list()
     suspend fun getCourse(id: Long) = db.courseDao().get(id)
     suspend fun currentSemester() = db.semesterDao().current()
@@ -117,7 +122,20 @@ class TimetableRepository(private val db: AppDatabase) {
         periods: List<PeriodEntity>,
         courses: List<CourseEntity>,
         exams: List<ExamEntity>,
+        examWeeks: List<ExamWeekEntity> = emptyList(),
     ) {
+        val weeksForExams = examWeeks.ifEmpty {
+            exams.map { it.examWeekId.orEmpty() to it.examWeekName }
+                .filter { it.first.isNotBlank() || it.second.isNotBlank() }
+                .distinctBy { it.first.ifBlank { it.second } }
+                .map { (id, name) ->
+                    ExamWeekEntity(
+                        acadYearSemester = semester.acadYearSemester,
+                        examWeekId = id.ifBlank { name },
+                        examWeekName = name.ifBlank { "考试" },
+                    )
+                }
+        }
         db.withTransaction {
             db.semesterDao().upsert(semester)
             db.weekDao().deleteSemester(semester.acadYearSemester)
@@ -128,6 +146,8 @@ class TimetableRepository(private val db: AppDatabase) {
             courses.forEach { db.courseDao().insert(it.copy(id = 0)) }
             db.examDao().deleteSemester(semester.acadYearSemester)
             if (exams.isNotEmpty()) db.examDao().upsertAll(exams)
+            db.examWeekDao().deleteSemester(semester.acadYearSemester)
+            if (weeksForExams.isNotEmpty()) db.examWeekDao().upsertAll(weeksForExams)
         }
     }
 

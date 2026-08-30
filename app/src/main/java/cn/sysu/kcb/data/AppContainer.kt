@@ -4,11 +4,14 @@ import android.content.Context
 import cn.sysu.kcb.data.local.AppDatabase
 import cn.sysu.kcb.data.prefs.CookieStore
 import cn.sysu.kcb.data.prefs.SettingsRepository
+import cn.sysu.kcb.data.prefs.WebDavSecrets
 import cn.sysu.kcb.data.remote.GithubUpdateService
 import cn.sysu.kcb.data.remote.GzhuClient
 import cn.sysu.kcb.data.remote.GzhuImportService
 import cn.sysu.kcb.data.remote.ImportRouter
 import cn.sysu.kcb.data.remote.JwxtImportService
+import cn.sysu.kcb.data.remote.WebDavClient
+import cn.sysu.kcb.data.remote.WebDavSyncService
 import cn.sysu.kcb.data.remote.createJwxtApi
 import cn.sysu.kcb.data.remote.createJwxtJson
 import cn.sysu.kcb.data.repo.ShareService
@@ -27,5 +30,7 @@ class AppContainer(context: Context) {
     val importer = ImportRouter(settings, sysuImporter, gzhuImporter)
     val updates = GithubUpdateService(json)
     val share = ShareService(context, timetable, json)
+    val webdavSecrets = WebDavSecrets(context)
+    val webdav = WebDavSyncService(WebDavClient(), share, settings, webdavSecrets)
     val alarms = ClassAlarmScheduler(context)
 }

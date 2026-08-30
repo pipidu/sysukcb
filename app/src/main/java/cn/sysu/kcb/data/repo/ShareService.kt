@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.core.content.FileProvider
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.ExamEntity
+import cn.sysu.kcb.data.local.ExamWeekEntity
 import cn.sysu.kcb.data.local.PeriodEntity
 import cn.sysu.kcb.data.local.SemesterEntity
 import cn.sysu.kcb.data.local.WeekEntity
@@ -23,6 +24,7 @@ data class SharePack(
     val periods: List<PeriodEntity> = emptyList(),
     val courses: List<CourseEntity> = emptyList(),
     val exams: List<ExamEntity> = emptyList(),
+    val examWeeks: List<ExamWeekEntity> = emptyList(),
 )
 
 class ShareService(
@@ -37,12 +39,28 @@ class ShareService(
             periods = repo.listPeriods(semester).map { it.copy(id = 0) },
             courses = repo.listCourses(semester).map { it.copy(id = 0) },
             exams = repo.listExams(semester).map { it.copy(id = 0) },
+            examWeeks = repo.listExamWeeks(semester).map { it.copy(id = 0) },
         )
         val dir = File(context.cacheDir, "share").apply { mkdirs() }
         val file = File(dir, "课程表D-$semester.sysukcb.json")
-        file.writeText(json.encodeToString(SharePack.serializer(), pack))
+        file.writeText(encode(pack))
         return file
     }
+
+    suspend fun exportAllJson(): String {
+        return encode(
+            SharePack(
+                semesters = repo.listSemesters(),
+                weeks = repo.listAllWeeks().map { it.copy(id = 0) },
+                periods = repo.listAllPeriods().map { it.copy(id = 0) },
+                courses = repo.listAllCourses().map { it.copy(id = 0) },
+                exams = repo.listAllExams().map { it.copy(id = 0) },
+                examWeeks = repo.listAllExamWeeks().map { it.copy(id = 0) },
+            ),
+        )
+    }
+
+    private fun encode(pack: SharePack) = json.encodeToString(SharePack.serializer(), pack)
 
     fun shareFile(file: File) {
         val uri = FileProvider.getUriForFile(
@@ -69,6 +87,7 @@ class ShareService(
         val groupedWeeks = pack.weeks.groupBy { it.acadYearSemester }
         val groupedPeriods = pack.periods.groupBy { it.acadYearSemester }
         val groupedExams = pack.exams.groupBy { it.acadYearSemester }
+        val groupedExamWeeks = pack.examWeeks.groupBy { it.acadYearSemester }
         val semesters = pack.semesters.ifEmpty {
             groupedCourses.keys.map {
                 SemesterEntity(it, it, 0, 0, 0, false)
@@ -83,6 +102,7 @@ class ShareService(
                     it.copy(source = if (it.source == "imported") "shared" else it.source)
                 },
                 exams = groupedExams[semester.acadYearSemester].orEmpty(),
+                examWeeks = groupedExamWeeks[semester.acadYearSemester].orEmpty(),
             )
         }
         return semesters.firstOrNull()?.acadYearSemester.orEmpty()

@@ -43,6 +43,9 @@ interface WeekDao {
     @Query("SELECT * FROM weeks WHERE acadYearSemester = :sem ORDER BY weekly")
     suspend fun list(sem: String): List<WeekEntity>
 
+    @Query("SELECT * FROM weeks")
+    suspend fun listAll(): List<WeekEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(items: List<WeekEntity>)
 
@@ -57,6 +60,9 @@ interface PeriodDao {
 
     @Query("SELECT * FROM periods WHERE acadYearSemester = :sem ORDER BY sectionNumber")
     suspend fun list(sem: String): List<PeriodEntity>
+
+    @Query("SELECT * FROM periods")
+    suspend fun listAll(): List<PeriodEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(items: List<PeriodEntity>)
@@ -129,6 +135,12 @@ interface ExamWeekDao {
 
     @Query("SELECT * FROM exam_weeks ORDER BY acadYearSemester DESC, startDate")
     fun observeAll(): Flow<List<ExamWeekEntity>>
+
+    @Query("SELECT * FROM exam_weeks WHERE acadYearSemester = :sem ORDER BY startDate, examWeekName")
+    suspend fun list(sem: String): List<ExamWeekEntity>
+
+    @Query("SELECT * FROM exam_weeks")
+    suspend fun listAll(): List<ExamWeekEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(items: List<ExamWeekEntity>)

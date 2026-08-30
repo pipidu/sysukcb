@@ -40,9 +40,12 @@ import cn.sysu.kcb.KcbApp
 import cn.sysu.kcb.MainActivity
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.PeriodEntity
+import cn.sysu.kcb.data.local.WeekEntity
 import cn.sysu.kcb.domain.WeekMask
 import cn.sysu.kcb.notify.ClassAlarmScheduler
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 class TodayWidget : GlanceAppWidget() {
     override val sizeMode: SizeMode = SizeMode.Exact
@@ -70,6 +73,19 @@ class WeekWidget : GlanceAppWidget() {
     }
 }
 
+class NextWidget : GlanceAppWidget() {
+    override val sizeMode: SizeMode = SizeMode.Exact
+
+    override suspend fun provideGlance(context: Context, id: GlanceId) {
+        val state = WidgetData.load(context)
+        provideContent {
+            GlanceTheme {
+                NextContent(state)
+            }
+        }
+    }
+}
+
 class TodayWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = TodayWidget()
 }
@@ -77,6 +93,18 @@ class TodayWidgetReceiver : GlanceAppWidgetReceiver() {
 class WeekWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = WeekWidget()
 }
+
+class NextWidgetReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = NextWidget()
+}
+
+data class UpcomingItem(
+    val name: String,
+    val place: String,
+    val timeLabel: String,
+    val color: Long,
+    val ongoing: Boolean,
+)
 
 data class WidgetState(
     val theme: Long,
@@ -86,6 +114,7 @@ data class WidgetState(
     val weekCourses: List<CourseEntity>,
     val periods: List<PeriodEntity>,
     val weekNo: Int,
+    val upcoming: List<UpcomingItem>,
 )
 
 object WidgetData {
@@ -110,15 +139,73 @@ object WidgetData {
             weekCourses = courses.filter { WeekMask.has(it.weeksMask, weekNo) },
             periods = periods,
             weekNo = weekNo,
+            upcoming = upcomingClasses(courses, periods, weeks, current?.startMillis ?: 0L, 2),
         )
     }
 
     suspend fun refreshAll(context: Context) {
         TodayWidget().updateAll(context)
         WeekWidget().updateAll(context)
+        NextWidget().updateAll(context)
     }
 
     private fun weekdayName(day: Int) = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日").getOrElse(day - 1) { "" }
+
+    private fun upcomingClasses(
+        courses: List<CourseEntity>,
+        periods: List<PeriodEntity>,
+        weeks: List<WeekEntity>,
+        semesterStart: Long,
+        limit: Int,
+    ): List<UpcomingItem> {
+        val now = java.time.LocalDateTime.now()
+        val today = now.toLocalDate()
+        val periodMap = periods.associateBy { it.sectionNumber }
+        val result = mutableListOf<UpcomingItem>()
+        for (offset in 0..13) {
+            if (result.size >= limit) break
+            val date = today.plusDays(offset.toLong())
+            val weekNo = ClassAlarmScheduler.resolveWeek(date, weeks, semesterStart) ?: 1
+            val dayCourses = courses
+                .filter { it.dayOfWeek == date.dayOfWeek.value && WeekMask.has(it.weeksMask, weekNo) }
+                .sortedBy { it.startPeriod }
+            for (course in dayCourses) {
+                val startRaw = periodMap[course.startPeriod]?.startTime.orEmpty()
+                val endRaw = periodMap[course.endPeriod]?.endTime.orEmpty()
+                val start = parseHm(startRaw)
+                val end = parseHm(endRaw)
+                if (date == today) {
+                    if (end != null && !now.toLocalTime().isBefore(end)) continue
+                }
+                val ongoing = date == today && start != null && end != null &&
+                    !now.toLocalTime().isBefore(start) && now.toLocalTime().isBefore(end)
+                val timeRange = listOf(startRaw, endRaw).filter { it.isNotBlank() }.joinToString("-")
+                val dayLabel = when {
+                    ongoing -> "正在上课"
+                    offset == 0 -> timeRange
+                    offset == 1 -> "明天 $timeRange"
+                    else -> "${weekdayName(date.dayOfWeek.value)} $timeRange"
+                }
+                result += UpcomingItem(
+                    name = course.courseName,
+                    place = course.place,
+                    timeLabel = if (ongoing) "$timeRange${if (course.place.isNotBlank()) " · ${course.place}" else ""}" else
+                        listOf(dayLabel, course.place).filter { it.isNotBlank() }.joinToString(" · "),
+                    color = course.color,
+                    ongoing = ongoing,
+                )
+                if (result.size >= limit) break
+            }
+        }
+        return result
+    }
+
+    private fun parseHm(raw: String): LocalTime? {
+        val value = raw.trim()
+        if (value.isBlank()) return null
+        return runCatching { LocalTime.parse(value) }.getOrNull()
+            ?: runCatching { LocalTime.parse(value, DateTimeFormatter.ofPattern("H:mm")) }.getOrNull()
+    }
 }
 
 @Composable
@@ -265,6 +352,79 @@ private fun WeekContent(state: WidgetState) {
                         } else {
                             Spacer(GlanceModifier.width(1.dp))
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NextContent(state: WidgetState) {
+    val theme = Color(state.theme)
+    val open = openAppAction()
+    Column(
+        modifier = GlanceModifier
+            .fillMaxSize()
+            .appWidgetBackground()
+            .cornerRadius(20.dp)
+            .background(ColorProvider(Color.White))
+            .clickable(open)
+            .padding(10.dp),
+    ) {
+        Text(
+            "接下来",
+            style = TextStyle(color = ColorProvider(theme), fontWeight = FontWeight.Bold, fontSize = 13.sp),
+        )
+        Text(
+            state.subtitle,
+            style = TextStyle(color = ColorProvider(Color(0xFF667085)), fontSize = 10.sp),
+        )
+        Spacer(GlanceModifier.height(6.dp))
+        if (state.upcoming.isEmpty()) {
+            Box(
+                modifier = GlanceModifier.fillMaxWidth().defaultWeight().cornerRadius(10.dp).background(ColorProvider(Color(0xFFF7F4F4))),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("最近没有课", style = TextStyle(color = ColorProvider(Color(0xFF98A2B3)), fontSize = 12.sp))
+            }
+        } else {
+            state.upcoming.forEach { item ->
+                Row(
+                    modifier = GlanceModifier
+                        .fillMaxWidth()
+                        .defaultWeight()
+                        .padding(bottom = 4.dp)
+                        .cornerRadius(10.dp)
+                        .background(ColorProvider(Color(item.color).copy(alpha = 0.12f)))
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = GlanceModifier
+                            .width(4.dp)
+                            .fillMaxHeight()
+                            .cornerRadius(4.dp)
+                            .background(ColorProvider(Color(item.color))),
+                    ) {
+                        Spacer(GlanceModifier.width(4.dp))
+                    }
+                    Spacer(GlanceModifier.width(8.dp))
+                    Column(modifier = GlanceModifier.defaultWeight()) {
+                        Text(
+                            if (item.ongoing) "正在上课 · ${item.name}" else item.name,
+                            style = TextStyle(
+                                color = ColorProvider(Color(0xFF1D2939)),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                            ),
+                            maxLines = 2,
+                        )
+                        Text(
+                            item.timeLabel,
+                            style = TextStyle(color = ColorProvider(Color(0xFF667085)), fontSize = 10.sp),
+                            maxLines = 2,
+                        )
                     }
                 }
             }

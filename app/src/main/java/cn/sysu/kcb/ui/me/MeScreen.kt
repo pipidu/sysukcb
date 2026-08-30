@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Info
@@ -43,6 +44,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -63,6 +65,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -85,6 +89,15 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
     var showColor by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
+    val webdavBusy by viewModel.webdavBusy.collectAsStateWithLifecycle()
+    val webdavHasPassword by viewModel.webdavHasPassword.collectAsStateWithLifecycle()
+    var davUrl by remember { mutableStateOf("") }
+    var davUser by remember { mutableStateOf("") }
+    var davPassword by remember { mutableStateOf("") }
+    LaunchedEffect(settings.webdavUrl, settings.webdavUser) {
+        davUrl = settings.webdavUrl
+        davUser = settings.webdavUser
+    }
     LaunchedEffect(Unit) {
         viewModel.checkSession()
         viewModel.checkForUpdate(manual = false)
@@ -200,6 +213,59 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
                     }
                 },
             )
+            Card(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("WebDAV 同步", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "把全部学期的课表和考试上传到坚果云、Nextcloud 或群晖，换机后再下载回来。密码只存在本机。",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                    OutlinedTextField(
+                        value = davUrl,
+                        onValueChange = { davUrl = it },
+                        label = { Text("地址") },
+                        placeholder = { Text("https://dav.jianguoyun.com/dav/sysukcb.json") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = davUser,
+                        onValueChange = { davUser = it },
+                        label = { Text("用户名") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = davPassword,
+                        onValueChange = { davPassword = it },
+                        label = { Text("密码") },
+                        placeholder = { Text(if (webdavHasPassword) "已保存，留空则不改" else "应用密码") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        webdavSyncHint(settings.webdavLastSyncAt, settings.webdavLastMessage),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { viewModel.saveWebDav(davUrl, davUser, davPassword) },
+                            enabled = !webdavBusy,
+                        ) { Text("保存") }
+                        Button(
+                            onClick = { viewModel.uploadWebDav(davUrl, davUser, davPassword) },
+                            enabled = !webdavBusy && !importing,
+                        ) { Text(if (webdavBusy) "同步中…" else "上传") }
+                        Button(
+                            onClick = { viewModel.downloadWebDav(davUrl, davUser, davPassword) },
+                            enabled = !webdavBusy && !importing,
+                        ) { Text("下载") }
+                    }
+                }
+            }
             ListItem(
                 headlineContent = { Text("主题色") },
                 supportingContent = { Text("默认中大红，可随时更换") },
@@ -287,7 +353,7 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
                 Text("清空本地数据", color = MaterialTheme.colorScheme.error)
             }
             Text(
-                "数据仅保存在本机。HAR 抓包文件不会被应用读取或上传。",
+                "数据默认只保存在本机。WebDAV 同步走你自己的网盘，密码存在本机加密存储。HAR 抓包文件不会被应用读取或上传。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -416,4 +482,13 @@ private fun LabelSlider(label: String, value: Float, from: Float, to: Float, onC
         Text("$label ${"%.0f".format(if (to > 2f) value else value * 100)}")
         Slider(value = value, onValueChange = onChange, valueRange = from..to)
     }
+}
+
+private fun webdavSyncHint(at: Long, message: String): String {
+    if (at <= 0L) return message.ifBlank { "尚未同步" }
+    val time = java.time.Instant.ofEpochMilli(at)
+        .atZone(java.time.ZoneId.systemDefault())
+        .toLocalDateTime()
+        .format(java.time.format.DateTimeFormatter.ofPattern("M/d HH:mm"))
+    return if (message.isBlank()) "上次同步 $time" else "上次同步 $time · $message"
 }
