@@ -85,6 +85,27 @@ class TimetableRepository(private val db: AppDatabase) {
         }
     }
 
+    suspend fun replaceCoursesKeepExams(
+        semester: SemesterEntity,
+        weeks: List<WeekEntity>,
+        periods: List<PeriodEntity>,
+        courses: List<CourseEntity>,
+    ) {
+        db.withTransaction {
+            db.semesterDao().upsert(semester)
+            if (weeks.isNotEmpty()) {
+                db.weekDao().deleteSemester(semester.acadYearSemester)
+                db.weekDao().upsertAll(weeks)
+            }
+            if (periods.isNotEmpty()) {
+                db.periodDao().deleteSemester(semester.acadYearSemester)
+                db.periodDao().upsertAll(periods)
+            }
+            db.courseDao().deleteSemester(semester.acadYearSemester)
+            courses.forEach { db.courseDao().insert(it.copy(id = 0)) }
+        }
+    }
+
     suspend fun replaceExams(semester: String, items: List<ExamEntity>) {
         db.withTransaction {
             db.examDao().deleteSemester(semester)

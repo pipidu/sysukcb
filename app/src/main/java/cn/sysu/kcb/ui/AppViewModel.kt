@@ -234,7 +234,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun importJson(text: String) = viewModelScope.launch {
         importing.value = true
-        runCatching { container.share.importJson(text) }
+        runCatching {
+            if (text.contains("\"format\"") && text.contains("sysukcb")) {
+                container.share.importJson(text)
+            } else {
+                val result = container.wakeup.import(
+                    raw = text,
+                    semesterHint = container.settings.snapshot().selectedSemester,
+                    themeColor = settings.value.themeColor,
+                )
+                if (result.semester.isNotBlank()) container.settings.setSelectedSemester(result.semester)
+                result.semester
+            }
+        }
             .onSuccess {
                 if (it.isNotBlank()) container.settings.setSelectedSemester(it)
                 message.value = "已从文件导入课表"
@@ -243,6 +255,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 WidgetData.refreshAll(getApplication())
             }
             .onFailure { message.value = it.message ?: "文件导入失败" }
+        importing.value = false
+    }
+
+    fun importWakeUp(text: String) = viewModelScope.launch {
+        importing.value = true
+        runCatching {
+            container.wakeup.import(
+                raw = text,
+                semesterHint = container.settings.snapshot().selectedSemester,
+                themeColor = settings.value.themeColor,
+            )
+        }
+            .onSuccess {
+                if (it.semester.isNotBlank()) container.settings.setSelectedSemester(it.semester)
+                message.value = "已从 WakeUp 导入 ${it.count} 门课"
+                openTimetableAt.value = System.currentTimeMillis()
+                refreshAlarms()
+                WidgetData.refreshAll(getApplication())
+            }
+            .onFailure { message.value = it.message ?: "WakeUp 导入失败" }
         importing.value = false
     }
 

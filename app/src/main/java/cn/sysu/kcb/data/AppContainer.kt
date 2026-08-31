@@ -12,6 +12,7 @@ import cn.sysu.kcb.data.remote.ImportRouter
 import cn.sysu.kcb.data.remote.JwxtImportService
 import cn.sysu.kcb.data.remote.WebDavClient
 import cn.sysu.kcb.data.remote.WebDavSyncService
+import cn.sysu.kcb.data.remote.WakeUpImportService
 import cn.sysu.kcb.data.remote.createJwxtApi
 import cn.sysu.kcb.data.remote.createJwxtJson
 import cn.sysu.kcb.data.repo.FriendRepository
@@ -33,6 +34,7 @@ class AppContainer(context: Context) {
     val share = ShareService(context, timetable, json)
     val webdavSecrets = WebDavSecrets(context)
     val friends = FriendRepository(db, share)
+    val wakeup = WakeUpImportService(timetable, json)
     val webdav = WebDavSyncService(WebDavClient(), share, settings, webdavSecrets, friends)
     val alarms = ClassAlarmScheduler(context)
 }

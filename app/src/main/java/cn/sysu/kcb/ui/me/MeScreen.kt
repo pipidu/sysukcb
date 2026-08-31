@@ -85,6 +85,8 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
     val context = LocalContext.current
     var showColor by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    var showWakeUp by remember { mutableStateOf(false) }
+    var wakeupCode by remember { mutableStateOf("") }
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val webdavBusy by viewModel.webdavBusy.collectAsStateWithLifecycle()
     val webdavHasPassword by viewModel.webdavHasPassword.collectAsStateWithLifecycle()
@@ -108,6 +110,13 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
             runCatching {
                 context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
             }.getOrNull()?.let { viewModel.importJson(it) }
+        }
+    }
+    val wakeupPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+            }.getOrNull()?.let { viewModel.importWakeUp(it) }
         }
     }
     val notifyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
@@ -207,10 +216,26 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
             )
             ListItem(
                 headlineContent = { Text("从文件导入") },
-                supportingContent = { Text("打开他人分享的 .sysukcb.json") },
+                supportingContent = { Text("打开他人分享的 .sysukcb.json，或 WakeUp 备份 / CSV") },
                 trailingContent = {
                     OutlinedButton(onClick = { filePicker.launch(arrayOf("application/json", "text/plain", "*/*")) }) {
                         Text("选择")
+                    }
+                },
+            )
+            ListItem(
+                headlineContent = { Text("从 WakeUp 导入") },
+                supportingContent = { Text("WakeUp 课程表里导出备份文件，或粘贴分享口令；导入到当前选中学期，考试仍保留") },
+                trailingContent = {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { wakeupPicker.launch(arrayOf("application/json", "text/plain", "*/*")) },
+                            enabled = !importing,
+                        ) { Text("文件") }
+                        OutlinedButton(
+                            onClick = { showWakeUp = true },
+                            enabled = !importing,
+                        ) { Text("口令") }
                     }
                 },
             )
@@ -425,6 +450,38 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
                 }) { Text("清空") }
             },
             dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } },
+        )
+    }
+    if (showWakeUp) {
+        AlertDialog(
+            onDismissRequest = { showWakeUp = false },
+            title = { Text("WakeUp 分享口令") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "在 WakeUp 复制整段分享口令粘贴到这里。新版口令若无法拉取，请改用「导出为备份」再点文件导入。",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                    OutlinedTextField(
+                        value = wakeupCode,
+                        onValueChange = { wakeupCode = it },
+                        label = { Text("分享口令") },
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val code = wakeupCode
+                        showWakeUp = false
+                        viewModel.importWakeUp(code)
+                    },
+                    enabled = wakeupCode.isNotBlank() && !importing,
+                ) { Text("导入") }
+            },
+            dismissButton = { TextButton(onClick = { showWakeUp = false }) { Text("取消") } },
         )
     }
 }
