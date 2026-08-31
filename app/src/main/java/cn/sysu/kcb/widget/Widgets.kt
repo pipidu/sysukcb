@@ -385,7 +385,6 @@ private fun WeekContent(state: WidgetState) {
 
 @Composable
 private fun NextContent(state: WidgetState) {
-    val theme = Color(state.theme)
     val open = openAppAction()
     Column(
         modifier = GlanceModifier
@@ -394,17 +393,8 @@ private fun NextContent(state: WidgetState) {
             .cornerRadius(20.dp)
             .background(ColorProvider(Color.White))
             .clickable(open)
-            .padding(10.dp),
+            .padding(8.dp),
     ) {
-        Text(
-            "接下来",
-            style = TextStyle(color = ColorProvider(theme), fontWeight = FontWeight.Bold, fontSize = 13.sp),
-        )
-        Text(
-            state.subtitle,
-            style = TextStyle(color = ColorProvider(Color(0xFF667085)), fontSize = 10.sp),
-        )
-        Spacer(GlanceModifier.height(6.dp))
         if (state.upcoming.isEmpty()) {
             Box(
                 modifier = GlanceModifier.fillMaxWidth().defaultWeight().cornerRadius(10.dp).background(ColorProvider(Color(0xFFF7F4F4))),
@@ -453,7 +443,7 @@ private fun NextContent(state: WidgetState) {
                             Text(
                                 item.place,
                                 style = TextStyle(color = ColorProvider(Color.White.copy(alpha = 0.92f)), fontSize = 10.sp),
-                                maxLines = 1,
+                                maxLines = 2,
                             )
                         }
                     }
