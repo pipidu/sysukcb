@@ -1,6 +1,10 @@
 package cn.sysu.kcb.ui
 
 import android.app.Application
+import android.content.Intent
+import android.provider.Settings
+import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cn.sysu.kcb.BuildConfig
@@ -14,11 +18,14 @@ import cn.sysu.kcb.data.remote.SessionStatus
 import cn.sysu.kcb.data.remote.isNewerThan
 import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.widget.WidgetData
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val container = (application as KcbApp).container
@@ -39,9 +46,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val checkingSession = MutableStateFlow(false)
     val openTimetableAt = MutableStateFlow(0L)
     val updateState = MutableStateFlow<UpdateCheckState>(UpdateCheckState.Idle)
+    val apkDownload = MutableStateFlow<ApkDownloadState>(ApkDownloadState.Idle)
     val webdavBusy = MutableStateFlow(false)
     val webdavHasPassword = MutableStateFlow(container.webdavSecrets.hasPassword())
     private var lastUpdateCheckAt = 0L
+    private var downloadJob: Job? = null
 
     fun consumeMessage() {
         message.value = null
@@ -70,6 +79,63 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     UpdateCheckState.Idle
                 }
             }
+    }
+
+    fun downloadAndInstall(update: AppUpdate) {
+        val url = update.apkUrl
+        if (url.isNullOrBlank()) {
+            apkDownload.value = ApkDownloadState.Failed("这个版本没有安装包")
+            return
+        }
+        downloadJob?.cancel()
+        downloadJob = viewModelScope.launch {
+            apkDownload.value = ApkDownloadState.Progress(0L, 0L)
+            val dest = File(getApplication<Application>().cacheDir, "updates/kcb-${update.versionName}.apk")
+            runCatching {
+                container.updates.downloadApk(url, dest) { received, total ->
+                    apkDownload.value = ApkDownloadState.Progress(received, total)
+                }
+            }.onSuccess {
+                apkDownload.value = ApkDownloadState.Installing
+                runCatching { installDownloadedApk(dest) }
+                    .onFailure { apkDownload.value = ApkDownloadState.Failed(it.message ?: "无法打开安装程序") }
+            }.onFailure { error ->
+                if (error is CancellationException) {
+                    apkDownload.value = ApkDownloadState.Idle
+                    throw error
+                }
+                apkDownload.value = ApkDownloadState.Failed(error.message ?: "下载失败")
+            }
+        }
+    }
+
+    fun cancelApkDownload() {
+        downloadJob?.cancel()
+        downloadJob = null
+        apkDownload.value = ApkDownloadState.Idle
+    }
+
+    fun denyInstallPermission() {
+        apkDownload.value = ApkDownloadState.Failed("请允许安装未知应用后再更新")
+    }
+
+    fun unknownSourcesIntent(): Intent {
+        val app = getApplication<Application>()
+        return Intent(
+            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+            "package:${app.packageName}".toUri(),
+        )
+    }
+
+    private fun installDownloadedApk(file: File) {
+        val app = getApplication<Application>()
+        val uri = FileProvider.getUriForFile(app, "${app.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        app.startActivity(intent)
     }
 
     fun checkSession() = viewModelScope.launch {
@@ -278,4 +344,11 @@ sealed class UpdateCheckState {
     data object UpToDate : UpdateCheckState()
     data class Available(val update: AppUpdate) : UpdateCheckState()
     data class Failed(val message: String) : UpdateCheckState()
+}
+
+sealed class ApkDownloadState {
+    data object Idle : ApkDownloadState()
+    data class Progress(val received: Long, val total: Long) : ApkDownloadState()
+    data object Installing : ApkDownloadState()
+    data class Failed(val message: String) : ApkDownloadState()
 }

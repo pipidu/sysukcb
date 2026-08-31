@@ -2,8 +2,14 @@ package cn.sysu.kcb.ui.me
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -17,12 +23,12 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import cn.sysu.kcb.ui.theme.KcbTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,15 +42,28 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.sysu.kcb.BuildConfig
 import cn.sysu.kcb.data.remote.GITHUB_PAGE_URL
+import cn.sysu.kcb.ui.ApkDownloadState
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.UpdateCheckState
+import cn.sysu.kcb.ui.theme.KcbTopBar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val context = LocalContext.current
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
+    val apkDownload by viewModel.apkDownload.collectAsStateWithLifecycle()
     var showUpdate by remember { mutableStateOf(false) }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        val available = viewModel.updateState.value as? UpdateCheckState.Available
+            ?: return@rememberLauncherForActivityResult
+        val allowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+            context.packageManager.canRequestPackageInstalls()
+        if (allowed) viewModel.downloadAndInstall(available.update)
+        else viewModel.denyInstallPermission()
+    }
     LaunchedEffect(Unit) {
         viewModel.checkForUpdate(manual = false)
     }
@@ -53,6 +72,16 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     }
     fun openUrl(url: String) {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+    fun startDownload() {
+        val available = viewModel.updateState.value as? UpdateCheckState.Available ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !context.packageManager.canRequestPackageInstalls()
+        ) {
+            permissionLauncher.launch(viewModel.unknownSourcesIntent())
+            return
+        }
+        viewModel.downloadAndInstall(available.update)
     }
     Scaffold(
         topBar = {
@@ -88,7 +117,7 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 supportingContent = {
                     Text(
                         when (val state = updateState) {
-                            UpdateCheckState.Idle -> "从 GitHub Releases 获取"
+                            UpdateCheckState.Idle -> "应用内下载安装"
                             UpdateCheckState.Checking -> "正在检查…"
                             UpdateCheckState.UpToDate -> "已是最新版本"
                             is UpdateCheckState.Available -> "发现新版本 ${state.update.versionName}"
@@ -119,25 +148,73 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val available = updateState as? UpdateCheckState.Available
     if (showUpdate && available != null) {
         val update = available.update
+        val downloading = apkDownload is ApkDownloadState.Progress || apkDownload is ApkDownloadState.Installing
         AlertDialog(
-            onDismissRequest = { showUpdate = false },
+            onDismissRequest = {
+                if (!downloading) {
+                    showUpdate = false
+                    viewModel.cancelApkDownload()
+                }
+            },
             title = { Text("发现新版本 ${update.versionName}") },
             text = {
-                Text(
-                    update.notes.ifBlank { "到 GitHub Releases 下载最新安装包。" },
-                )
+                Column {
+                    Text(update.notes.ifBlank { "下载安装包后按系统提示安装。" })
+                    when (val dl = apkDownload) {
+                        is ApkDownloadState.Progress -> {
+                            Spacer(Modifier.height(12.dp))
+                            if (dl.total > 0) {
+                                LinearProgressIndicator(
+                                    progress = { (dl.received.toFloat() / dl.total).coerceIn(0f, 1f) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Text(
+                                    "${formatMb(dl.received)} / ${formatMb(dl.total)} MB",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                    modifier = Modifier.padding(top = 6.dp),
+                                )
+                            } else {
+                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                Text(
+                                    "正在下载…",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(top = 6.dp),
+                                )
+                            }
+                        }
+                        ApkDownloadState.Installing -> {
+                            Spacer(Modifier.height(12.dp))
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            Text("正在打开安装程序…", modifier = Modifier.padding(top = 6.dp))
+                        }
+                        is ApkDownloadState.Failed -> {
+                            Spacer(Modifier.height(12.dp))
+                            Text(dl.message, color = MaterialTheme.colorScheme.error)
+                        }
+                        else -> Unit
+                    }
+                }
             },
             confirmButton = {
                 TextButton(
-                    onClick = {
-                        showUpdate = false
-                        openUrl(update.apkUrl ?: update.htmlUrl)
-                    },
-                ) { Text("去更新") }
+                    onClick = { startDownload() },
+                    enabled = !downloading,
+                ) { Text(if (apkDownload is ApkDownloadState.Failed) "重试" else "下载更新") }
             },
             dismissButton = {
-                TextButton(onClick = { showUpdate = false }) { Text("稍后") }
+                TextButton(
+                    onClick = {
+                        if (downloading) viewModel.cancelApkDownload()
+                        else {
+                            showUpdate = false
+                            viewModel.cancelApkDownload()
+                        }
+                    },
+                ) { Text(if (downloading) "取消下载" else "稍后") }
             },
         )
     }
 }
+
+private fun formatMb(bytes: Long): String = "%.1f".format(bytes / 1024.0 / 1024.0)

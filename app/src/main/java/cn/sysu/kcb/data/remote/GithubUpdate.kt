@@ -1,12 +1,14 @@
 package cn.sysu.kcb.data.remote
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 const val GITHUB_PAGE_URL = "https://github.com/pipidu/sysukcb"
@@ -25,6 +27,13 @@ class GithubUpdateService(private val json: Json) {
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
 
+    private val downloadClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .build()
+
     suspend fun fetchLatest(): AppUpdate? = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url("https://api.github.com/repos/pipidu/sysukcb/releases/latest")
@@ -41,6 +50,41 @@ class GithubUpdateService(private val json: Json) {
             json.decodeFromString(GithubReleaseDto.serializer(), body).toAppUpdate()
         }
     }
+
+    suspend fun downloadApk(url: String, dest: File, onProgress: (received: Long, total: Long) -> Unit) =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "sysukcb-android")
+                .header("Accept", "application/octet-stream")
+                .build()
+            downloadClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) error("下载失败（${response.code}）")
+                val body = response.body ?: error("下载失败")
+                val total = body.contentLength()
+                dest.parentFile?.mkdirs()
+                val tmp = File(dest.parentFile, "${dest.name}.part")
+                tmp.outputStream().use { out ->
+                    body.byteStream().use { input ->
+                        val buf = ByteArray(16 * 1024)
+                        var received = 0L
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n <= 0) break
+                            out.write(buf, 0, n)
+                            received += n
+                            ensureActive()
+                            onProgress(received, total)
+                        }
+                    }
+                }
+                if (dest.exists()) dest.delete()
+                if (!tmp.renameTo(dest)) {
+                    tmp.copyTo(dest, overwrite = true)
+                    tmp.delete()
+                }
+            }
+        }
 }
 
 fun AppUpdate.isNewerThan(localCode: Int, localName: String): Boolean {
