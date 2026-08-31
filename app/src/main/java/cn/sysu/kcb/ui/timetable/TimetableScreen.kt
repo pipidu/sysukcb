@@ -1,6 +1,7 @@
 package cn.sysu.kcb.ui.timetable
 
-import androidx.compose.animation.AnimatedContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -39,8 +40,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.outlined.ChevronLeft
-import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -67,6 +66,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -112,11 +112,17 @@ fun TimetableScreen(
             ?: settings.selectedSemester.takeIf { it.isNotBlank() }
             ?: SemesterRange.guessCurrent()
     }
-    val semesterOptions = remember(semesterAnchor, semesters) {
-        (SemesterRange.span(semesterAnchor, before = 8, after = 8) + semesters.map { it.acadYearSemester }).distinct()
+    val populatedSemesters = remember(semesters) {
+        semesters.map { it.acadYearSemester }
+            .distinct()
+            .sortedByDescending { SemesterRange.ordinal(it) ?: Int.MIN_VALUE }
     }
-    val semester = remember(settings.selectedSemester, semesters, semesterOptions) {
-        pickSemester(settings, semesters, semesterOptions)
+    val addableSemesters = remember(semesterAnchor, populatedSemesters) {
+        SemesterRange.span(semesterAnchor, before = 8, after = 8)
+            .filterNot { it in populatedSemesters }
+    }
+    val semester = remember(settings.selectedSemester, semesters) {
+        pickSemester(settings, semesters)
     }
     LaunchedEffect(semester, settings.selectedSemester, semesters) {
         if (semester.isBlank()) {
@@ -146,6 +152,7 @@ fun TimetableScreen(
         }
     }
     var semesterMenu by remember { mutableStateOf(false) }
+    var addSemesterOpen by remember { mutableStateOf(false) }
     var weekPicker by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf(false) }
@@ -194,6 +201,14 @@ fun TimetableScreen(
         .union(WindowInsets.systemBars)
         .asPaddingValues()
         .calculateBottomPadding()
+    val context = LocalContext.current
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+            }.getOrNull()?.let { viewModel.importJson(it) }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -250,7 +265,7 @@ fun TimetableScreen(
                         Text(semester.ifBlank { "学年" }, color = MaterialTheme.colorScheme.onPrimary)
                     }
                     DropdownMenu(expanded = semesterMenu, onDismissRequest = { semesterMenu = false }) {
-                        semesterOptions.forEach { option ->
+                        populatedSemesters.forEach { option ->
                             val entity = semesters.firstOrNull { it.acadYearSemester == option }
                             DropdownMenuItem(
                                 text = { Text(buildString {
@@ -264,35 +279,15 @@ fun TimetableScreen(
                                 },
                             )
                         }
+                        DropdownMenuItem(
+                            text = { Text("添加学年") },
+                            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
+                            onClick = {
+                                semesterMenu = false
+                                addSemesterOpen = true
+                            },
+                        )
                     }
-                }
-                IconButton(onClick = {
-                    if (termOverview) {
-                        termOverview = false
-                        userPickedWeek = true
-                        return@IconButton
-                    }
-                    val next = (selectedWeek - 1).coerceAtLeast(1)
-                    if (next == selectedWeek) return@IconButton
-                    userPickedWeek = true
-                    syncingPager = true
-                    selectedWeek = next
-                }) {
-                    Icon(Icons.Outlined.ChevronLeft, contentDescription = "上一周")
-                }
-                IconButton(onClick = {
-                    if (termOverview) {
-                        termOverview = false
-                        userPickedWeek = true
-                        return@IconButton
-                    }
-                    val next = (selectedWeek + 1).coerceAtMost(maxWeek)
-                    if (next == selectedWeek) return@IconButton
-                    userPickedWeek = true
-                    syncingPager = true
-                    selectedWeek = next
-                }) {
-                    Icon(Icons.Outlined.ChevronRight, contentDescription = "下一周")
                 }
                 Box {
                     IconButton(onClick = { moreMenu = true }) {
@@ -352,31 +347,40 @@ fun TimetableScreen(
                     }
                 }
                 Box(Modifier.weight(1f)) {
-                    val empty = snapshot.courses.isEmpty() && snapshot.weeks.isEmpty() && snapshot.periods.isEmpty() && !editing
-                    AnimatedContent(
-                        targetState = empty,
-                        label = "emptyOrGrid",
-                    ) { isEmpty ->
-                        if (isEmpty) {
-                            Column(
-                                modifier = Modifier.fillMaxSize().padding(32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
-                            ) {
-                                Text("还没有课表", style = MaterialTheme.typography.titleMedium)
-                                Text("登录教务后即可自动导入课表和考试，或打开右上角菜单添加课程", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), textAlign = TextAlign.Center)
-                                TextButton(onClick = onLogin) { Text("去登录") }
-                            }
-                        } else if (termOverview) {
+                    val empty = snapshot.courses.isEmpty() && !editing
+                    if (termOverview) {
+                        TimetableGrid(
+                            periods = snapshot.periods,
+                            courses = snapshot.courses,
+                            weekStart = resolveWeekStart(
+                                academicWeek ?: selectedWeek,
+                                snapshot.weeks.firstOrNull { it.weekly == (academicWeek ?: selectedWeek) },
+                                snapshot.weeks,
+                                snapshot.semester?.startMillis ?: 0L,
+                            ),
+                            onCourses = { group ->
+                                if (editing && group.size == 1) onEdit(group.first().id)
+                                else viewingCourses = group
+                            },
+                            onEmpty = if (editing) {
+                                { day, period -> onAdd(day, period, semester) }
+                            } else {
+                                null
+                            },
+                            themeColor = settings.themeColor,
+                        )
+                    } else {
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize(),
+                            beyondViewportPageCount = 1,
+                        ) { page ->
+                            val weekNo = page + 1
+                            val weekEntity = snapshot.weeks.firstOrNull { it.weekly == weekNo }
                             TimetableGrid(
                                 periods = snapshot.periods,
-                                courses = snapshot.courses,
-                                weekStart = resolveWeekStart(
-                                    academicWeek ?: selectedWeek,
-                                    snapshot.weeks.firstOrNull { it.weekly == (academicWeek ?: selectedWeek) },
-                                    snapshot.weeks,
-                                    snapshot.semester?.startMillis ?: 0L,
-                                ),
+                                courses = snapshot.courses.filter { WeekMask.has(it.weeksMask, weekNo) },
+                                weekStart = resolveWeekStart(weekNo, weekEntity, snapshot.weeks, snapshot.semester?.startMillis ?: 0L),
                                 onCourses = { group ->
                                     if (editing && group.size == 1) onEdit(group.first().id)
                                     else viewingCourses = group
@@ -388,29 +392,22 @@ fun TimetableScreen(
                                 },
                                 themeColor = settings.themeColor,
                             )
-                        } else {
-                            HorizontalPager(
-                                state = pagerState,
-                                modifier = Modifier.fillMaxSize(),
-                                beyondViewportPageCount = 1,
-                            ) { page ->
-                                val weekNo = page + 1
-                                val weekEntity = snapshot.weeks.firstOrNull { it.weekly == weekNo }
-                                TimetableGrid(
-                                    periods = snapshot.periods,
-                                    courses = snapshot.courses.filter { WeekMask.has(it.weeksMask, weekNo) },
-                                    weekStart = resolveWeekStart(weekNo, weekEntity, snapshot.weeks, snapshot.semester?.startMillis ?: 0L),
-                                    onCourses = { group ->
-                                        if (editing && group.size == 1) onEdit(group.first().id)
-                                        else viewingCourses = group
-                                    },
-                                    onEmpty = if (editing) {
-                                        { day, period -> onAdd(day, period, semester) }
-                                    } else {
-                                        null
-                                    },
-                                    themeColor = settings.themeColor,
-                                )
+                        }
+                    }
+                    if (empty) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.78f)),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+                        ) {
+                            Text("还没有课表", style = MaterialTheme.typography.titleMedium)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = onLogin) { Text("去登录") }
+                                TextButton(onClick = { filePicker.launch(arrayOf("application/json", "text/plain", "*/*")) }) {
+                                    Text("从文件导入")
+                                }
                             }
                         }
                     }
@@ -450,6 +447,17 @@ fun TimetableScreen(
                 weekPicker = false
             },
             onDismiss = { weekPicker = false },
+        )
+    }
+    if (addSemesterOpen) {
+        AddSemesterDialog(
+            candidates = addableSemesters,
+            onPick = { picked ->
+                userPickedWeek = false
+                viewModel.addSemester(picked)
+                addSemesterOpen = false
+            },
+            onDismiss = { addSemesterOpen = false },
         )
     }
 }
@@ -511,13 +519,50 @@ internal fun weekRangeLabel(
 private fun pickSemester(
     settings: UserSettings,
     semesters: List<SemesterEntity>,
-    options: List<String>,
 ): String {
     val saved = settings.selectedSemester
     if (saved.isNotBlank()) return saved
     return semesters.firstOrNull { it.isCurrent }?.acadYearSemester
         ?: semesters.firstOrNull()?.acadYearSemester
-        ?: options.firstOrNull().orEmpty()
+        .orEmpty()
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AddSemesterDialog(
+    candidates: List<String>,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("添加学年") },
+        text = {
+            if (candidates.isEmpty()) {
+                Text("前后各 8 个学期都已在列表里。")
+            } else {
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    candidates.forEach { option ->
+                        FilterChip(
+                            selected = false,
+                            onClick = { onPick(option) },
+                            label = { Text(option, fontSize = 13.sp, lineHeight = 16.sp) },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)

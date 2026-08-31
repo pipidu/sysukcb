@@ -200,6 +200,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         WidgetData.refreshAll(getApplication())
     }
 
+    fun addSemester(semester: String) = viewModelScope.launch {
+        if (semester.isBlank()) return@launch
+        container.timetable.ensureSemester(semester)
+        if (container.settings.snapshot().selectedSemester != semester) {
+            container.settings.setSelectedSemester(semester)
+            refreshAlarms()
+            WidgetData.refreshAll(getApplication())
+        }
+    }
+
     fun importFromJwxt(semester: String? = null) = importInternal(
         onlyCurrent = true,
         semester = semester ?: settings.value.selectedSemester.ifBlank { null },

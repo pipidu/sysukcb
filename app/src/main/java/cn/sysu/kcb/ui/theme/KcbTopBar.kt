@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 val KcbTopBarHeight = 48.dp
+val KcbBottomBarHeight = 56.dp
 
 @Composable
 fun KcbTopBar(

@@ -137,7 +137,7 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             )
             ListItem(
                 headlineContent = { Text("GitHub") },
-                supportingContent = { Text(GITHUB_PAGE_URL) },
+                supportingContent = { Text("开源地址") },
                 trailingContent = {
                     Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = "在浏览器打开")
                 },

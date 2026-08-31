@@ -59,6 +59,25 @@ class TimetableRepository(private val db: AppDatabase) {
     suspend fun currentSemester() = db.semesterDao().current()
 
     suspend fun upsertSemester(item: SemesterEntity) = db.semesterDao().upsert(item)
+
+    suspend fun ensureSemester(id: String) {
+        val trimmed = id.trim()
+        if (trimmed.isBlank()) return
+        if (db.semesterDao().get(trimmed) != null) return
+        val parts = trimmed.split("-")
+        val year = parts.getOrNull(0).orEmpty()
+        val term = parts.getOrNull(1)?.toIntOrNull() ?: 1
+        upsertSemester(
+            SemesterEntity(
+                acadYearSemester = trimmed,
+                acadYear = year,
+                acadSemester = term,
+                startMillis = 0L,
+                endMillis = 0L,
+                isCurrent = false,
+            ),
+        )
+    }
     suspend fun clearCurrentFlag() = db.semesterDao().clearCurrentFlag()
     suspend fun replaceWeeks(semester: String, items: List<WeekEntity>) {
         if (items.isEmpty()) return

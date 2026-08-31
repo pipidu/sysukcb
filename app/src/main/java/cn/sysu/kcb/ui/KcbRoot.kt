@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -53,6 +54,7 @@ import cn.sysu.kcb.ui.login.LoginScreen
 import cn.sysu.kcb.ui.me.AboutScreen
 import cn.sysu.kcb.ui.me.MeScreen
 import cn.sysu.kcb.ui.me.WebDavScreen
+import cn.sysu.kcb.ui.theme.KcbBottomBarHeight
 import cn.sysu.kcb.ui.theme.KcbMotion
 import cn.sysu.kcb.ui.timetable.TimetableScreen
 
@@ -69,6 +71,8 @@ fun KcbRoot(viewModel: AppViewModel) {
         snackbar.showSnackbar(text)
         viewModel.consumeMessage()
     }
+    val navEntry by nav.currentBackStackEntryAsState()
+    val onHome = navEntry?.destination?.route.orEmpty().let { it.isEmpty() || it == "home" }
     fun goHome() {
         if (!nav.popBackStack("home", false)) {
             nav.navigate("home") { launchSingleTop = true }
@@ -156,7 +160,10 @@ fun KcbRoot(viewModel: AppViewModel) {
             hostState = snackbar,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 88.dp),
+                .then(
+                    if (onHome) Modifier.padding(bottom = KcbBottomBarHeight)
+                    else Modifier.navigationBarsPadding(),
+                ),
         )
     }
 }
@@ -224,7 +231,7 @@ private fun HomeTabs(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             NavigationBar(
-                modifier = Modifier.height(56.dp),
+                modifier = Modifier.height(KcbBottomBarHeight),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 tonalElevation = 0.dp,
             ) {

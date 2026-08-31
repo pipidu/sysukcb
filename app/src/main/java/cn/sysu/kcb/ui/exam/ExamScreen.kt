@@ -59,8 +59,11 @@ fun ExamScreen(viewModel: AppViewModel) {
             ?: settings.selectedSemester.takeIf { it.isNotBlank() }
             ?: SemesterRange.guessCurrent()
     }
-    val semesterOptions = remember(currentAnchor, semesters, allExams) {
-        (SemesterRange.span(currentAnchor, before = 8, after = 8) + semesters.map { it.acadYearSemester } + allExams.map { it.acadYearSemester }).distinct()
+    val semesterOptions = remember(semesters, allExams) {
+        (semesters.map { it.acadYearSemester } + allExams.map { it.acadYearSemester })
+            .distinct()
+            .filter { id -> allExams.any { it.acadYearSemester == id } }
+            .sortedByDescending { SemesterRange.ordinal(it) ?: Int.MIN_VALUE }
     }
     var examSemester by rememberSaveable { mutableStateOf("") }
     var userPickedSemester by rememberSaveable { mutableStateOf(false) }

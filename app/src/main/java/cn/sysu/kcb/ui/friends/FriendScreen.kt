@@ -27,8 +27,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ChevronLeft
-import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -332,34 +330,6 @@ private fun FriendTimetablePane(pack: SharePack, themeColor: Long) {
                         )
                     }
                 }
-            }
-            IconButton(onClick = {
-                if (termOverview) {
-                    termOverview = false
-                    userPickedWeek = true
-                    return@IconButton
-                }
-                val next = (selectedWeek - 1).coerceAtLeast(1)
-                if (next == selectedWeek) return@IconButton
-                userPickedWeek = true
-                syncingPager = true
-                selectedWeek = next
-            }) {
-                Icon(Icons.Outlined.ChevronLeft, contentDescription = "上一周")
-            }
-            IconButton(onClick = {
-                if (termOverview) {
-                    termOverview = false
-                    userPickedWeek = true
-                    return@IconButton
-                }
-                val next = (selectedWeek + 1).coerceAtMost(maxWeek)
-                if (next == selectedWeek) return@IconButton
-                userPickedWeek = true
-                syncingPager = true
-                selectedWeek = next
-            }) {
-                Icon(Icons.Outlined.ChevronRight, contentDescription = "下一周")
             }
             TextButton(onClick = { weekPicker = true }) { Text("周次") }
         }
