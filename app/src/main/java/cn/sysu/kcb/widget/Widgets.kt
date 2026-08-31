@@ -393,56 +393,58 @@ private fun NextContent(state: WidgetState) {
             .cornerRadius(20.dp)
             .background(ColorProvider(Color.White))
             .clickable(open)
-            .padding(8.dp),
+            .padding(6.dp),
     ) {
         if (state.upcoming.isEmpty()) {
             Box(
                 modifier = GlanceModifier.fillMaxWidth().defaultWeight().cornerRadius(10.dp).background(ColorProvider(Color(0xFFF7F4F4))),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("最近没有课", style = TextStyle(color = ColorProvider(Color(0xFF98A2B3)), fontSize = 12.sp))
+                Text("最近没有课", style = TextStyle(color = ColorProvider(Color(0xFF98A2B3)), fontSize = 11.sp))
             }
         } else {
-            state.upcoming.forEach { item ->
+            state.upcoming.forEachIndexed { index, item ->
+                if (index > 0) {
+                    Spacer(GlanceModifier.height(6.dp))
+                }
                 Row(
                     modifier = GlanceModifier
                         .fillMaxWidth()
                         .defaultWeight()
-                        .padding(bottom = 4.dp)
                         .cornerRadius(10.dp)
                         .background(ColorProvider(Color(item.color)))
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(
                         modifier = GlanceModifier
-                            .width(4.dp)
-                            .height(40.dp)
-                            .cornerRadius(4.dp)
+                            .width(3.dp)
+                            .height(32.dp)
+                            .cornerRadius(3.dp)
                             .background(ColorProvider(Color.White.copy(alpha = 0.85f))),
                     ) {
-                        Spacer(GlanceModifier.width(4.dp))
+                        Spacer(GlanceModifier.width(3.dp))
                     }
-                    Spacer(GlanceModifier.width(8.dp))
+                    Spacer(GlanceModifier.width(6.dp))
                     Column(modifier = GlanceModifier.defaultWeight()) {
                         Text(
                             item.name,
                             style = TextStyle(
                                 color = ColorProvider(Color.White),
-                                fontSize = 12.sp,
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium,
                             ),
                             maxLines = 1,
                         )
                         Text(
                             item.whenText,
-                            style = TextStyle(color = ColorProvider(Color.White.copy(alpha = 0.92f)), fontSize = 10.sp),
+                            style = TextStyle(color = ColorProvider(Color.White.copy(alpha = 0.92f)), fontSize = 8.sp),
                             maxLines = 1,
                         )
                         if (item.place.isNotBlank()) {
                             Text(
                                 item.place,
-                                style = TextStyle(color = ColorProvider(Color.White.copy(alpha = 0.92f)), fontSize = 10.sp),
+                                style = TextStyle(color = ColorProvider(Color.White.copy(alpha = 0.92f)), fontSize = 8.sp),
                                 maxLines = 2,
                             )
                         }
