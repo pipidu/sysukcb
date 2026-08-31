@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -82,7 +83,7 @@ import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FriendScreen(viewModel: AppViewModel) {
+fun FriendScreen(viewModel: AppViewModel, onSetupSync: () -> Unit) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val webdavBusy by viewModel.webdavBusy.collectAsStateWithLifecycle()
     val friends by KcbApp.instance.container.friends.observe().collectAsStateWithLifecycle(emptyList())
@@ -131,32 +132,34 @@ fun FriendScreen(viewModel: AppViewModel) {
                     modifier = Modifier.padding(start = 12.dp).weight(1f),
                     maxLines = 1,
                 )
-                TextButton(onClick = { pane = "timetable" }) {
-                    Text(
-                        "课表",
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = if (pane == "timetable") 1f else 0.65f),
-                        fontWeight = if (pane == "timetable") FontWeight.Bold else FontWeight.Normal,
-                    )
-                }
-                TextButton(onClick = { pane = "exam" }) {
-                    Text(
-                        "考试",
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = if (pane == "exam") 1f else 0.65f),
-                        fontWeight = if (pane == "exam") FontWeight.Bold else FontWeight.Normal,
-                    )
-                }
-                IconButton(
-                    onClick = { viewModel.refreshFriends(silent = false) },
-                    enabled = !webdavBusy,
-                ) {
-                    if (webdavBusy) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp,
+                if (selected != null) {
+                    TextButton(onClick = { pane = "timetable" }) {
+                        Text(
+                            "课表",
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = if (pane == "timetable") 1f else 0.65f),
+                            fontWeight = if (pane == "timetable") FontWeight.Bold else FontWeight.Normal,
                         )
-                    } else {
-                        Icon(Icons.Outlined.Sync, contentDescription = "同步好友")
+                    }
+                    TextButton(onClick = { pane = "exam" }) {
+                        Text(
+                            "考试",
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = if (pane == "exam") 1f else 0.65f),
+                            fontWeight = if (pane == "exam") FontWeight.Bold else FontWeight.Normal,
+                        )
+                    }
+                    IconButton(
+                        onClick = { viewModel.refreshFriends(silent = false) },
+                        enabled = !webdavBusy,
+                    ) {
+                        if (webdavBusy) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(Icons.Outlined.Sync, contentDescription = "同步好友")
+                        }
                     }
                 }
             }
@@ -184,7 +187,7 @@ fun FriendScreen(viewModel: AppViewModel) {
                 }
             }
             when {
-                selected == null -> FriendEmpty(settings.webdavNickname.isNotBlank(), settings.webdavUrl.isNotBlank())
+                selected == null -> FriendEmpty(onSetupSync = onSetupSync)
                 pack == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("这份好友课表无法读取", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                 }
@@ -196,18 +199,23 @@ fun FriendScreen(viewModel: AppViewModel) {
 }
 
 @Composable
-private fun FriendEmpty(hasNickname: Boolean, hasUrl: Boolean) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+private fun FriendEmpty(onSetupSync: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+    ) {
         Text(
-            when {
-                !hasUrl -> "在「我的」填写 WebDAV 地址并同步后，同一账号下的其他昵称会出现在这里"
-                !hasNickname -> "在「我的 → WebDAV」填写自己的昵称，点「同步好友」或开启自动同步"
-                else -> "还没有其他昵称的课表。请让对方用同一网盘账号、不同昵称上传。"
-            },
+            "还没有好友课表",
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            "同一网盘账号、不同昵称上传后会出现在这里",
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(32.dp),
         )
+        Button(onClick = onSetupSync) { Text("去设置同步") }
     }
 }
 

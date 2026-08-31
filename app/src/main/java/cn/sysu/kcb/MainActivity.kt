@@ -28,7 +28,7 @@ class MainActivity : ComponentActivity() {
         KcbApp.instance.container.alarms.ensureChannels()
         setContent {
             val settings by viewModel.settings.collectAsStateWithLifecycle()
-            KcbTheme(themeColor = settings.themeColor) {
+            KcbTheme(themeColor = settings.themeColor, themeMode = settings.themeMode) {
                 KcbRoot(viewModel)
             }
         }

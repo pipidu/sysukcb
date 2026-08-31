@@ -18,33 +18,40 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -56,17 +63,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cn.sysu.kcb.data.prefs.SettingsRepository
+import cn.sysu.kcb.data.prefs.UserSettings
 import cn.sysu.kcb.data.remote.SessionStatus
 import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.ui.AppViewModel
@@ -76,7 +87,12 @@ import cn.sysu.kcb.ui.theme.PresetThemeColors
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) {
+fun MeScreen(
+    viewModel: AppViewModel,
+    onLogin: () -> Unit,
+    onAbout: () -> Unit,
+    onWebDav: () -> Unit,
+) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val importing by viewModel.importing.collectAsStateWithLifecycle()
     val loggedIn by viewModel.loggedIn.collectAsStateWithLifecycle()
@@ -85,22 +101,14 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
     val context = LocalContext.current
     var showColor by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    var confirmAllImport by remember { mutableStateOf(false) }
     var showWakeUp by remember { mutableStateOf(false) }
     var wakeupCode by remember { mutableStateOf("") }
+    var accountOpen by rememberSaveable { mutableStateOf(true) }
+    var importOpen by rememberSaveable { mutableStateOf(true) }
+    var appearanceOpen by rememberSaveable { mutableStateOf(true) }
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
-    val webdavBusy by viewModel.webdavBusy.collectAsStateWithLifecycle()
-    val webdavHasPassword by viewModel.webdavHasPassword.collectAsStateWithLifecycle()
-    var davUrl by remember { mutableStateOf("") }
-    var davUser by remember { mutableStateOf("") }
-    var davPassword by remember { mutableStateOf("") }
-    var davNick by remember { mutableStateOf("") }
-    var davAuto by remember { mutableStateOf(true) }
-    LaunchedEffect(settings.webdavUrl, settings.webdavUser, settings.webdavNickname, settings.webdavAutoSync) {
-        davUrl = settings.webdavUrl
-        davUser = settings.webdavUser
-        davNick = settings.webdavNickname
-        davAuto = settings.webdavAutoSync
-    }
+    val canImport = !importing && !checkingSession && sessionStatus == SessionStatus.Valid
     LaunchedEffect(Unit) {
         viewModel.checkSession()
         viewModel.checkForUpdate(manual = false)
@@ -149,254 +157,215 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
                 .verticalScroll(rememberScrollState())
                 .padding(bottom = 24.dp),
         ) {
-            Card(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("教务登录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        School.All.forEach { school ->
-                            FilterChip(
-                                selected = settings.schoolId == school.id,
-                                onClick = { viewModel.setSchool(school.id) },
+            ExpandableCard(
+                title = "账号",
+                summary = accountSummary(settings, sessionStatus, checkingSession),
+                expanded = accountOpen,
+                onToggle = { accountOpen = !accountOpen },
+            ) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    School.All.forEach { school ->
+                        FilterChip(
+                            selected = settings.schoolId == school.id,
+                            onClick = { viewModel.setSchool(school.id) },
+                            enabled = !importing,
+                            label = { Text(school.displayName) },
+                        )
+                    }
+                }
+                Text(
+                    sessionLabel(sessionStatus, checkingSession),
+                    color = when {
+                        checkingSession -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        sessionStatus == SessionStatus.Valid -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        else -> MaterialTheme.colorScheme.error
+                    },
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onLogin) { Text(if (loggedIn) "重新登录" else "登录") }
+                    if (loggedIn) OutlinedButton(onClick = { viewModel.logout() }) { Text("退出登录") }
+                }
+            }
+            ExpandableCard(
+                title = "导入导出",
+                summary = "教务导入、文件、WakeUp",
+                expanded = importOpen,
+                onToggle = { importOpen = !importOpen },
+            ) {
+                Text(
+                    "选中学期只导入课表页当前学年；全部导入会覆盖前后各 8 个学期。",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = { viewModel.importFromJwxt() },
+                        enabled = canImport,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(if (importing) "导入中…" else "导入选中学期", textAlign = TextAlign.Center)
+                    }
+                    Button(
+                        onClick = { confirmAllImport = true },
+                        enabled = canImport,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("全部导入", textAlign = TextAlign.Center)
+                    }
+                }
+                ListItem(
+                    headlineContent = { Text("导出课表") },
+                    supportingContent = { Text("生成 JSON，分享给同学用本 App 导入") },
+                    trailingContent = {
+                        OutlinedButton(
+                            onClick = { viewModel.exportSemester(settings.selectedSemester) },
+                            enabled = settings.selectedSemester.isNotBlank(),
+                        ) { Text("分享") }
+                    },
+                )
+                ListItem(
+                    headlineContent = { Text("从文件导入") },
+                    supportingContent = { Text("本 App 的 JSON，或 WakeUp 备份 / CSV") },
+                    trailingContent = {
+                        OutlinedButton(onClick = { filePicker.launch(arrayOf("application/json", "text/plain", "*/*")) }) {
+                            Text("选择")
+                        }
+                    },
+                )
+                ListItem(
+                    headlineContent = { Text("从 WakeUp 导入") },
+                    supportingContent = { Text("备份文件或分享口令，导入到当前学期，考试保留") },
+                    trailingContent = {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { wakeupPicker.launch(arrayOf("application/json", "text/plain", "*/*")) },
                                 enabled = !importing,
-                                label = { Text(school.displayName) },
-                            )
+                            ) { Text("文件") }
+                            OutlinedButton(
+                                onClick = { showWakeUp = true },
+                                enabled = !importing,
+                            ) { Text("口令") }
                         }
-                    }
-                    Text(
-                        when {
-                            checkingSession -> "正在检查登录…"
-                            sessionStatus == SessionStatus.Valid -> "登录有效，可导入课表和考试"
-                            sessionStatus == SessionStatus.Unreachable -> "无法检查登录，请稍后重试"
-                            else -> "未登录或已过期，请重新登录后再导入"
-                        },
-                        color = when {
-                            checkingSession -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                            sessionStatus == SessionStatus.Valid -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                            else -> MaterialTheme.colorScheme.error
-                        },
-                    )
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = onLogin) { Text(if (loggedIn) "重新登录" else "登录") }
-                        if (loggedIn) OutlinedButton(onClick = { viewModel.logout() }) { Text("退出登录") }
+                    },
+                )
+            }
+            Card(
+                Modifier
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .clickable(onClick = onWebDav),
+            ) {
+                ListItem(
+                    headlineContent = { Text("同步", fontWeight = FontWeight.SemiBold) },
+                    supportingContent = {
+                        Text(
+                            if (settings.webdavUrl.isBlank()) "用坚果云和好友互看课表"
+                            else webdavSyncHint(settings.webdavLastSyncAt, settings.webdavLastMessage),
+                        )
+                    },
+                    trailingContent = {
+                        Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+                    },
+                )
+            }
+            ExpandableCard(
+                title = "外观与提醒",
+                summary = appearanceSummary(settings),
+                expanded = appearanceOpen,
+                onToggle = { appearanceOpen = !appearanceOpen },
+            ) {
+                Text("显示模式", style = MaterialTheme.typography.labelLarge)
+                val modes = listOf(
+                    SettingsRepository.THEME_MODE_SYSTEM to "跟随系统",
+                    SettingsRepository.THEME_MODE_LIGHT to "浅色",
+                    SettingsRepository.THEME_MODE_DARK to "深色",
+                )
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    modes.forEachIndexed { index, (id, label) ->
+                        SegmentedButton(
+                            selected = settings.themeMode == id,
+                            onClick = { viewModel.setThemeMode(id) },
+                            shape = SegmentedButtonDefaults.itemShape(index, modes.size),
+                        ) { Text(label) }
                     }
                 }
-            }
-            Card(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("导入课表和考试", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "选中学期只导入当前课表页所选学年的课表和考试；全部导入会拉取当前学期前后各 8 个学期（含已公布的未来课表与考试）。",
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    )
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = { viewModel.importFromJwxt() },
-                            enabled = !importing && (loggedIn || sessionStatus == SessionStatus.Expired || sessionStatus == SessionStatus.Unreachable),
-                        ) {
-                            Text(if (importing) "导入中…" else "导入选中学期")
-                        }
-                        Button(
-                            onClick = { viewModel.importAllYears() },
-                            enabled = !importing && (loggedIn || sessionStatus == SessionStatus.Expired || sessionStatus == SessionStatus.Unreachable),
-                        ) {
-                            Text("全部导入")
-                        }
-                    }
-                }
-            }
-            ListItem(
-                headlineContent = { Text("导出课表") },
-                supportingContent = { Text("生成 JSON 文件，分享给同学用本 App 导入") },
-                trailingContent = {
-                    OutlinedButton(
-                        onClick = { viewModel.exportSemester(settings.selectedSemester) },
-                        enabled = settings.selectedSemester.isNotBlank(),
-                    ) { Text("分享") }
-                },
-            )
-            ListItem(
-                headlineContent = { Text("从文件导入") },
-                supportingContent = { Text("打开他人分享的 .sysukcb.json，或 WakeUp 备份 / CSV") },
-                trailingContent = {
-                    OutlinedButton(onClick = { filePicker.launch(arrayOf("application/json", "text/plain", "*/*")) }) {
-                        Text("选择")
-                    }
-                },
-            )
-            ListItem(
-                headlineContent = { Text("从 WakeUp 导入") },
-                supportingContent = { Text("WakeUp 课程表里导出备份文件，或粘贴分享口令；导入到当前选中学期，考试仍保留") },
-                trailingContent = {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { wakeupPicker.launch(arrayOf("application/json", "text/plain", "*/*")) },
-                            enabled = !importing,
-                        ) { Text("文件") }
-                        OutlinedButton(
-                            onClick = { showWakeUp = true },
-                            enabled = !importing,
-                        ) { Text("口令") }
-                    }
-                },
-            )
-            Card(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("WebDAV 同步", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "把全部学期的课表和考试上传到坚果云、Nextcloud 或群晖。同一账号下用不同昵称上传，即可在「好友」页互看课表和考试。密码只存在本机。",
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    )
-                    OutlinedTextField(
-                        value = davUrl,
-                        onValueChange = { davUrl = it },
-                        label = { Text("地址") },
-                        placeholder = { Text("https://dav.jianguoyun.com/dav/sysukcb.json") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    OutlinedTextField(
-                        value = davUser,
-                        onValueChange = { davUser = it },
-                        label = { Text("用户名") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    OutlinedTextField(
-                        value = davPassword,
-                        onValueChange = { davPassword = it },
-                        label = { Text("密码") },
-                        placeholder = { Text(if (webdavHasPassword) "已保存，留空则不改" else "应用密码") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    OutlinedTextField(
-                        value = davNick,
-                        onValueChange = { davNick = it },
-                        label = { Text("昵称") },
-                        placeholder = { Text("上传到同一网盘时用来区分课表") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    ListItem(
-                        headlineContent = { Text("自动同步") },
-                        supportingContent = { Text("连网后约每小时上传自己的课表，并拉取其他昵称") },
-                        trailingContent = {
-                            Switch(
-                                checked = davAuto,
-                                onCheckedChange = { checked ->
-                                    davAuto = checked
-                                    viewModel.saveWebDav(davUrl, davUser, davPassword, davNick, checked)
-                                },
-                            )
-                        },
-                    )
-                    Text(
-                        webdavSyncHint(settings.webdavLastSyncAt, settings.webdavLastMessage),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { viewModel.saveWebDav(davUrl, davUser, davPassword, davNick, davAuto) },
-                            enabled = !webdavBusy,
-                        ) { Text("保存") }
-                        Button(
-                            onClick = { viewModel.uploadWebDav(davUrl, davUser, davPassword, davNick, davAuto) },
-                            enabled = !webdavBusy && !importing,
-                        ) { Text(if (webdavBusy) "同步中…" else "上传") }
-                        Button(
-                            onClick = { viewModel.downloadWebDav(davUrl, davUser, davPassword, davNick, davAuto) },
-                            enabled = !webdavBusy && !importing,
-                        ) { Text("下载") }
-                        Button(
-                            onClick = { viewModel.syncFriendsWebDav(davUrl, davUser, davPassword, davNick, davAuto) },
-                            enabled = !webdavBusy && !importing,
-                        ) { Text("同步好友") }
-                    }
-                }
-            }
-            ListItem(
-                headlineContent = { Text("主题色") },
-                supportingContent = { Text("更换后课表卡片换成同色调配色") },
-                trailingContent = {
-                    Box(
-                        Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(Color(settings.themeColor))
-                            .clickable { showColor = true },
-                    )
-                },
-                modifier = Modifier.clickable { showColor = true },
-            )
-            ListItem(
-                headlineContent = { Text("上课提醒") },
-                trailingContent = {
-                    Switch(
-                        checked = settings.reminderEnabled,
-                        onCheckedChange = {
-                            if (it && Build.VERSION.SDK_INT >= 33) {
-                                notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            }
-                            if (it && Build.VERSION.SDK_INT >= 31) {
-                                val am = context.getSystemService(AlarmManager::class.java)
-                                if (!am.canScheduleExactAlarms()) {
-                                    context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                                        data = Uri.parse("package:${context.packageName}")
-                                    })
+                ListItem(
+                    headlineContent = { Text("主题色") },
+                    supportingContent = { Text(themeColorName(settings.themeColor)) },
+                    trailingContent = {
+                        Box(
+                            Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(Color(settings.themeColor))
+                                .clickable { showColor = true },
+                        )
+                    },
+                    modifier = Modifier.clickable { showColor = true },
+                )
+                ListItem(
+                    headlineContent = { Text("上课提醒") },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.reminderEnabled,
+                            onCheckedChange = {
+                                if (it && Build.VERSION.SDK_INT >= 33) {
+                                    notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 }
-                            }
-                            viewModel.setReminderEnabled(it)
-                        },
-                    )
-                },
-            )
-            AnimatedVisibility(
-                visible = settings.reminderEnabled,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut(),
-            ) {
-                Column {
-                    Text("提前 ${settings.reminderMinutes} 分钟", modifier = Modifier.padding(horizontal = 16.dp))
-                    Slider(
-                        value = settings.reminderMinutes.toFloat(),
-                        onValueChange = { viewModel.setReminderMinutes(it.toInt().coerceIn(5, 60)) },
-                        valueRange = 5f..60f,
-                        steps = 10,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
+                                if (it && Build.VERSION.SDK_INT >= 31) {
+                                    val am = context.getSystemService(AlarmManager::class.java)
+                                    if (!am.canScheduleExactAlarms()) {
+                                        context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                            data = Uri.parse("package:${context.packageName}")
+                                        })
+                                    }
+                                }
+                                viewModel.setReminderEnabled(it)
+                            },
+                        )
+                    },
+                )
+                AnimatedVisibility(
+                    visible = settings.reminderEnabled,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    Column {
+                        Text("提前 ${settings.reminderMinutes} 分钟")
+                        Slider(
+                            value = settings.reminderMinutes.toFloat(),
+                            onValueChange = { viewModel.setReminderMinutes(it.toInt().coerceIn(5, 60)) },
+                            valueRange = 5f..60f,
+                            steps = 10,
+                        )
+                    }
                 }
-            }
-            ListItem(
-                headlineContent = { Text("考试提醒") },
-                trailingContent = {
-                    Switch(
-                        checked = settings.examReminderEnabled,
-                        onCheckedChange = {
-                            if (it && Build.VERSION.SDK_INT >= 33) {
-                                notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            }
-                            viewModel.setExamReminderEnabled(it)
-                        },
-                    )
-                },
-            )
-            AnimatedVisibility(
-                visible = settings.examReminderEnabled,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut(),
-            ) {
-                Column {
-                    Text("提前 ${settings.examReminderMinutes} 分钟", modifier = Modifier.padding(horizontal = 16.dp))
-                    Slider(
-                        value = settings.examReminderMinutes.toFloat(),
-                        onValueChange = { viewModel.setExamReminderMinutes(it.toInt().coerceIn(15, 180)) },
-                        valueRange = 15f..180f,
-                        steps = 10,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
+                ListItem(
+                    headlineContent = { Text("考试提醒") },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.examReminderEnabled,
+                            onCheckedChange = {
+                                if (it && Build.VERSION.SDK_INT >= 33) {
+                                    notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                                viewModel.setExamReminderEnabled(it)
+                            },
+                        )
+                    },
+                )
+                AnimatedVisibility(
+                    visible = settings.examReminderEnabled,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    Column {
+                        Text("提前 ${settings.examReminderMinutes} 分钟")
+                        Slider(
+                            value = settings.examReminderMinutes.toFloat(),
+                            onValueChange = { viewModel.setExamReminderMinutes(it.toInt().coerceIn(15, 180)) },
+                            valueRange = 15f..180f,
+                            steps = 10,
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -436,6 +405,22 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
                 viewModel.setThemeColor(it)
                 showColor = false
             },
+        )
+    }
+    if (confirmAllImport) {
+        AlertDialog(
+            onDismissRequest = { confirmAllImport = false },
+            title = { Text("全部导入？") },
+            text = {
+                Text("会覆盖当前学期前后各 8 个学期已导入的课表（手改过的导入课也会被替换），只保留你手动添加的课。")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmAllImport = false
+                    viewModel.importAllYears()
+                }) { Text("导入") }
+            },
+            dismissButton = { TextButton(onClick = { confirmAllImport = false }) { Text("取消") } },
         )
     }
     if (confirmClear) {
@@ -486,6 +471,53 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
     }
 }
 
+@Composable
+private fun ExpandableCard(
+    title: String,
+    summary: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Column {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggle)
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    if (!expanded && summary.isNotBlank()) {
+                        Text(
+                            summary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                        )
+                    }
+                }
+                Icon(
+                    if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                    contentDescription = if (expanded) "收起" else "展开",
+                )
+            }
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
+                Column(
+                    Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    content = content,
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ColorPickerDialog(
@@ -513,25 +545,39 @@ private fun ColorPickerDialog(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    PresetThemeColors.forEach { (color, _) ->
-                        Box(
-                            Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(Color(color))
-                                .border(
-                                    width = if ((color and 0xFFFFFFL) == livePacked) 2.dp else 0.dp,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    shape = CircleShape,
-                                )
+                    PresetThemeColors.forEach { (color, name) ->
+                        val selected = (color and 0xFFFFFFL) == livePacked
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .width(56.dp)
                                 .clickable {
                                     val next = rgbOf(color)
                                     setRgb(next[0], next[1], next[2])
                                 },
-                        )
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(color))
+                                    .border(
+                                        width = if (selected) 2.dp else 0.dp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        shape = CircleShape,
+                                    ),
+                            )
+                            Text(
+                                name,
+                                fontSize = 11.sp,
+                                lineHeight = 14.sp,
+                                maxLines = 1,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            )
+                        }
                     }
                 }
                 Box(
@@ -592,11 +638,26 @@ private fun LabelSlider(label: String, value: Float, from: Float, to: Float, onC
     }
 }
 
-private fun webdavSyncHint(at: Long, message: String): String {
-    if (at <= 0L) return message.ifBlank { "尚未同步" }
-    val time = java.time.Instant.ofEpochMilli(at)
-        .atZone(java.time.ZoneId.systemDefault())
-        .toLocalDateTime()
-        .format(java.time.format.DateTimeFormatter.ofPattern("M/d HH:mm"))
-    return if (message.isBlank()) "上次同步 $time" else "上次同步 $time · $message"
+private fun sessionLabel(status: SessionStatus, checking: Boolean): String = when {
+    checking -> "正在检查登录…"
+    status == SessionStatus.Valid -> "登录有效，可导入课表和考试"
+    status == SessionStatus.Unreachable -> "无法检查登录，请稍后重试"
+    else -> "未登录或已过期，请重新登录后再导入"
+}
+
+private fun accountSummary(settings: UserSettings, status: SessionStatus, checking: Boolean): String {
+    val school = School.of(settings.schoolId).displayName
+    return "$school · ${sessionLabel(status, checking)}"
+}
+
+private fun themeColorName(color: Long): String =
+    PresetThemeColors.firstOrNull { (it.first and 0xFFFFFFL) == (color and 0xFFFFFFL) }?.second ?: "自定义"
+
+private fun appearanceSummary(settings: UserSettings): String {
+    val mode = when (settings.themeMode) {
+        SettingsRepository.THEME_MODE_LIGHT -> "浅色"
+        SettingsRepository.THEME_MODE_DARK -> "深色"
+        else -> "跟随系统"
+    }
+    return "${themeColorName(settings.themeColor)} · $mode"
 }

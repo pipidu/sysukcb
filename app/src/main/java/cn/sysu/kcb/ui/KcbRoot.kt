@@ -52,6 +52,7 @@ import cn.sysu.kcb.ui.friends.FriendScreen
 import cn.sysu.kcb.ui.login.LoginScreen
 import cn.sysu.kcb.ui.me.AboutScreen
 import cn.sysu.kcb.ui.me.MeScreen
+import cn.sysu.kcb.ui.me.WebDavScreen
 import cn.sysu.kcb.ui.theme.KcbMotion
 import cn.sysu.kcb.ui.timetable.TimetableScreen
 
@@ -90,6 +91,7 @@ fun KcbRoot(viewModel: AppViewModel) {
                         nav.navigate("login")
                     },
                     onAbout = { nav.navigate("about") },
+                    onWebDav = { nav.navigate("webdav") },
                     onEdit = { id -> nav.navigate("edit/$id") },
                     onAdd = { day, period, semester ->
                         nav.navigate("add?day=$day&period=$period&semester=$semester")
@@ -98,6 +100,9 @@ fun KcbRoot(viewModel: AppViewModel) {
             }
             composable("about") {
                 AboutScreen(viewModel = viewModel, onBack = { nav.popBackStack() })
+            }
+            composable("webdav") {
+                WebDavScreen(viewModel = viewModel, onBack = { nav.popBackStack() })
             }
             composable("login") {
                 LoginScreen(
@@ -200,6 +205,7 @@ private fun HomeTabs(
     viewModel: AppViewModel,
     onLogin: () -> Unit,
     onAbout: () -> Unit,
+    onWebDav: () -> Unit,
     onEdit: (Long) -> Unit,
     onAdd: (Int, Int, String) -> Unit,
 ) {
@@ -262,8 +268,10 @@ private fun HomeTabs(
                 TimetableScreen(viewModel = viewModel, onEdit = onEdit, onAdd = onAdd, onLogin = onLogin)
             }
             composable("exam") { ExamScreen(viewModel) }
-            composable("friends") { FriendScreen(viewModel) }
-            composable("me") { MeScreen(viewModel = viewModel, onLogin = onLogin, onAbout = onAbout) }
+            composable("friends") { FriendScreen(viewModel, onSetupSync = onWebDav) }
+            composable("me") {
+                MeScreen(viewModel = viewModel, onLogin = onLogin, onAbout = onAbout, onWebDav = onWebDav)
+            }
         }
     }
 }

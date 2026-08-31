@@ -8,23 +8,29 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import cn.sysu.kcb.ui.theme.KcbTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,10 +40,12 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.domain.CourseColors
@@ -74,6 +82,7 @@ fun CourseEditScreen(
         mutableLongStateOf(existing?.color ?: CourseColors.of(name.ifBlank { "课" }, settings.themeColor))
     }
     var weeksMask by remember(existing) { mutableLongStateOf(existing?.weeksMask ?: WeekMask.fromRange(1, 18)) }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -118,17 +127,56 @@ fun CourseEditScreen(
                     )
                 }
             }
-            Text("周次（${WeekMask.describe(weeksMask)}）")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                (1..20).forEach { w ->
-                    val on = WeekMask.has(weeksMask, w)
-                    FilterChip(
-                        selected = on,
-                        onClick = {
-                            weeksMask = if (on) weeksMask and WeekMask.bit(w).inv() else weeksMask or WeekMask.bit(w)
-                        },
-                        label = { Text("$w") },
-                    )
+            Text("周次（${WeekMask.describe(weeksMask, 20)}）")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = weeksMask == WeekMask.fromRange(1, 20),
+                    onClick = { weeksMask = WeekMask.fromRange(1, 20) },
+                    label = { Text("全选") },
+                )
+                FilterChip(
+                    selected = weeksMask == WeekMask.fromRange(1, 20) { it % 2 == 1 },
+                    onClick = { weeksMask = WeekMask.fromRange(1, 20) { it % 2 == 1 } },
+                    label = { Text("单周") },
+                )
+                FilterChip(
+                    selected = weeksMask == WeekMask.fromRange(1, 20) { it % 2 == 0 },
+                    onClick = { weeksMask = WeekMask.fromRange(1, 20) { it % 2 == 0 } },
+                    label = { Text("双周") },
+                )
+                FilterChip(
+                    selected = weeksMask == 0L,
+                    onClick = { weeksMask = 0L },
+                    label = { Text("清空") },
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                repeat(4) { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        repeat(5) { col ->
+                            val w = row * 5 + col + 1
+                            val on = WeekMask.has(weeksMask, w)
+                            val bg = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                            val fg = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                            Box(
+                                Modifier
+                                    .weight(1f)
+                                    .height(36.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(bg)
+                                    .clickable {
+                                        weeksMask = if (on) {
+                                            weeksMask and WeekMask.bit(w).inv()
+                                        } else {
+                                            weeksMask or WeekMask.bit(w)
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text("$w", color = fg, fontSize = 13.sp)
+                            }
+                        }
+                    }
                 }
             }
             Text("颜色")
@@ -180,13 +228,25 @@ fun CourseEditScreen(
             ) { Text("保存") }
             if (existing != null) {
                 OutlinedButton(
-                    onClick = {
-                        viewModel.deleteCourse(existing)
-                        onDone()
-                    },
+                    onClick = { confirmDelete = true },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("删除课程") }
             }
         }
+    }
+    if (confirmDelete && existing != null) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("删除这门课？") },
+            text = { Text("删除后无法恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteCourse(existing)
+                    confirmDelete = false
+                    onDone()
+                }) { Text("删除") }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("取消") } },
+        )
     }
 }

@@ -73,7 +73,12 @@ private fun Color.compositeOn(bg: Color): Color {
 @Composable
 fun KcbTheme(
     themeColor: Long = SettingsRepository.DEFAULT_THEME_COLOR,
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    themeMode: String = SettingsRepository.THEME_MODE_SYSTEM,
+    darkTheme: Boolean = when (themeMode) {
+        SettingsRepository.THEME_MODE_LIGHT -> false
+        SettingsRepository.THEME_MODE_DARK -> true
+        else -> isSystemInDarkTheme()
+    },
     content: @Composable () -> Unit,
 ) {
     val scheme = colorSchemeFromSeed(themeColor, darkTheme)

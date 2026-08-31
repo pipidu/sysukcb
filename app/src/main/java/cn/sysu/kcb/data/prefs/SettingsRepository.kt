@@ -16,6 +16,7 @@ private val Context.dataStore by preferencesDataStore("kcb_settings")
 
 data class UserSettings(
     val themeColor: Long = SettingsRepository.DEFAULT_THEME_COLOR,
+    val themeMode: String = SettingsRepository.THEME_MODE_SYSTEM,
     val reminderEnabled: Boolean = true,
     val reminderMinutes: Int = 15,
     val examReminderEnabled: Boolean = true,
@@ -38,6 +39,14 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setThemeColor(color: Long) {
         context.dataStore.edit { it[Keys.themeColor] = color }
+    }
+
+    suspend fun setThemeMode(mode: String) {
+        val normalized = when (mode) {
+            THEME_MODE_LIGHT, THEME_MODE_DARK -> mode
+            else -> THEME_MODE_SYSTEM
+        }
+        context.dataStore.edit { it[Keys.themeMode] = normalized }
     }
 
     suspend fun setReminderEnabled(enabled: Boolean) {
@@ -90,6 +99,7 @@ class SettingsRepository(private val context: Context) {
 
     private fun Preferences.toSettings() = UserSettings(
         themeColor = this[Keys.themeColor] ?: SettingsRepository.DEFAULT_THEME_COLOR,
+        themeMode = this[Keys.themeMode] ?: SettingsRepository.THEME_MODE_SYSTEM,
         reminderEnabled = this[Keys.reminderEnabled] ?: true,
         reminderMinutes = this[Keys.reminderMinutes] ?: 15,
         examReminderEnabled = this[Keys.examReminderEnabled] ?: true,
@@ -107,6 +117,7 @@ class SettingsRepository(private val context: Context) {
 
     private object Keys {
         val themeColor = longPreferencesKey("theme_color")
+        val themeMode = stringPreferencesKey("theme_mode")
         val reminderEnabled = booleanPreferencesKey("reminder_enabled")
         val reminderMinutes = intPreferencesKey("reminder_minutes")
         val examReminderEnabled = booleanPreferencesKey("exam_reminder_enabled")
@@ -125,5 +136,8 @@ class SettingsRepository(private val context: Context) {
     companion object {
         const val DEFAULT_THEME_COLOR = 0xFF8C1A1AL
         const val DEFAULT_SCHOOL_ID = "sysu"
+        const val THEME_MODE_SYSTEM = "system"
+        const val THEME_MODE_LIGHT = "light"
+        const val THEME_MODE_DARK = "dark"
     }
 }

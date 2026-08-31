@@ -422,13 +422,9 @@ fun TimetableScreen(
                     periods = snapshot.periods,
                     themeColor = settings.themeColor,
                     onDismiss = { viewingCourses = null },
-                    onEdit = if (editing) {
-                        { course ->
-                            viewingCourses = null
-                            onEdit(course.id)
-                        }
-                    } else {
-                        null
+                    onEdit = { course ->
+                        viewingCourses = null
+                        onEdit(course.id)
                     },
                     bottomInset = sheetBottomInset,
                 )

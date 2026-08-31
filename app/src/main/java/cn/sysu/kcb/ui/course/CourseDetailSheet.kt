@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -74,13 +73,6 @@ fun CourseDetailSheet(
                 if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                 CourseDetailBlock(course, periods, themeColor, onEdit)
             }
-            Spacer(Modifier.height(4.dp))
-            Button(
-                onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("关闭")
-            }
         }
     }
 }
@@ -131,7 +123,7 @@ private fun CourseDetailBlock(
             OutlinedButton(
                 onClick = { onEdit(course) },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("编辑这门课") }
+            ) { Text("编辑") }
         }
     }
 }

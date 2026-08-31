@@ -156,6 +156,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         WidgetData.refreshAll(getApplication())
     }
 
+    fun setThemeMode(mode: String) = viewModelScope.launch {
+        container.settings.setThemeMode(mode)
+    }
+
     fun setReminderEnabled(enabled: Boolean) = viewModelScope.launch {
         container.settings.setReminderEnabled(enabled)
         refreshAlarms()

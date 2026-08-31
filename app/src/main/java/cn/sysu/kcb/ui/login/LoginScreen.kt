@@ -14,9 +14,11 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -26,7 +28,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -34,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -97,6 +99,7 @@ fun LoginScreen(
         }
     }
 
+    val gzhu = school.id == School.ID_GZHU
     Scaffold(
         topBar = {
             KcbTopBar {
@@ -104,20 +107,20 @@ fun LoginScreen(
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "关闭")
                 }
                 Text("${school.shortName}教务登录", modifier = Modifier.weight(1f))
-                TextButton(onClick = { tryFinish(requireJwxtCheck = true) }, enabled = !finished && !checking) {
-                    Text("开始导入")
-                }
             }
         },
         bottomBar = {
-            Button(
-                onClick = { tryFinish(requireJwxtCheck = false) },
-                enabled = !finished && !checking,
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-            ) { Text(if (checking) "正在确认登录…" else "我已登录，导入课表和考试") }
+            if (!gzhu) {
+                Button(
+                    onClick = { tryFinish(requireJwxtCheck = false) },
+                    enabled = !finished && !checking,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                ) { Text(if (checking) "正在确认登录…" else "我已登录，导入课表和考试") }
+            }
         },
     ) { inner ->
-        Column(Modifier.fillMaxSize().padding(inner)) {
+        Box(Modifier.fillMaxSize().padding(inner)) {
+            Column(Modifier.fillMaxSize()) {
             AnimatedVisibility(visible = progress in 1..99) {
                 LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())
             }
@@ -232,6 +235,17 @@ fun LoginScreen(
                     popupWebView = null
                 },
             )
+            }
+            if (gzhu) {
+                Button(
+                    onClick = { tryFinish(requireJwxtCheck = false) },
+                    enabled = !finished && !checking,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .navigationBarsPadding()
+                        .padding(12.dp),
+                ) { Text(if (checking) "正在确认…" else "我已登录") }
+            }
         }
     }
 }
