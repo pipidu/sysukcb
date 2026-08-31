@@ -101,8 +101,8 @@ class NextWidgetReceiver : GlanceAppWidgetReceiver() {
 
 data class UpcomingItem(
     val name: String,
+    val whenText: String,
     val place: String,
-    val timeLabel: String,
     val color: Long,
     val ongoing: Boolean,
 )
@@ -182,17 +182,16 @@ object WidgetData {
                 val ongoing = date == today && start != null && end != null &&
                     !now.toLocalTime().isBefore(start) && now.toLocalTime().isBefore(end)
                 val timeRange = listOf(startRaw, endRaw).filter { it.isNotBlank() }.joinToString("-")
-                val dayLabel = when {
-                    ongoing -> "正在上课"
-                    offset == 0 -> timeRange
-                    offset == 1 -> "明天 $timeRange"
-                    else -> "${weekdayName(date.dayOfWeek.value)} $timeRange"
+                val whenText = when {
+                    ongoing -> "正在上课 $timeRange".trim()
+                    offset == 0 -> timeRange.ifBlank { "今天" }
+                    offset == 1 -> "明天 ${timeRange}".trim()
+                    else -> "${weekdayName(date.dayOfWeek.value)} $timeRange".trim()
                 }
                 result += UpcomingItem(
-                    name = course.courseName,
-                    place = course.place,
-                    timeLabel = if (ongoing) "$timeRange${if (course.place.isNotBlank()) " · ${course.place}" else ""}" else
-                        listOf(dayLabel, course.place).filter { it.isNotBlank() }.joinToString(" · "),
+                    name = course.courseName.trim(),
+                    whenText = whenText,
+                    place = compactPlace(course.place),
                     color = CourseColors.display(course.color, course.courseName, theme),
                     ongoing = ongoing,
                 )
@@ -209,6 +208,14 @@ object WidgetData {
             ?: runCatching { LocalTime.parse(value, DateTimeFormatter.ofPattern("H:mm")) }.getOrNull()
     }
 }
+
+private fun compactPlace(place: String): String =
+    place.replace(Regex("（\\d+座）|\\(\\d+座\\)"), "")
+        .replace('/', ' ')
+        .replace('\n', ' ')
+        .replace('\r', ' ')
+        .replace(Regex("\\s+"), " ")
+        .trim()
 
 @Composable
 private fun openAppAction(): androidx.glance.action.Action {
@@ -272,10 +279,17 @@ private fun TodayContent(state: WidgetState) {
                             maxLines = 1,
                         )
                         Text(
-                            listOf("$start-$end", course.place).filter { it.isNotBlank() }.joinToString(" · "),
+                            start.takeIf { it.isNotBlank() }?.let { "$it-${end}" } ?: compactPlace(course.place),
                             style = TextStyle(color = ColorProvider(Color(0xFF667085)), fontSize = 11.sp),
                             maxLines = 1,
                         )
+                        if (start.isNotBlank() && course.place.isNotBlank()) {
+                            Text(
+                                compactPlace(course.place),
+                                style = TextStyle(color = ColorProvider(Color(0xFF667085)), fontSize = 11.sp),
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             }
@@ -400,35 +414,42 @@ private fun NextContent(state: WidgetState) {
                         .defaultWeight()
                         .padding(bottom = 4.dp)
                         .cornerRadius(10.dp)
-                        .background(ColorProvider(Color(item.color).copy(alpha = 0.55f)))
-                        .padding(8.dp),
+                        .background(ColorProvider(Color(item.color)))
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(
                         modifier = GlanceModifier
                             .width(4.dp)
-                            .fillMaxHeight()
+                            .height(40.dp)
                             .cornerRadius(4.dp)
-                            .background(ColorProvider(Color(item.color))),
+                            .background(ColorProvider(Color.White.copy(alpha = 0.85f))),
                     ) {
                         Spacer(GlanceModifier.width(4.dp))
                     }
                     Spacer(GlanceModifier.width(8.dp))
                     Column(modifier = GlanceModifier.defaultWeight()) {
                         Text(
-                            if (item.ongoing) "正在上课 · ${item.name}" else item.name,
+                            item.name,
                             style = TextStyle(
-                                color = ColorProvider(Color(0xFF1D2939)),
+                                color = ColorProvider(Color.White),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                             ),
-                            maxLines = 2,
+                            maxLines = 1,
                         )
                         Text(
-                            item.timeLabel,
-                            style = TextStyle(color = ColorProvider(Color(0xFF667085)), fontSize = 10.sp),
-                            maxLines = 2,
+                            item.whenText,
+                            style = TextStyle(color = ColorProvider(Color.White.copy(alpha = 0.92f)), fontSize = 10.sp),
+                            maxLines = 1,
                         )
+                        if (item.place.isNotBlank()) {
+                            Text(
+                                item.place,
+                                style = TextStyle(color = ColorProvider(Color.White.copy(alpha = 0.92f)), fontSize = 10.sp),
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             }
