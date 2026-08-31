@@ -112,17 +112,16 @@ fun TimetableScreen(
             ?: settings.selectedSemester.takeIf { it.isNotBlank() }
             ?: SemesterRange.guessCurrent()
     }
-    val populatedSemesters = remember(semesters) {
-        semesters.map { it.acadYearSemester }
-            .distinct()
-            .sortedByDescending { SemesterRange.ordinal(it) ?: Int.MIN_VALUE }
+    val populatedIds by repo.populatedCourseSemesters.collectAsStateWithLifecycle(emptyList())
+    val populatedSemesters = remember(populatedIds) {
+        populatedIds.distinct().sortedByDescending { SemesterRange.ordinal(it) ?: Int.MIN_VALUE }
     }
     val addableSemesters = remember(semesterAnchor, populatedSemesters) {
         SemesterRange.span(semesterAnchor, before = 8, after = 8)
             .filterNot { it in populatedSemesters }
     }
-    val semester = remember(settings.selectedSemester, semesters) {
-        pickSemester(settings, semesters)
+    val semester = remember(settings.selectedSemester, semesters, populatedSemesters) {
+        pickSemester(settings, semesters, populatedSemesters)
     }
     LaunchedEffect(semester, settings.selectedSemester, semesters) {
         if (semester.isBlank()) {
@@ -519,12 +518,12 @@ internal fun weekRangeLabel(
 private fun pickSemester(
     settings: UserSettings,
     semesters: List<SemesterEntity>,
+    populated: List<String>,
 ): String {
     val saved = settings.selectedSemester
     if (saved.isNotBlank()) return saved
-    return semesters.firstOrNull { it.isCurrent }?.acadYearSemester
-        ?: semesters.firstOrNull()?.acadYearSemester
-        .orEmpty()
+    return semesters.firstOrNull { it.isCurrent && it.acadYearSemester in populated }?.acadYearSemester
+        ?: populated.firstOrNull().orEmpty()
 }
 
 @OptIn(ExperimentalLayoutApi::class)

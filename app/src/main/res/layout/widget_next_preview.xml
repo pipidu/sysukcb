@@ -3,23 +3,41 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="6dp"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp"
+    android:paddingTop="7dp"
+    android:paddingBottom="8dp"
     android:background="@drawable/widget_background">
-    <TextView
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="4dp"
-        android:text="8/31 周一 · 第1周"
-        android:textColor="#8C1A1A"
-        android:textSize="11sp"
-        android:textStyle="bold"
-        android:maxLines="1" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+        <View
+            android:layout_width="6dp"
+            android:layout_height="6dp"
+            android:background="#8C1A1A" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="8/31 周一 · 第1周"
+            android:textColor="#8C1A1A"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:maxLines="1" />
+    </LinearLayout>
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:layout_marginTop="6dp"
         android:orientation="vertical"
-        android:padding="6dp"
+        android:gravity="center_vertical"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
         android:background="#8C1A1A">
         <TextView
             android:layout_width="wrap_content"
@@ -49,7 +67,11 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:orientation="vertical"
-        android:padding="6dp"
+        android:gravity="center_vertical"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
         android:background="#6B1414">
         <TextView
             android:layout_width="wrap_content"

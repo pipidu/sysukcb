@@ -104,9 +104,9 @@ fun MeScreen(
     var confirmAllImport by remember { mutableStateOf(false) }
     var showWakeUp by remember { mutableStateOf(false) }
     var wakeupCode by remember { mutableStateOf("") }
-    var accountOpen by rememberSaveable { mutableStateOf(true) }
-    var importOpen by rememberSaveable { mutableStateOf(true) }
-    var appearanceOpen by rememberSaveable { mutableStateOf(true) }
+    var accountOpen by rememberSaveable { mutableStateOf(false) }
+    var importOpen by rememberSaveable { mutableStateOf(false) }
+    var appearanceOpen by rememberSaveable { mutableStateOf(false) }
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val canImport = !importing && !checkingSession && sessionStatus == SessionStatus.Valid
     LaunchedEffect(Unit) {
@@ -248,24 +248,6 @@ fun MeScreen(
                     },
                 )
             }
-            Card(
-                Modifier
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .clickable(onClick = onWebDav),
-            ) {
-                ListItem(
-                    headlineContent = { Text("同步", fontWeight = FontWeight.SemiBold) },
-                    supportingContent = {
-                        Text(
-                            if (settings.webdavUrl.isBlank()) "用坚果云和好友互看课表"
-                            else webdavSyncHint(settings.webdavLastSyncAt, settings.webdavLastMessage),
-                        )
-                    },
-                    trailingContent = {
-                        Icon(Icons.Outlined.ChevronRight, contentDescription = null)
-                    },
-                )
-            }
             ExpandableCard(
                 title = "外观与提醒",
                 summary = appearanceSummary(settings),
@@ -367,6 +349,24 @@ fun MeScreen(
                         )
                     }
                 }
+            }
+            Card(
+                Modifier
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .clickable(onClick = onWebDav),
+            ) {
+                ListItem(
+                    headlineContent = { Text("同步", fontWeight = FontWeight.SemiBold) },
+                    supportingContent = {
+                        Text(
+                            if (settings.webdavUrl.isBlank()) "用坚果云和好友互看课表"
+                            else webdavSyncHint(settings.webdavLastSyncAt, settings.webdavLastMessage),
+                        )
+                    },
+                    trailingContent = {
+                        Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+                    },
+                )
             }
             Spacer(Modifier.height(12.dp))
             TextButton(onClick = { confirmClear = true }, modifier = Modifier.padding(horizontal = 8.dp)) {

@@ -401,21 +401,36 @@ private fun NextContent(state: WidgetState) {
             .cornerRadius(20.dp)
             .background(ColorProvider(Color.White))
             .clickable(open)
-            .padding(6.dp),
+            .padding(start = 8.dp, end = 8.dp, top = 7.dp, bottom = 8.dp),
     ) {
-        Text(
-            state.nextTitle,
-            style = TextStyle(
-                color = ColorProvider(theme),
-                fontWeight = FontWeight.Bold,
-                fontSize = 11.sp,
-            ),
-            maxLines = 1,
-        )
-        Spacer(GlanceModifier.height(4.dp))
+        Row(
+            modifier = GlanceModifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = GlanceModifier
+                    .width(6.dp)
+                    .height(6.dp)
+                    .cornerRadius(3.dp)
+                    .background(ColorProvider(theme)),
+            ) {
+                Spacer(GlanceModifier.width(6.dp))
+            }
+            Spacer(GlanceModifier.width(6.dp))
+            Text(
+                state.nextTitle,
+                style = TextStyle(
+                    color = ColorProvider(theme),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                ),
+                maxLines = 1,
+            )
+        }
+        Spacer(GlanceModifier.height(6.dp))
         if (state.upcoming.isEmpty()) {
             Box(
-                modifier = GlanceModifier.fillMaxWidth().defaultWeight().cornerRadius(10.dp).background(ColorProvider(Color(0xFFF7F4F4))),
+                modifier = GlanceModifier.fillMaxWidth().defaultWeight().cornerRadius(12.dp).background(ColorProvider(Color(0xFFF7F4F4))),
                 contentAlignment = Alignment.Center,
             ) {
                 Text("最近没有课", style = TextStyle(color = ColorProvider(Color(0xFF98A2B3)), fontSize = 11.sp))
@@ -425,47 +440,36 @@ private fun NextContent(state: WidgetState) {
                 if (index > 0) {
                     Spacer(GlanceModifier.height(6.dp))
                 }
-                Row(
+                Column(
                     modifier = GlanceModifier
                         .fillMaxWidth()
                         .defaultWeight()
-                        .cornerRadius(10.dp)
+                        .cornerRadius(12.dp)
                         .background(ColorProvider(Color(item.color)))
-                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalAlignment = Alignment.Start,
                 ) {
-                    Box(
-                        modifier = GlanceModifier
-                            .width(3.dp)
-                            .height(32.dp)
-                            .cornerRadius(3.dp)
-                            .background(ColorProvider(Color.White.copy(alpha = 0.85f))),
-                    ) {
-                        Spacer(GlanceModifier.width(3.dp))
-                    }
-                    Spacer(GlanceModifier.width(6.dp))
-                    Column(modifier = GlanceModifier.defaultWeight()) {
+                    Text(
+                        item.name,
+                        style = TextStyle(
+                            color = ColorProvider(Color.White),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                        ),
+                        maxLines = 1,
+                    )
+                    Text(
+                        item.whenText,
+                        style = TextStyle(color = ColorProvider(Color.White.copy(alpha = 0.92f)), fontSize = 8.sp),
+                        maxLines = 1,
+                    )
+                    if (item.place.isNotBlank()) {
                         Text(
-                            item.name,
-                            style = TextStyle(
-                                color = ColorProvider(Color.White),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Medium,
-                            ),
-                            maxLines = 1,
-                        )
-                        Text(
-                            item.whenText,
+                            item.place,
                             style = TextStyle(color = ColorProvider(Color.White.copy(alpha = 0.92f)), fontSize = 8.sp),
-                            maxLines = 1,
+                            maxLines = 2,
                         )
-                        if (item.place.isNotBlank()) {
-                            Text(
-                                item.place,
-                                style = TextStyle(color = ColorProvider(Color.White.copy(alpha = 0.92f)), fontSize = 8.sp),
-                                maxLines = 2,
-                            )
-                        }
                     }
                 }
             }

@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.combine
 
 class TimetableRepository(private val db: AppDatabase) {
     val semesters: Flow<List<SemesterEntity>> = db.semesterDao().observeAll()
+    val populatedCourseSemesters: Flow<List<String>> = db.courseDao().observePopulatedSemesters()
 
     fun courses(semester: String): Flow<List<CourseEntity>> = db.courseDao().observe(semester)
     fun exams(semester: String): Flow<List<ExamEntity>> = db.examDao().observe(semester)

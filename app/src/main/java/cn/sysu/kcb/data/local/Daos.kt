@@ -85,6 +85,9 @@ interface CourseDao {
     @Query("SELECT * FROM courses")
     suspend fun listAll(): List<CourseEntity>
 
+    @Query("SELECT DISTINCT acadYearSemester FROM courses")
+    fun observePopulatedSemesters(): Flow<List<String>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(item: CourseEntity): Long
 
