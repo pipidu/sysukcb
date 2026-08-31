@@ -124,23 +124,29 @@ object WidgetData {
         val settings = app.container.settings.snapshot()
         val current = app.container.timetable.currentSemester()
         val semester = settings.selectedSemester.ifBlank { current?.acadYearSemester.orEmpty() }
+        val semesterMeta = app.container.timetable.listSemesters().firstOrNull { it.acadYearSemester == semester }
+        val startMillis = semesterMeta?.startMillis ?: 0L
         val weeks = app.container.timetable.listWeeks(semester)
         val courses = app.container.timetable.listCourses(semester)
         val periods = app.container.timetable.listPeriods(semester)
         val today = LocalDate.now()
-        val weekNo = ClassAlarmScheduler.resolveWeek(today, weeks, current?.startMillis ?: 0L) ?: 1
-        val todayCourses = courses
-            .filter { it.dayOfWeek == today.dayOfWeek.value && WeekMask.has(it.weeksMask, weekNo) }
-            .sortedBy { it.startPeriod }
+        val weekNo = ClassAlarmScheduler.resolveWeek(today, weeks, startMillis)
+        val todayCourses = if (weekNo == null) {
+            emptyList()
+        } else {
+            courses
+                .filter { it.dayOfWeek == today.dayOfWeek.value && WeekMask.has(it.weeksMask, weekNo) }
+                .sortedBy { it.startPeriod }
+        }
         return WidgetState(
             theme = settings.themeColor,
             title = "今日课程",
-            subtitle = "第${weekNo}周 · ${weekdayName(today.dayOfWeek.value)}",
+            subtitle = if (weekNo != null) "第${weekNo}周 · ${weekdayName(today.dayOfWeek.value)}" else "学期未开始",
             today = todayCourses,
-            weekCourses = courses.filter { WeekMask.has(it.weeksMask, weekNo) },
+            weekCourses = if (weekNo == null) emptyList() else courses.filter { WeekMask.has(it.weeksMask, weekNo) },
             periods = periods,
-            weekNo = weekNo,
-            upcoming = upcomingClasses(courses, periods, weeks, current?.startMillis ?: 0L, 2, settings.themeColor),
+            weekNo = weekNo ?: 0,
+            upcoming = upcomingClasses(courses, periods, weeks, startMillis, 2, settings.themeColor),
         )
     }
 
@@ -164,10 +170,10 @@ object WidgetData {
         val today = now.toLocalDate()
         val periodMap = periods.associateBy { it.sectionNumber }
         val result = mutableListOf<UpcomingItem>()
-        for (offset in 0..13) {
+        for (offset in 0..27) {
             if (result.size >= limit) break
             val date = today.plusDays(offset.toLong())
-            val weekNo = ClassAlarmScheduler.resolveWeek(date, weeks, semesterStart) ?: 1
+            val weekNo = ClassAlarmScheduler.resolveWeek(date, weeks, semesterStart) ?: continue
             val dayCourses = courses
                 .filter { it.dayOfWeek == date.dayOfWeek.value && WeekMask.has(it.weeksMask, weekNo) }
                 .sortedBy { it.startPeriod }
@@ -185,8 +191,8 @@ object WidgetData {
                 val whenText = when {
                     ongoing -> "正在上课 $timeRange".trim()
                     offset == 0 -> timeRange.ifBlank { "今天" }
-                    offset == 1 -> "明天 ${timeRange}".trim()
-                    else -> "${weekdayName(date.dayOfWeek.value)} $timeRange".trim()
+                    offset == 1 -> "明天 $timeRange".trim()
+                    else -> "${date.monthValue}/${date.dayOfMonth} ${weekdayName(date.dayOfWeek.value)} $timeRange".trim()
                 }
                 result += UpcomingItem(
                     name = course.courseName.trim(),
@@ -313,7 +319,7 @@ private fun WeekContent(state: WidgetState) {
             .padding(8.dp),
     ) {
         Text(
-            "第${state.weekNo}周课表",
+            if (state.weekNo > 0) "第${state.weekNo}周课表" else "学期未开始",
             style = TextStyle(color = ColorProvider(theme), fontWeight = FontWeight.Bold, fontSize = 14.sp),
         )
         Spacer(GlanceModifier.height(6.dp))

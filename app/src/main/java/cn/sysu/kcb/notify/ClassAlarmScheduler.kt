@@ -144,26 +144,32 @@ class ClassAlarmScheduler(private val context: Context) {
                 val end = week.endDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: continue
                 if (!date.isBefore(start) && !date.isAfter(end)) return week.weekly
             }
+            val max = weeks.maxOfOrNull { it.weekly } ?: WeekMask.MAX_WEEK
             val dated = weeks.filter { !it.startDate.isNullOrBlank() }
             val known = dated.minByOrNull { it.weekly }
             if (known != null) {
                 val start = runCatching { LocalDate.parse(known.startDate) }.getOrNull()
                 if (start != null) {
-                    val diff = ChronoUnit.WEEKS.between(start, date).toInt()
-                    val week = known.weekly + diff
-                    val max = weeks.maxOfOrNull { it.weekly } ?: WeekMask.MAX_WEEK
+                    val origin = mondayOf(start)
+                    if (date.isBefore(origin)) return null
+                    val week = known.weekly + (ChronoUnit.DAYS.between(origin, date) / 7).toInt()
                     if (week in 1..max) return week
+                    return null
                 }
             }
             if (semesterStartMillis > 0) {
                 val start = java.time.Instant.ofEpochMilli(semesterStartMillis)
                     .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-                val week = ChronoUnit.WEEKS.between(start, date).toInt() + 1
-                val max = weeks.maxOfOrNull { it.weekly } ?: WeekMask.MAX_WEEK
+                val origin = mondayOf(start)
+                if (date.isBefore(origin)) return null
+                val week = (ChronoUnit.DAYS.between(origin, date) / 7).toInt() + 1
                 if (week in 1..max) return week
             }
             return null
         }
+
+        private fun mondayOf(date: LocalDate): LocalDate =
+            date.minusDays((date.dayOfWeek.value - 1).toLong())
     }
 }
 
