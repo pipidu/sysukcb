@@ -126,3 +126,13 @@ data class WeekdayEntity(
     @PrimaryKey val dataNumber: String,
     val dataName: String,
 )
+
+@Entity(tableName = "friend_packs")
+data class FriendPackEntity(
+    @PrimaryKey val id: String,
+    val nickname: String,
+    val filename: String,
+    val payload: String,
+    val exportedAt: String,
+    val syncedAt: Long,
+)

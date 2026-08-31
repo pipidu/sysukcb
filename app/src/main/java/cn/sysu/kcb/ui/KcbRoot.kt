@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -47,6 +48,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import cn.sysu.kcb.ui.course.CourseEditScreen
 import cn.sysu.kcb.ui.exam.ExamScreen
+import cn.sysu.kcb.ui.friends.FriendScreen
 import cn.sysu.kcb.ui.login.LoginScreen
 import cn.sysu.kcb.ui.me.AboutScreen
 import cn.sysu.kcb.ui.me.MeScreen
@@ -233,6 +235,12 @@ private fun HomeTabs(
                     label = { Text("考试", fontSize = 11.sp, lineHeight = 12.sp) },
                 )
                 NavigationBarItem(
+                    selected = route == "friends",
+                    onClick = { tabNav.navigate("friends") { popUpTo("timetable"); launchSingleTop = true } },
+                    icon = { Icon(Icons.Outlined.Groups, contentDescription = "好友", modifier = Modifier.size(20.dp)) },
+                    label = { Text("好友", fontSize = 11.sp, lineHeight = 12.sp) },
+                )
+                NavigationBarItem(
                     selected = route == "me",
                     onClick = { tabNav.navigate("me") { popUpTo("timetable"); launchSingleTop = true } },
                     icon = { Icon(Icons.Outlined.Person, contentDescription = "我的", modifier = Modifier.size(20.dp)) },
@@ -254,6 +262,7 @@ private fun HomeTabs(
                 TimetableScreen(viewModel = viewModel, onEdit = onEdit, onAdd = onAdd, onLogin = onLogin)
             }
             composable("exam") { ExamScreen(viewModel) }
+            composable("friends") { FriendScreen(viewModel) }
             composable("me") { MeScreen(viewModel = viewModel, onLogin = onLogin, onAbout = onAbout) }
         }
     }

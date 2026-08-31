@@ -459,7 +459,7 @@ fun TimetableScreen(
 }
 
 @Composable
-private fun WeekTitleText(
+internal fun WeekTitleText(
     pagerState: PagerState,
     weeks: List<WeekEntity>,
     selectedWeek: Int,
@@ -476,7 +476,7 @@ private fun WeekTitleText(
     )
 }
 
-private fun displayedWeekNo(
+internal fun displayedWeekNo(
     pagerState: PagerState,
     selectedWeek: Int,
     syncingPager: Boolean,
@@ -497,7 +497,7 @@ private fun displayedWeekNo(
     }
 }
 
-private fun weekRangeLabel(
+internal fun weekRangeLabel(
     weekNo: Int,
     weeks: List<WeekEntity>,
     semesterStartMillis: Long,
@@ -526,7 +526,7 @@ private fun pickSemester(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun WeekPickerDialog(
+internal fun WeekPickerDialog(
     weeks: List<WeekEntity>,
     selectedWeek: Int,
     currentWeek: Int?,
@@ -578,7 +578,7 @@ private fun WeekPickerDialog(
     )
 }
 
-private fun resolveWeekStart(
+internal fun resolveWeekStart(
     selectedWeek: Int,
     week: WeekEntity?,
     weeks: List<WeekEntity>,
@@ -645,7 +645,7 @@ private val compactTime = TextStyle(
 )
 
 @Composable
-private fun TimetableGrid(
+internal fun TimetableGrid(
     periods: List<PeriodEntity>,
     courses: List<CourseEntity>,
     weekStart: LocalDate?,

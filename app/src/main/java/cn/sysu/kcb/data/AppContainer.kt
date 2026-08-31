@@ -14,6 +14,7 @@ import cn.sysu.kcb.data.remote.WebDavClient
 import cn.sysu.kcb.data.remote.WebDavSyncService
 import cn.sysu.kcb.data.remote.createJwxtApi
 import cn.sysu.kcb.data.remote.createJwxtJson
+import cn.sysu.kcb.data.repo.FriendRepository
 import cn.sysu.kcb.data.repo.ShareService
 import cn.sysu.kcb.data.repo.TimetableRepository
 import cn.sysu.kcb.notify.ClassAlarmScheduler
@@ -31,6 +32,7 @@ class AppContainer(context: Context) {
     val updates = GithubUpdateService(json)
     val share = ShareService(context, timetable, json)
     val webdavSecrets = WebDavSecrets(context)
-    val webdav = WebDavSyncService(WebDavClient(), share, settings, webdavSecrets)
+    val friends = FriendRepository(db, share)
+    val webdav = WebDavSyncService(WebDavClient(), share, settings, webdavSecrets, friends)
     val alarms = ClassAlarmScheduler(context)
 }

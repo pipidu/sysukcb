@@ -19,6 +19,7 @@ data class SharePack(
     val format: String = "sysukcb",
     val version: Int = 1,
     val exportedAt: String = Instant.now().toString(),
+    val nickname: String = "",
     val semesters: List<SemesterEntity> = emptyList(),
     val weeks: List<WeekEntity> = emptyList(),
     val periods: List<PeriodEntity> = emptyList(),
@@ -47,9 +48,10 @@ class ShareService(
         return file
     }
 
-    suspend fun exportAllJson(): String {
+    suspend fun exportAllJson(nickname: String = ""): String {
         return encode(
             SharePack(
+                nickname = nickname,
                 semesters = repo.listSemesters(),
                 weeks = repo.listAllWeeks().map { it.copy(id = 0) },
                 periods = repo.listAllPeriods().map { it.copy(id = 0) },
@@ -58,6 +60,14 @@ class ShareService(
                 examWeeks = repo.listAllExamWeeks().map { it.copy(id = 0) },
             ),
         )
+    }
+
+    fun decodePack(text: String): SharePack {
+        val pack = json.decodeFromString(SharePack.serializer(), text)
+        if (pack.format != "sysukcb") {
+            error("不是课程表D导出文件")
+        }
+        return pack
     }
 
     private fun encode(pack: SharePack) = json.encodeToString(SharePack.serializer(), pack)

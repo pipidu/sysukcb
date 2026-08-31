@@ -24,8 +24,11 @@ data class UserSettings(
     val schoolId: String = SettingsRepository.DEFAULT_SCHOOL_ID,
     val webdavUrl: String = "",
     val webdavUser: String = "",
+    val webdavNickname: String = "",
+    val webdavAutoSync: Boolean = true,
     val webdavLastSyncAt: Long = 0L,
     val webdavLastMessage: String = "",
+    val selectedFriendId: String = "",
 )
 
 class SettingsRepository(private val context: Context) {
@@ -61,11 +64,21 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.schoolId] = schoolId }
     }
 
-    suspend fun setWebDav(url: String, user: String) {
+    suspend fun setWebDav(url: String, user: String, nickname: String, autoSync: Boolean) {
         context.dataStore.edit {
             it[Keys.webdavUrl] = url.trim()
             it[Keys.webdavUser] = user.trim()
+            it[Keys.webdavNickname] = nickname.trim()
+            it[Keys.webdavAutoSync] = autoSync
         }
+    }
+
+    suspend fun setWebDavAutoSync(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.webdavAutoSync] = enabled }
+    }
+
+    suspend fun setSelectedFriendId(id: String) {
+        context.dataStore.edit { it[Keys.selectedFriendId] = id }
     }
 
     suspend fun setWebDavLastSync(at: Long, message: String) {
@@ -85,8 +98,11 @@ class SettingsRepository(private val context: Context) {
         schoolId = this[Keys.schoolId] ?: SettingsRepository.DEFAULT_SCHOOL_ID,
         webdavUrl = this[Keys.webdavUrl].orEmpty(),
         webdavUser = this[Keys.webdavUser].orEmpty(),
+        webdavNickname = this[Keys.webdavNickname].orEmpty(),
+        webdavAutoSync = this[Keys.webdavAutoSync] ?: true,
         webdavLastSyncAt = this[Keys.webdavLastSyncAt] ?: 0L,
         webdavLastMessage = this[Keys.webdavLastMessage].orEmpty(),
+        selectedFriendId = this[Keys.selectedFriendId].orEmpty(),
     )
 
     private object Keys {
@@ -99,8 +115,11 @@ class SettingsRepository(private val context: Context) {
         val schoolId = stringPreferencesKey("school_id")
         val webdavUrl = stringPreferencesKey("webdav_url")
         val webdavUser = stringPreferencesKey("webdav_user")
+        val webdavNickname = stringPreferencesKey("webdav_nickname")
+        val webdavAutoSync = booleanPreferencesKey("webdav_auto_sync")
         val webdavLastSyncAt = longPreferencesKey("webdav_last_sync_at")
         val webdavLastMessage = stringPreferencesKey("webdav_last_message")
+        val selectedFriendId = stringPreferencesKey("selected_friend_id")
     }
 
     companion object {

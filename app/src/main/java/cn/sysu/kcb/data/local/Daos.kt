@@ -172,3 +172,21 @@ interface WeekdayDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(items: List<WeekdayEntity>)
 }
+
+@Dao
+interface FriendPackDao {
+    @Query("SELECT * FROM friend_packs ORDER BY nickname COLLATE NOCASE")
+    fun observeAll(): Flow<List<FriendPackEntity>>
+
+    @Query("SELECT * FROM friend_packs ORDER BY nickname COLLATE NOCASE")
+    suspend fun list(): List<FriendPackEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(item: FriendPackEntity)
+
+    @Query("DELETE FROM friend_packs WHERE id NOT IN (:ids)")
+    suspend fun deleteNotIn(ids: List<String>)
+
+    @Query("DELETE FROM friend_packs")
+    suspend fun clear()
+}

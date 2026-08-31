@@ -22,8 +22,8 @@ android {
         applicationId = "cn.sysu.kcb"
         minSdk = 26
         targetSdk = 35
-        versionCode = 26
-        versionName = "1.0.25"
+        versionCode = 27
+        versionName = "1.0.26"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -101,5 +101,6 @@ dependencies {
     implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.androidx.glance.material3)
+    implementation(libs.androidx.work.runtime.ktx)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

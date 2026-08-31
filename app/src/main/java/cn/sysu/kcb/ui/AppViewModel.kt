@@ -16,6 +16,7 @@ import cn.sysu.kcb.data.remote.SessionCheckResult
 import cn.sysu.kcb.data.remote.SessionExpiredException
 import cn.sysu.kcb.data.remote.SessionStatus
 import cn.sysu.kcb.data.remote.isNewerThan
+import cn.sysu.kcb.data.remote.WebDavSyncWorker
 import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.widget.WidgetData
 import kotlinx.coroutines.CancellationException
@@ -252,13 +253,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }.onFailure { message.value = it.message ?: "导出失败" }
     }
 
-    fun saveWebDav(url: String, user: String, password: String) = viewModelScope.launch {
-        persistWebDav(url, user, password)
+    fun saveWebDav(
+        url: String,
+        user: String,
+        password: String,
+        nickname: String,
+        autoSync: Boolean,
+    ) = viewModelScope.launch {
+        persistWebDav(url, user, password, nickname, autoSync)
         message.value = "已保存 WebDAV 设置"
     }
 
-    fun uploadWebDav(url: String, user: String, password: String) = viewModelScope.launch {
-        persistWebDav(url, user, password)
+    fun uploadWebDav(
+        url: String,
+        user: String,
+        password: String,
+        nickname: String,
+        autoSync: Boolean,
+    ) = viewModelScope.launch {
+        persistWebDav(url, user, password, nickname, autoSync)
         webdavBusy.value = true
         runCatching { container.webdav.upload() }
             .onSuccess { message.value = "已上传课表到 WebDAV" }
@@ -266,8 +279,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         webdavBusy.value = false
     }
 
-    fun downloadWebDav(url: String, user: String, password: String) = viewModelScope.launch {
-        persistWebDav(url, user, password)
+    fun downloadWebDav(
+        url: String,
+        user: String,
+        password: String,
+        nickname: String,
+        autoSync: Boolean,
+    ) = viewModelScope.launch {
+        persistWebDav(url, user, password, nickname, autoSync)
         webdavBusy.value = true
         importing.value = true
         runCatching { container.webdav.download() }
@@ -283,10 +302,45 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         webdavBusy.value = false
     }
 
-    private suspend fun persistWebDav(url: String, user: String, password: String) {
-        container.settings.setWebDav(url, user)
+    fun syncFriendsWebDav(
+        url: String,
+        user: String,
+        password: String,
+        nickname: String,
+        autoSync: Boolean,
+    ) = viewModelScope.launch {
+        persistWebDav(url, user, password, nickname, autoSync)
+        webdavBusy.value = true
+        runCatching { container.webdav.syncFriends() }
+            .onSuccess { message.value = it }
+            .onFailure { message.value = it.message ?: "同步好友失败" }
+        webdavBusy.value = false
+    }
+
+    fun refreshFriends(silent: Boolean = false) = viewModelScope.launch {
+        if (webdavBusy.value) return@launch
+        webdavBusy.value = true
+        runCatching { container.webdav.syncFriends() }
+            .onSuccess { if (!silent) message.value = it }
+            .onFailure { if (!silent) message.value = it.message ?: "同步好友失败" }
+        webdavBusy.value = false
+    }
+
+    fun setSelectedFriend(id: String) = viewModelScope.launch {
+        container.settings.setSelectedFriendId(id)
+    }
+
+    private suspend fun persistWebDav(
+        url: String,
+        user: String,
+        password: String,
+        nickname: String,
+        autoSync: Boolean,
+    ) {
+        container.settings.setWebDav(url, user, nickname, autoSync)
         if (password.isNotBlank()) container.webdavSecrets.save(password)
         webdavHasPassword.value = container.webdavSecrets.hasPassword()
+        WebDavSyncWorker.schedule(getApplication(), autoSync)
     }
 
     fun prepareFreshLogin() {
@@ -304,6 +358,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearLocal() = viewModelScope.launch {
         container.timetable.clearAll()
+        container.friends.clear()
         refreshAlarms()
         WidgetData.refreshAll(getApplication())
         message.value = "本地数据已清空"

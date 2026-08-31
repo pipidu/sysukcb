@@ -91,9 +91,13 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
     var davUrl by remember { mutableStateOf("") }
     var davUser by remember { mutableStateOf("") }
     var davPassword by remember { mutableStateOf("") }
-    LaunchedEffect(settings.webdavUrl, settings.webdavUser) {
+    var davNick by remember { mutableStateOf("") }
+    var davAuto by remember { mutableStateOf(true) }
+    LaunchedEffect(settings.webdavUrl, settings.webdavUser, settings.webdavNickname, settings.webdavAutoSync) {
         davUrl = settings.webdavUrl
         davUser = settings.webdavUser
+        davNick = settings.webdavNickname
+        davAuto = settings.webdavAutoSync
     }
     LaunchedEffect(Unit) {
         viewModel.checkSession()
@@ -214,7 +218,7 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("WebDAV 同步", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "把全部学期的课表和考试上传到坚果云、Nextcloud 或群晖，换机后再下载回来。密码只存在本机。",
+                        "把全部学期的课表和考试上传到坚果云、Nextcloud 或群晖。同一账号下用不同昵称上传，即可在「好友」页互看课表和考试。密码只存在本机。",
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     )
                     OutlinedTextField(
@@ -242,6 +246,27 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    OutlinedTextField(
+                        value = davNick,
+                        onValueChange = { davNick = it },
+                        label = { Text("昵称") },
+                        placeholder = { Text("上传到同一网盘时用来区分课表") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    ListItem(
+                        headlineContent = { Text("自动同步") },
+                        supportingContent = { Text("连网后约每小时上传自己的课表，并拉取其他昵称") },
+                        trailingContent = {
+                            Switch(
+                                checked = davAuto,
+                                onCheckedChange = { checked ->
+                                    davAuto = checked
+                                    viewModel.saveWebDav(davUrl, davUser, davPassword, davNick, checked)
+                                },
+                            )
+                        },
+                    )
                     Text(
                         webdavSyncHint(settings.webdavLastSyncAt, settings.webdavLastMessage),
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
@@ -249,17 +274,21 @@ fun MeScreen(viewModel: AppViewModel, onLogin: () -> Unit, onAbout: () -> Unit) 
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
-                            onClick = { viewModel.saveWebDav(davUrl, davUser, davPassword) },
+                            onClick = { viewModel.saveWebDav(davUrl, davUser, davPassword, davNick, davAuto) },
                             enabled = !webdavBusy,
                         ) { Text("保存") }
                         Button(
-                            onClick = { viewModel.uploadWebDav(davUrl, davUser, davPassword) },
+                            onClick = { viewModel.uploadWebDav(davUrl, davUser, davPassword, davNick, davAuto) },
                             enabled = !webdavBusy && !importing,
                         ) { Text(if (webdavBusy) "同步中…" else "上传") }
                         Button(
-                            onClick = { viewModel.downloadWebDav(davUrl, davUser, davPassword) },
+                            onClick = { viewModel.downloadWebDav(davUrl, davUser, davPassword, davNick, davAuto) },
                             enabled = !webdavBusy && !importing,
                         ) { Text("下载") }
+                        Button(
+                            onClick = { viewModel.syncFriendsWebDav(davUrl, davUser, davPassword, davNick, davAuto) },
+                            enabled = !webdavBusy && !importing,
+                        ) { Text("同步好友") }
                     }
                 }
             }
