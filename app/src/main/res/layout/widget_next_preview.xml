@@ -5,6 +5,15 @@
     android:orientation="vertical"
     android:padding="6dp"
     android:background="@drawable/widget_background">
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:text="8/31 周一 · 第1周"
+        android:textColor="#8C1A1A"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:maxLines="1" />
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"

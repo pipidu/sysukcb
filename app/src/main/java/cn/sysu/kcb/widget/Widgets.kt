@@ -111,6 +111,7 @@ data class WidgetState(
     val theme: Long,
     val title: String,
     val subtitle: String,
+    val nextTitle: String,
     val today: List<CourseEntity>,
     val weekCourses: List<CourseEntity>,
     val periods: List<PeriodEntity>,
@@ -138,10 +139,16 @@ object WidgetData {
                 .filter { it.dayOfWeek == today.dayOfWeek.value && WeekMask.has(it.weeksMask, weekNo) }
                 .sortedBy { it.startPeriod }
         }
+        val weekday = weekdayName(today.dayOfWeek.value)
         return WidgetState(
             theme = settings.themeColor,
             title = "今日课程",
-            subtitle = if (weekNo != null) "第${weekNo}周 · ${weekdayName(today.dayOfWeek.value)}" else "学期未开始",
+            subtitle = if (weekNo != null) "第${weekNo}周 · $weekday" else "学期未开始",
+            nextTitle = if (weekNo != null) {
+                "${today.monthValue}/${today.dayOfMonth} $weekday · 第${weekNo}周"
+            } else {
+                "${today.monthValue}/${today.dayOfMonth} $weekday · 学期未开始"
+            },
             today = todayCourses,
             weekCourses = if (weekNo == null) emptyList() else courses.filter { WeekMask.has(it.weeksMask, weekNo) },
             periods = periods,
@@ -385,6 +392,7 @@ private fun WeekContent(state: WidgetState) {
 
 @Composable
 private fun NextContent(state: WidgetState) {
+    val theme = Color(state.theme)
     val open = openAppAction()
     Column(
         modifier = GlanceModifier
@@ -395,6 +403,16 @@ private fun NextContent(state: WidgetState) {
             .clickable(open)
             .padding(6.dp),
     ) {
+        Text(
+            state.nextTitle,
+            style = TextStyle(
+                color = ColorProvider(theme),
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+            ),
+            maxLines = 1,
+        )
+        Spacer(GlanceModifier.height(4.dp))
         if (state.upcoming.isEmpty()) {
             Box(
                 modifier = GlanceModifier.fillMaxWidth().defaultWeight().cornerRadius(10.dp).background(ColorProvider(Color(0xFFF7F4F4))),
