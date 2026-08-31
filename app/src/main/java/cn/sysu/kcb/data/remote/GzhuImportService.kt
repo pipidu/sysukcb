@@ -335,7 +335,7 @@ class GzhuImportService(
             val name = o.str("kcmc").trim()
             if (name.isBlank()) continue
             val day = o.str("xqj").toIntOrNull() ?: continue
-            val (startPeriod, endPeriod) = parsePeriods(o.str("jcor").ifBlank { o.str("jcs") }.ifBlank { o.str("jc") })
+            val (startPeriod, endPeriod) = parsePeriods(o.firstStr("jcs", "jc", "jcor"))
             if (startPeriod <= 0) continue
             val zcd = o.str("zcd").ifBlank { o.str("qsjsz") }
             val startWeek = Regex("""\d+""").find(zcd)?.value?.toIntOrNull() ?: 1
@@ -355,7 +355,7 @@ class GzhuImportService(
                 endPeriod = endPeriod,
                 startWeek = startWeek,
                 weeksMask = weeksMask,
-                timeDetail = listOf(zcd, o.str("jc")).filter { it.isNotBlank() }.joinToString(" "),
+                timeDetail = listOf(zcd, o.firstStr("jcs", "jc")).filter { it.isNotBlank() }.joinToString(" "),
                 color = CourseColors.of(name, themeColor),
                 extraJson = o.toString(),
             )
@@ -471,9 +471,13 @@ class GzhuImportService(
     }
 
     private fun parsePeriods(raw: String): Pair<Int, Int> {
-        val digits = Regex("""\d+""").findAll(raw).mapNotNull { it.value.toIntOrNull() }.toList()
-        if (digits.isEmpty()) return 0 to 0
-        return digits.first() to digits.last()
+        val periodPart = raw.substringBefore('{').substringBefore("第").replace("节", "").trim()
+        val nums = Regex("""\d+""").findAll(periodPart)
+            .mapNotNull { it.value.toIntOrNull() }
+            .filter { it in 1..20 }
+            .toList()
+        if (nums.isEmpty()) return 0 to 0
+        return nums.min() to nums.max()
     }
 
     private fun splitTimeRange(raw: String): Pair<String, String> {

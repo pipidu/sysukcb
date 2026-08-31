@@ -94,8 +94,8 @@ interface CourseDao {
     @Delete
     suspend fun delete(item: CourseEntity)
 
-    @Query("DELETE FROM courses WHERE acadYearSemester = :sem AND source = 'imported' AND locallyEdited = 0")
-    suspend fun deleteUneditedImported(sem: String)
+    @Query("DELETE FROM courses WHERE acadYearSemester = :sem AND source = 'imported'")
+    suspend fun deleteImported(sem: String)
 
     @Query("DELETE FROM courses WHERE acadYearSemester = :sem")
     suspend fun deleteSemester(sem: String)

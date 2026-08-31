@@ -80,34 +80,22 @@ class TimetableRepository(private val db: AppDatabase) {
 
     suspend fun replaceImportedCourses(semester: String, imported: List<CourseEntity>) {
         db.withTransaction {
-            val existing = db.courseDao().list(semester)
-            if (imported.isEmpty()) {
-                // Keep previously imported courses if 教务 returned an empty table.
-                return@withTransaction
-            }
-            val editedIds = existing
-                .filter { it.locallyEdited && !it.classesId.isNullOrBlank() }
-                .map { it.classesId }
-                .toSet()
-            db.courseDao().deleteUneditedImported(semester)
-            imported.filter { it.classesId == null || it.classesId !in editedIds }
-                .forEach { db.courseDao().insert(it.copy(id = 0)) }
+            db.courseDao().deleteImported(semester)
+            imported.forEach { db.courseDao().insert(it.copy(id = 0)) }
         }
     }
 
     suspend fun replaceExams(semester: String, items: List<ExamEntity>) {
-        if (items.isEmpty()) return
         db.withTransaction {
             db.examDao().deleteSemester(semester)
-            db.examDao().upsertAll(items)
+            if (items.isNotEmpty()) db.examDao().upsertAll(items)
         }
     }
 
     suspend fun replaceExamWeeks(semester: String, items: List<ExamWeekEntity>) {
-        if (items.isEmpty()) return
         db.withTransaction {
             db.examWeekDao().deleteSemester(semester)
-            db.examWeekDao().upsertAll(items)
+            if (items.isNotEmpty()) db.examWeekDao().upsertAll(items)
         }
     }
 
