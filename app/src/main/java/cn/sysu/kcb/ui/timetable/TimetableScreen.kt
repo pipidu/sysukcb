@@ -40,7 +40,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.automirrored.outlined.StickyNote2
+import androidx.compose.material.icons.outlined.CalendarViewMonth
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ViewWeek
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -297,6 +300,12 @@ fun TimetableScreen(
                     DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                             DropdownMenuItem(
                                 text = { Text(if (termOverview) "查看周课表" else "学期总课表") },
+                                leadingIcon = {
+                                    Icon(
+                                        if (termOverview) Icons.Outlined.ViewWeek else Icons.Outlined.CalendarViewMonth,
+                                        contentDescription = null,
+                                    )
+                                },
                                 onClick = {
                                     termOverview = !termOverview
                                     moreMenu = false
@@ -313,6 +322,7 @@ fun TimetableScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text("添加便签") },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Outlined.StickyNote2, contentDescription = null) },
                                 onClick = {
                                     moreMenu = false
                                     viewModel.addStickyNote(semester, snapshot.notes.size)
@@ -442,7 +452,8 @@ fun TimetableScreen(
                     bottomInset = sheetBottomInset,
                 )
             }
-            editingNote?.let { note ->
+            editingNote?.let { draft ->
+                val note = snapshot.notes.firstOrNull { it.id == draft.id } ?: draft
                 StickyNoteEditorDialog(
                     note = note,
                     themeColor = settings.themeColor,

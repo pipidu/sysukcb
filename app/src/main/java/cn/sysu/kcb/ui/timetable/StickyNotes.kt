@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -33,6 +34,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +42,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -105,106 +109,135 @@ internal fun StickyNoteLayer(
     if (notes.isEmpty()) return
     val density = LocalDensity.current
     val touchSlop = LocalViewConfiguration.current.touchSlop
-    val gridWpx = with(density) { gridW.toPx() }
-    val gridHpx = with(density) { gridH.toPx() }
-    var live by remember { mutableStateOf<StickyNoteEntity?>(null) }
-    val shown = notes.sortedBy { it.z }.map { note ->
-        if (live?.id == note.id) live!! else note
-    }
-    shown.forEach { note ->
+    val gridWpx = with(density) { gridW.toPx() }.coerceAtLeast(1f)
+    val gridHpx = with(density) { gridH.toPx() }.coerceAtLeast(1f)
+    val notesLatest = rememberUpdatedState(notes)
+    val onChangeLatest = rememberUpdatedState(onChange)
+    val onEditLatest = rememberUpdatedState(onEdit)
+    var dragId by remember { mutableStateOf<Long?>(null) }
+    var dragPx by remember { mutableStateOf(Offset.Zero) }
+    var resizeId by remember { mutableStateOf<Long?>(null) }
+    var resizePx by remember { mutableStateOf(Offset.Zero) }
+    fun latest(id: Long) = notesLatest.value.firstOrNull { it.id == id }
+
+    notes.sortedBy { it.z }.forEach { note ->
+        val dragging = dragId == note.id
+        val resizing = resizeId == note.id
         val w = gridW * note.wFrac.coerceIn(0.12f, 0.7f)
         val h = gridH * note.hFrac.coerceIn(0.08f, 0.6f)
         val x = gridW * note.xFrac.coerceIn(0f, 0.88f)
         val y = gridH * note.yFrac.coerceIn(0f, 0.9f)
+        val baseWpx = with(density) { w.toPx() }.coerceAtLeast(1f)
+        val baseHpx = with(density) { h.toPx() }.coerceAtLeast(1f)
         val fill = Color(note.color).copy(alpha = note.alpha.coerceIn(0.35f, 1f))
         val ink = if (fill.copy(alpha = 1f).luminance() > 0.55f) Color(0xFF3E2723) else Color.White
         Box(
             Modifier
                 .offset(x, y)
                 .size(w, h)
-                .shadow(3.dp, RoundedCornerShape(6.dp))
-                .clip(RoundedCornerShape(6.dp))
-                .background(fill)
-                .border(0.6.dp, Color.Black.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
                 .then(
                     if (editable) {
                         Modifier.pointerInput(note.id, gridWpx, gridHpx) {
                             awaitEachGesture {
                                 val down = awaitFirstDown(requireUnconsumed = false)
+                                var moved = Offset.Zero
                                 var dragged = false
-                                var current = live.takeIf { it?.id == note.id } ?: note
                                 drag(down.id) { change ->
-                                    val delta = change.positionChange()
-                                    if (!dragged &&
-                                        (change.position - down.position).getDistance() > touchSlop
-                                    ) {
-                                        dragged = true
-                                    }
+                                    moved += change.positionChange()
+                                    if (!dragged && moved.getDistance() > touchSlop) dragged = true
                                     if (dragged) {
                                         change.consume()
-                                        current = current.copy(
-                                            xFrac = (current.xFrac + delta.x / gridWpx)
-                                                .coerceIn(0f, 1f - current.wFrac),
-                                            yFrac = (current.yFrac + delta.y / gridHpx)
-                                                .coerceIn(0f, 1f - current.hFrac),
-                                            z = System.currentTimeMillis(),
-                                        )
-                                        live = current
+                                        dragId = note.id
+                                        dragPx = moved
                                     }
                                 }
                                 if (dragged) {
-                                    onChange(current)
-                                    live = null
+                                    latest(note.id)?.let { current ->
+                                        onChangeLatest.value(
+                                            current.copy(
+                                                xFrac = (current.xFrac + moved.x / gridWpx)
+                                                    .coerceIn(0f, 1f - current.wFrac),
+                                                yFrac = (current.yFrac + moved.y / gridHpx)
+                                                    .coerceIn(0f, 1f - current.hFrac),
+                                                z = System.currentTimeMillis(),
+                                            ),
+                                        )
+                                    }
+                                    dragId = null
+                                    dragPx = Offset.Zero
                                 } else {
-                                    onEdit(note)
+                                    latest(note.id)?.let { onEditLatest.value(it) }
                                 }
                             }
                         }
                     } else {
                         Modifier.clickable { onEdit(note) }
                     },
-                )
-                .padding(6.dp),
+                ),
         ) {
-            Text(
-                note.content.ifBlank { "便签" },
-                color = ink.copy(alpha = if (note.content.isBlank()) 0.55f else 1f),
-                style = noteBody,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (editable) {
-                Box(
-                    Modifier
-                        .align(Alignment.BottomEnd)
-                        .size(14.dp)
-                        .pointerInput(note.id, gridWpx, gridHpx) {
-                            awaitEachGesture {
-                                val down = awaitFirstDown(requireUnconsumed = false)
-                                var current = live.takeIf { it?.id == note.id } ?: note
-                                drag(down.id) { change ->
-                                    change.consume()
-                                    val delta = change.positionChange()
-                                    current = current.copy(
-                                        wFrac = (current.wFrac + delta.x / gridWpx)
-                                            .coerceIn(0.12f, 0.7f),
-                                        hFrac = (current.hFrac + delta.y / gridHpx)
-                                            .coerceIn(0.08f, 0.6f),
-                                        z = System.currentTimeMillis(),
-                                    )
-                                    live = current
-                                }
-                                onChange(current)
-                                live = null
-                            }
-                        },
-                ) {
+            Box(
+                Modifier
+                    .graphicsLayer {
+                        translationX = if (dragging) dragPx.x else 0f
+                        translationY = if (dragging) dragPx.y else 0f
+                        transformOrigin = TransformOrigin(0f, 0f)
+                        if (resizing) {
+                            scaleX = ((baseWpx + resizePx.x) / baseWpx).coerceIn(0.35f, 3.5f)
+                            scaleY = ((baseHpx + resizePx.y) / baseHpx).coerceIn(0.35f, 3.5f)
+                        }
+                    }
+                    .fillMaxSize()
+                    .shadow(3.dp, RoundedCornerShape(6.dp))
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(fill)
+                    .border(0.6.dp, Color.Black.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
+                    .padding(6.dp),
+            ) {
+                Text(
+                    note.content.ifBlank { "便签" },
+                    color = ink.copy(alpha = if (note.content.isBlank()) 0.55f else 1f),
+                    style = noteBody,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (editable) {
                     Box(
                         Modifier
                             .align(Alignment.BottomEnd)
-                            .size(8.dp)
-                            .clip(RoundedCornerShape(1.dp))
-                            .background(ink.copy(alpha = 0.35f)),
-                    )
+                            .size(14.dp)
+                            .pointerInput(note.id, gridWpx, gridHpx) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    var moved = Offset.Zero
+                                    resizeId = note.id
+                                    drag(down.id) { change ->
+                                        change.consume()
+                                        moved += change.positionChange()
+                                        resizePx = moved
+                                    }
+                                    latest(note.id)?.let { current ->
+                                        onChangeLatest.value(
+                                            current.copy(
+                                                wFrac = (current.wFrac + moved.x / gridWpx)
+                                                    .coerceIn(0.12f, 0.7f),
+                                                hFrac = (current.hFrac + moved.y / gridHpx)
+                                                    .coerceIn(0.08f, 0.6f),
+                                                z = System.currentTimeMillis(),
+                                            ),
+                                        )
+                                    }
+                                    resizeId = null
+                                    resizePx = Offset.Zero
+                                }
+                            },
+                    ) {
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(8.dp)
+                                .clip(RoundedCornerShape(1.dp))
+                                .background(ink.copy(alpha = 0.35f)),
+                        )
+                    }
                 }
             }
         }
@@ -220,11 +253,13 @@ internal fun StickyNoteEditorDialog(
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var content by remember(note.id) { mutableStateOf(note.content) }
-    var color by remember(note.id) { mutableLongStateOf(note.color) }
-    var alpha by remember(note.id) { mutableFloatStateOf(note.alpha) }
-    var wFrac by remember(note.id) { mutableFloatStateOf(note.wFrac) }
-    var hFrac by remember(note.id) { mutableFloatStateOf(note.hFrac) }
+    var content by remember(note.id, note.content, note.color, note.alpha, note.wFrac, note.hFrac) {
+        mutableStateOf(note.content)
+    }
+    var color by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac) { mutableLongStateOf(note.color) }
+    var alpha by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac) { mutableFloatStateOf(note.alpha) }
+    var wFrac by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac) { mutableFloatStateOf(note.wFrac) }
+    var hFrac by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac) { mutableFloatStateOf(note.hFrac) }
     var confirmDelete by remember { mutableStateOf(false) }
     val palette = remember(themeColor) { StickyNotePaper + CourseColors.paletteFor(themeColor) }
     AlertDialog(
