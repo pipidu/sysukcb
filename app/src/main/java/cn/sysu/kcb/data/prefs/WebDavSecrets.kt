@@ -26,7 +26,7 @@ class WebDavSecrets(context: Context) {
     fun hasPassword(): Boolean = password().isNotBlank()
 
     fun save(password: String) {
-        prefs.edit().putString(KEY, password).apply()
+        prefs.edit().putString(KEY, password.trim().replace(Regex("\\s+"), "")).commit()
     }
 
     fun clear() {

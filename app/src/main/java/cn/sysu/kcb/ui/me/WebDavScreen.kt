@@ -75,9 +75,9 @@ fun WebDavScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         ) {
             Text("坚果云（三步）", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
-                "1. 打开坚果云 → 账户信息 → 安全选项 → 第三方应用管理\n" +
-                    "2. 生成「应用密码」，不要用登录密码\n" +
-                    "3. 把邮箱、应用密码和下面的地址粘贴进来，再起一个昵称",
+                "1. 打开坚果云网页 → 账户信息 → 安全选项，关闭微信二次验证\n" +
+                    "2. 第三方应用管理 → 生成「应用密码」，不要用登录密码\n" +
+                    "3. 用户名填邮箱，密码粘贴应用密码，地址用下面的默认即可",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             )
             Text(

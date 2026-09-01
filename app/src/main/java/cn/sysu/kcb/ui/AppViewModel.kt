@@ -383,7 +383,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         nickname: String,
         autoSync: Boolean,
     ) {
-        container.settings.setWebDav(url, user, nickname, autoSync)
+        container.settings.setWebDav(url.trim(), user.trim(), nickname, autoSync)
         if (password.isNotBlank()) container.webdavSecrets.save(password)
         webdavHasPassword.value = container.webdavSecrets.hasPassword()
         WebDavSyncWorker.schedule(getApplication(), autoSync)

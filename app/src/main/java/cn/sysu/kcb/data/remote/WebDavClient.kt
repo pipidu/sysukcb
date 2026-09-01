@@ -28,7 +28,7 @@ class WebDavClient {
         val response = execute(
             Request.Builder()
                 .url(url)
-                .header("Authorization", Credentials.basic(user, password, java.nio.charset.StandardCharsets.UTF_8))
+                .header("Authorization", davAuth(user, password))
                 .header("User-Agent", UA)
                 .put(body.toRequestBody(JSON))
                 .build(),
@@ -43,7 +43,7 @@ class WebDavClient {
         val response = execute(
             Request.Builder()
                 .url(url)
-                .header("Authorization", Credentials.basic(user, password, java.nio.charset.StandardCharsets.UTF_8))
+                .header("Authorization", davAuth(user, password))
                 .header("User-Agent", UA)
                 .get()
                 .build(),
@@ -60,7 +60,7 @@ class WebDavClient {
         val response = execute(
             Request.Builder()
                 .url(dir)
-                .header("Authorization", Credentials.basic(user, password, java.nio.charset.StandardCharsets.UTF_8))
+                .header("Authorization", davAuth(user, password))
                 .header("User-Agent", UA)
                 .header("Depth", "1")
                 .method("PROPFIND", PROPFIND_BODY.toRequestBody(XML))
@@ -100,19 +100,19 @@ class WebDavClient {
         var path = ""
         for (i in 0 until segments.lastIndex) {
             path += "/" + segments[i]
+            if (path.equals("/dav", ignoreCase = true)) continue
             val dir = fileUrl.newBuilder().encodedPath(path).query(null).fragment(null).build()
             val response = execute(
                 Request.Builder()
                     .url(dir)
-                    .header("Authorization", Credentials.basic(user, password, java.nio.charset.StandardCharsets.UTF_8))
+                    .header("Authorization", davAuth(user, password))
                     .header("User-Agent", UA)
                     .method("MKCOL", ByteArray(0).toRequestBody(null))
                     .build(),
             )
-            if (response.code !in listOf(200, 201, 204, 301, 302, 405, 409)) {
-                if (response.code in listOf(401, 403)) {
-                    throw ImportFailedException(errorMessage("创建目录", response.code, response.body))
-                }
+            // 坚果云对已有根目录 /dav 会回 403，不是密码错。目录已存在时 405/409 也正常。
+            if (response.code == 401) {
+                throw ImportFailedException(errorMessage("创建目录", response.code, response.body))
             }
         }
     }
@@ -125,14 +125,22 @@ class WebDavClient {
     }
 
     private fun errorMessage(action: String, code: Int, body: String): String = when (code) {
-        401, 403 -> "WebDAV 用户名或密码错误"
-            404 -> "${action}失败：路径不存在"
-            507 -> "网盘空间不足"
-            else -> {
-                val hint = body.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim().take(80)
-                if (hint.isBlank()) "WebDAV ${action}失败（$code）" else "WebDAV ${action}失败（$code）：$hint"
-            }
+        401 -> "WebDAV 用户名或密码错误。坚果云请用邮箱和应用密码，不要用登录密码"
+        403 -> "网盘拒绝访问。坚果云请用应用密码，并在网页端「安全选项」关闭微信二次验证"
+        404 -> "${action}失败：路径不存在"
+        507 -> "网盘空间不足"
+        else -> {
+            val hint = body.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim().take(80)
+            if (hint.isBlank()) "WebDAV ${action}失败（$code）" else "WebDAV ${action}失败（$code）：$hint"
+        }
     }
+
+    private fun davAuth(user: String, password: String): String =
+        Credentials.basic(
+            user.trim(),
+            password.trim().replace(Regex("\\s+"), ""),
+            Charsets.UTF_8,
+        )
 
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
