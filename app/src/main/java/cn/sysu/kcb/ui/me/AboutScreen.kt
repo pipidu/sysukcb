@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,6 +28,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -53,6 +56,7 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val context = LocalContext.current
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val apkDownload by viewModel.apkDownload.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
     var showUpdate by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -136,6 +140,16 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 modifier = Modifier.clickable { viewModel.checkForUpdate(manual = true) },
             )
             ListItem(
+                headlineContent = { Text("镜像下载") },
+                supportingContent = { Text("经 GitHub Releases 镜像拉取安装包，国内网络更稳") },
+                trailingContent = {
+                    Switch(
+                        checked = settings.updateUseMirror,
+                        onCheckedChange = { viewModel.setUpdateUseMirror(it) },
+                    )
+                },
+            )
+            ListItem(
                 headlineContent = { Text("GitHub") },
                 supportingContent = { Text("开源地址") },
                 trailingContent = {
@@ -160,6 +174,24 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             text = {
                 Column {
                     Text(update.notes.ifBlank { "下载安装包后按系统提示安装。" })
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text("使用镜像下载", fontWeight = FontWeight.Medium)
+                            Text(
+                                "国内访问 GitHub 较慢时可开",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                            )
+                        }
+                        Switch(
+                            checked = settings.updateUseMirror,
+                            onCheckedChange = { viewModel.setUpdateUseMirror(it) },
+                            enabled = !downloading,
+                        )
+                    }
                     when (val dl = apkDownload) {
                         is ApkDownloadState.Progress -> {
                             Spacer(Modifier.height(12.dp))

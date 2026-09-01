@@ -29,6 +29,7 @@ data class UserSettings(
     val webdavAutoSync: Boolean = true,
     val webdavLastSyncAt: Long = 0L,
     val webdavLastMessage: String = "",
+    val updateUseMirror: Boolean = false,
     val selectedFriendId: String = "",
 )
 
@@ -86,6 +87,10 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.webdavAutoSync] = enabled }
     }
 
+    suspend fun setUpdateUseMirror(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.updateUseMirror] = enabled }
+    }
+
     suspend fun setSelectedFriendId(id: String) {
         context.dataStore.edit { it[Keys.selectedFriendId] = id }
     }
@@ -112,6 +117,7 @@ class SettingsRepository(private val context: Context) {
         webdavAutoSync = this[Keys.webdavAutoSync] ?: true,
         webdavLastSyncAt = this[Keys.webdavLastSyncAt] ?: 0L,
         webdavLastMessage = this[Keys.webdavLastMessage].orEmpty(),
+        updateUseMirror = this[Keys.updateUseMirror] ?: false,
         selectedFriendId = this[Keys.selectedFriendId].orEmpty(),
     )
 
@@ -130,6 +136,7 @@ class SettingsRepository(private val context: Context) {
         val webdavAutoSync = booleanPreferencesKey("webdav_auto_sync")
         val webdavLastSyncAt = longPreferencesKey("webdav_last_sync_at")
         val webdavLastMessage = stringPreferencesKey("webdav_last_message")
+        val updateUseMirror = booleanPreferencesKey("update_use_mirror")
         val selectedFriendId = stringPreferencesKey("selected_friend_id")
     }
 

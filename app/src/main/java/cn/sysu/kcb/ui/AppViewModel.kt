@@ -15,6 +15,7 @@ import cn.sysu.kcb.data.remote.AppUpdate
 import cn.sysu.kcb.data.remote.SessionCheckResult
 import cn.sysu.kcb.data.remote.SessionExpiredException
 import cn.sysu.kcb.data.remote.SessionStatus
+import cn.sysu.kcb.data.remote.mirroredGithubUrl
 import cn.sysu.kcb.data.remote.isNewerThan
 import cn.sysu.kcb.data.remote.WebDavClient
 import cn.sysu.kcb.data.remote.WebDavSyncWorker
@@ -65,7 +66,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return@launch
         }
         updateState.value = UpdateCheckState.Checking
-        runCatching { container.updates.fetchLatest() }
+        val useMirror = container.settings.snapshot().updateUseMirror
+        runCatching { container.updates.fetchLatest(useMirror) }
             .onSuccess { latest ->
                 lastUpdateCheckAt = System.currentTimeMillis()
                 updateState.value = if (latest != null && latest.isNewerThan(BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME)) {
@@ -94,7 +96,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             apkDownload.value = ApkDownloadState.Progress(0L, 0L)
             val dest = File(getApplication<Application>().cacheDir, "updates/kcb-${update.versionName}.apk")
             runCatching {
-                container.updates.downloadApk(url, dest) { received, total ->
+                val downloadUrl = mirroredGithubUrl(url, container.settings.snapshot().updateUseMirror)
+                container.updates.downloadApk(downloadUrl, dest) { received, total ->
                     apkDownload.value = ApkDownloadState.Progress(received, total)
                 }
             }.onSuccess {
@@ -169,6 +172,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setReminderMinutes(minutes: Int) = viewModelScope.launch {
         container.settings.setReminderMinutes(minutes)
         refreshAlarms()
+    }
+
+    fun setUpdateUseMirror(enabled: Boolean) = viewModelScope.launch {
+        container.settings.setUpdateUseMirror(enabled)
     }
 
     fun setExamReminderEnabled(enabled: Boolean) = viewModelScope.launch {
