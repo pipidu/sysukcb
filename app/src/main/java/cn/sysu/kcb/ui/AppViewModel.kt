@@ -16,6 +16,7 @@ import cn.sysu.kcb.data.remote.SessionCheckResult
 import cn.sysu.kcb.data.remote.SessionExpiredException
 import cn.sysu.kcb.data.remote.SessionStatus
 import cn.sysu.kcb.data.remote.isNewerThan
+import cn.sysu.kcb.data.remote.WebDavClient
 import cn.sysu.kcb.data.remote.WebDavSyncWorker
 import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.widget.WidgetData
@@ -383,7 +384,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         nickname: String,
         autoSync: Boolean,
     ) {
-        container.settings.setWebDav(url.trim(), user.trim(), nickname, autoSync)
+        val raw = url.trim().ifBlank { WebDavClient.DEFAULT_NUTSTORE_FILE_URL }
+        val canonical = runCatching { WebDavClient.normalizeFileUrl(raw).toString() }.getOrDefault(raw)
+        container.settings.setWebDav(canonical, user.trim(), nickname, autoSync)
         if (password.isNotBlank()) container.webdavSecrets.save(password)
         webdavHasPassword.value = container.webdavSecrets.hasPassword()
         WebDavSyncWorker.schedule(getApplication(), autoSync)

@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.theme.KcbTopBar
+import cn.sysu.kcb.data.remote.WebDavClient
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -50,7 +51,7 @@ fun WebDavScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     var davNick by remember { mutableStateOf("") }
     var davAuto by remember { mutableStateOf(true) }
     LaunchedEffect(settings.webdavUrl, settings.webdavUser, settings.webdavNickname, settings.webdavAutoSync) {
-        davUrl = settings.webdavUrl
+        davUrl = settings.webdavUrl.ifBlank { WebDavClient.DEFAULT_NUTSTORE_FILE_URL }
         davUser = settings.webdavUser
         davNick = settings.webdavNickname
         davAuto = settings.webdavAutoSync
@@ -77,7 +78,7 @@ fun WebDavScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             Text(
                 "1. 打开坚果云网页 → 账户信息 → 安全选项，关闭微信二次验证\n" +
                     "2. 第三方应用管理 → 生成「应用密码」，不要用登录密码\n" +
-                    "3. 用户名填邮箱，密码粘贴应用密码，地址用下面的默认即可",
+                    "3. 用户名填邮箱，密码粘贴应用密码；地址可留空，会自动用子文件夹 /dav/sysukcb/",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             )
             Text(
@@ -89,7 +90,7 @@ fun WebDavScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 value = davUrl,
                 onValueChange = { davUrl = it },
                 label = { Text("地址") },
-                placeholder = { Text("https://dav.jianguoyun.com/dav/sysukcb.json") },
+                placeholder = { Text(WebDavClient.DEFAULT_NUTSTORE_FILE_URL) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )

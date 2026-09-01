@@ -17,23 +17,20 @@ class WebDavClient {
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(45, TimeUnit.SECONDS)
         .writeTimeout(45, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .followSslRedirects(true)
+        .followRedirects(false)
+        .followSslRedirects(false)
         .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
         .build()
 
     suspend fun upload(fileUrl: String, user: String, password: String, body: String) = withContext(Dispatchers.IO) {
         val url = normalizeFileUrl(fileUrl)
         ensureParents(url, user, password)
-        val response = execute(
-            Request.Builder()
-                .url(url)
-                .header("Authorization", davAuth(user, password))
-                .header("User-Agent", UA)
-                .put(body.toRequestBody(JSON))
-                .build(),
-        )
-        if (response.code !in 200..204 && response.code != 201) {
+        var response = putFile(url, user, password, body)
+        if (response.code == 404) {
+            ensureParents(url, user, password)
+            response = putFile(url, user, password, body)
+        }
+        if (response.code !in 200..204) {
             throw ImportFailedException(errorMessage("上传", response.code, response.body))
         }
     }
@@ -101,7 +98,7 @@ class WebDavClient {
         for (i in 0 until segments.lastIndex) {
             path += "/" + segments[i]
             if (path.equals("/dav", ignoreCase = true)) continue
-            val dir = fileUrl.newBuilder().encodedPath(path).query(null).fragment(null).build()
+            val dir = fileUrl.newBuilder().encodedPath("$path/").query(null).fragment(null).build()
             val response = execute(
                 Request.Builder()
                     .url(dir)
@@ -117,17 +114,36 @@ class WebDavClient {
         }
     }
 
+    private fun putFile(url: HttpUrl, user: String, password: String, body: String): DavResponse =
+        execute(
+            Request.Builder()
+                .url(url)
+                .header("Authorization", davAuth(user, password))
+                .header("User-Agent", UA)
+                .put(body.toRequestBody(JSON))
+                .build(),
+        )
+
     private fun execute(request: Request): DavResponse {
-        http.newCall(request).execute().use { response ->
-            val text = response.body?.string().orEmpty()
-            return DavResponse(response.code, text)
+        var current = request
+        repeat(5) {
+            val (code, location, text) = http.newCall(current).execute().use { response ->
+                Triple(response.code, response.header("Location"), response.body?.string().orEmpty())
+            }
+            if (code in listOf(301, 302, 307, 308) && !location.isNullOrBlank()) {
+                val next = current.url.resolve(location) ?: return DavResponse(code, text)
+                current = current.newBuilder().url(next).build()
+            } else {
+                return DavResponse(code, text)
+            }
         }
+        throw ImportFailedException("WebDAV 重定向过多")
     }
 
     private fun errorMessage(action: String, code: Int, body: String): String = when (code) {
         401 -> "WebDAV 用户名或密码错误。坚果云请用邮箱和应用密码，不要用登录密码"
         403 -> "网盘拒绝访问。坚果云请用应用密码，并在网页端「安全选项」关闭微信二次验证"
-        404 -> "${action}失败：路径不存在"
+        404 -> "${action}失败：路径不存在。坚果云不能把文件直接放在 /dav 根目录，请用 /dav/sysukcb/sysukcb.json"
         507 -> "网盘空间不足"
         else -> {
             val hint = body.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim().take(80)
@@ -148,6 +164,7 @@ class WebDavClient {
         private const val UA = "sysukcb/android"
         const val DEFAULT_FILE = "sysukcb.json"
         const val RESERVED_STEM = "sysukcb"
+        const val DEFAULT_NUTSTORE_FILE_URL = "https://dav.jianguoyun.com/dav/sysukcb/sysukcb.json"
         private val HREF_REGEX = Regex("(?i)<[^<>]*:?href[^<>]*>([^<]+)</[^<>]*:?href>")
         private const val PROPFIND_BODY =
             """<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:resourcetype/></d:prop></d:propfind>"""
@@ -157,12 +174,26 @@ class WebDavClient {
             if (value.isBlank()) throw ImportFailedException("请填写 WebDAV 地址")
             if (!value.contains("://")) value = "https://$value"
             if (value.endsWith("/")) value += DEFAULT_FILE
-            val url = runCatching { value.toHttpUrl() }.getOrElse {
+            var url = runCatching { value.toHttpUrl() }.getOrElse {
                 throw ImportFailedException("WebDAV 地址无效")
             }
             val last = url.pathSegments.lastOrNull().orEmpty()
             if (last.isBlank() || !last.contains('.')) {
-                return url.newBuilder().addPathSegment(DEFAULT_FILE).build()
+                url = url.newBuilder().addPathSegment(DEFAULT_FILE).build()
+            }
+            return nestNutstoreRootFile(url)
+        }
+
+        private fun nestNutstoreRootFile(url: HttpUrl): HttpUrl {
+            if (!url.host.contains("jianguoyun", ignoreCase = true)) return url
+            val segs = url.pathSegments.filter { it.isNotEmpty() }
+            if (segs.size == 2 && segs[0].equals("dav", ignoreCase = true) && segs[1].contains('.')) {
+                return url.newBuilder()
+                    .query(null)
+                    .fragment(null)
+                    .encodedPath("/dav/$RESERVED_STEM/")
+                    .addPathSegment(segs[1])
+                    .build()
             }
             return url
         }
