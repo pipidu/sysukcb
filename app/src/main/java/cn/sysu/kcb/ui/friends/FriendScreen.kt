@@ -11,11 +11,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -48,11 +52,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -67,11 +66,7 @@ import cn.sysu.kcb.domain.SemesterRange
 import cn.sysu.kcb.domain.WeekMask
 import cn.sysu.kcb.notify.ClassAlarmScheduler
 import cn.sysu.kcb.ui.AppViewModel
-import cn.sysu.kcb.ui.course.CourseDetailActivity
-import cn.sysu.kcb.ui.exam.ExamDetailActivity
-import cn.sysu.kcb.ui.motion.SeamlessSource
-import cn.sysu.kcb.ui.motion.findActivity
-import cn.sysu.kcb.ui.motion.toScreenRect
+import cn.sysu.kcb.ui.course.CourseDetailSheet
 import cn.sysu.kcb.ui.theme.KcbTopBar
 import cn.sysu.kcb.ui.timetable.StickyNoteViewDialog
 import cn.sysu.kcb.ui.timetable.TimetableGrid
@@ -257,8 +252,8 @@ private fun FriendTimetablePane(pack: SharePack, themeColor: Long) {
     var userPickedWeek by rememberSaveable(semester, pack.exportedAt) { mutableStateOf(false) }
     var termOverview by rememberSaveable(semester, pack.exportedAt) { mutableStateOf(false) }
     var weekPicker by remember { mutableStateOf(false) }
+    var viewingCourses by remember { mutableStateOf<List<CourseEntity>?>(null) }
     var viewingNote by remember { mutableStateOf<StickyNoteEntity?>(null) }
-    val context = LocalContext.current
 
     val courses = pack.courses.filter { it.acadYearSemester == semester }
     val weeks = pack.weeks.filter { it.acadYearSemester == semester }
@@ -309,6 +304,10 @@ private fun FriendTimetablePane(pack: SharePack, themeColor: Long) {
                 }
             }
     }
+    val sheetBottomInset = WindowInsets.safeDrawing
+        .union(WindowInsets.systemBars)
+        .asPaddingValues()
+        .calculateBottomPadding()
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -377,11 +376,7 @@ private fun FriendTimetablePane(pack: SharePack, themeColor: Long) {
                         weeks,
                         semesterEntity?.startMillis ?: 0L,
                     ),
-                    onCourses = { group, source ->
-                        context.findActivity()?.let {
-                            CourseDetailActivity.start(it, group, periods, themeColor, true, source)
-                        }
-                    },
+                    onCourses = { viewingCourses = it },
                     onEmpty = null,
                     themeColor = themeColor,
                     notes = notes,
@@ -400,11 +395,7 @@ private fun FriendTimetablePane(pack: SharePack, themeColor: Long) {
                         periods = periods,
                         courses = courses.filter { WeekMask.has(it.weeksMask, weekNo) },
                         weekStart = resolveWeekStart(weekNo, weekEntity, weeks, semesterEntity?.startMillis ?: 0L),
-                        onCourses = { group, source ->
-                            context.findActivity()?.let {
-                                CourseDetailActivity.start(it, group, periods, themeColor, true, source)
-                            }
-                        },
+                        onCourses = { viewingCourses = it },
                         onEmpty = null,
                         themeColor = themeColor,
                         notes = stickyNotesOnWeek(notes, weekNo),
@@ -412,6 +403,16 @@ private fun FriendTimetablePane(pack: SharePack, themeColor: Long) {
                         onNoteEdit = { viewingNote = it },
                     )
                 }
+            }
+            viewingCourses?.let { group ->
+                CourseDetailSheet(
+                    courses = group,
+                    periods = periods,
+                    themeColor = themeColor,
+                    onDismiss = { viewingCourses = null },
+                    onEdit = null,
+                    bottomInset = sheetBottomInset,
+                )
             }
             viewingNote?.let { note ->
                 StickyNoteViewDialog(note = note, onDismiss = { viewingNote = null })
@@ -533,25 +534,7 @@ private fun FriendExamPane(pack: SharePack) {
 
 @Composable
 private fun FriendExamCard(exam: ExamEntity) {
-    val context = LocalContext.current
-    val hostView = LocalView.current
-    val radiusPx = with(LocalDensity.current) { 12.dp.toPx() }
-    val cardColor = MaterialTheme.colorScheme.surfaceContainer.toArgb()
-    var cardLayout by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
-    Card(
-        Modifier
-            .fillMaxWidth()
-            .onGloballyPositioned { cardLayout = it }
-            .clickable {
-                val source = SeamlessSource(
-                    view = hostView,
-                    screenRect = cardLayout?.toScreenRect(hostView) ?: android.graphics.Rect(),
-                    radiusPx = radiusPx,
-                    fillColor = cardColor,
-                )
-                context.findActivity()?.let { ExamDetailActivity.start(it, exam, source) }
-            },
-    ) {
+    Card(Modifier.fillMaxWidth()) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(exam.subjectName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)

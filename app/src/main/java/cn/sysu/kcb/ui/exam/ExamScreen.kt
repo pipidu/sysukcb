@@ -5,7 +5,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,11 +37,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,9 +44,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.sysu.kcb.KcbApp
 import cn.sysu.kcb.domain.SemesterRange
 import cn.sysu.kcb.ui.AppViewModel
-import cn.sysu.kcb.ui.motion.SeamlessSource
-import cn.sysu.kcb.ui.motion.findActivity
-import cn.sysu.kcb.ui.motion.toScreenRect
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -187,26 +178,7 @@ fun ExamScreen(viewModel: AppViewModel) {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(visible, key = { it.id }) { exam ->
-                        val context = LocalContext.current
-                        val hostView = LocalView.current
-                        val radiusPx = with(LocalDensity.current) { 12.dp.toPx() }
-                        val cardColor = MaterialTheme.colorScheme.surfaceContainer.toArgb()
-                        var cardLayout by remember(exam.id) { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
-                        Card(
-                            Modifier
-                                .fillMaxWidth()
-                                .animateItem()
-                                .onGloballyPositioned { cardLayout = it }
-                                .clickable {
-                                    val source = SeamlessSource(
-                                        view = hostView,
-                                        screenRect = cardLayout?.toScreenRect(hostView) ?: android.graphics.Rect(),
-                                        radiusPx = radiusPx,
-                                        fillColor = cardColor,
-                                    )
-                                    context.findActivity()?.let { ExamDetailActivity.start(it, exam, source) }
-                                },
-                        ) {
+                        Card(Modifier.fillMaxWidth().animateItem()) {
                             Row(
                                 Modifier.padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically,
