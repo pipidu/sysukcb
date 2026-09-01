@@ -17,18 +17,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
@@ -69,7 +64,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -92,7 +90,11 @@ import cn.sysu.kcb.domain.SemesterRange
 import cn.sysu.kcb.domain.WeekMask
 import cn.sysu.kcb.notify.ClassAlarmScheduler
 import cn.sysu.kcb.ui.AppViewModel
-import cn.sysu.kcb.ui.course.CourseDetailSheet
+import cn.sysu.kcb.ui.course.CourseDetailActivity
+import cn.sysu.kcb.ui.course.CourseEditActivity
+import cn.sysu.kcb.ui.motion.SeamlessSource
+import cn.sysu.kcb.ui.motion.findActivity
+import cn.sysu.kcb.ui.motion.toScreenRect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.time.LocalDate
@@ -160,7 +162,6 @@ fun TimetableScreen(
     var moreMenu by remember { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf(false) }
     var termOverview by rememberSaveable { mutableStateOf(false) }
-    var viewingCourses by remember { mutableStateOf<List<CourseEntity>?>(null) }
     var editingNote by remember { mutableStateOf<StickyNoteEntity?>(null) }
     val maxWeek = snapshot.weeks.maxOfOrNull { it.weekly } ?: 30
     val academicWeek = remember(snapshot.weeks, snapshot.semester?.startMillis) {
@@ -201,10 +202,6 @@ fun TimetableScreen(
                 }
             }
     }
-    val sheetBottomInset = WindowInsets.safeDrawing
-        .union(WindowInsets.systemBars)
-        .asPaddingValues()
-        .calculateBottomPadding()
     val context = LocalContext.current
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -381,9 +378,14 @@ fun TimetableScreen(
                                 snapshot.weeks,
                                 snapshot.semester?.startMillis ?: 0L,
                             ),
-                            onCourses = { group ->
-                                if (editing && group.size == 1) onEdit(group.first().id)
-                                else viewingCourses = group
+                            onCourses = { group, source ->
+                                val host = context.findActivity() ?: return@TimetableGrid
+                                if (editing && group.size == 1) {
+                                    val course = group.first()
+                                    CourseEditActivity.start(host, course.id, course.dayOfWeek, course.startPeriod, semester, source)
+                                } else {
+                                    CourseDetailActivity.start(host, group, snapshot.periods, settings.themeColor, false, source)
+                                }
                             },
                             onEmpty = if (editing) {
                                 { day, period -> onAdd(day, period, semester) }
@@ -408,9 +410,14 @@ fun TimetableScreen(
                                 periods = snapshot.periods,
                                 courses = snapshot.courses.filter { WeekMask.has(it.weeksMask, weekNo) },
                                 weekStart = resolveWeekStart(weekNo, weekEntity, snapshot.weeks, snapshot.semester?.startMillis ?: 0L),
-                                onCourses = { group ->
-                                    if (editing && group.size == 1) onEdit(group.first().id)
-                                    else viewingCourses = group
+                                onCourses = { group, source ->
+                                    val host = context.findActivity() ?: return@TimetableGrid
+                                    if (editing && group.size == 1) {
+                                        val course = group.first()
+                                        CourseEditActivity.start(host, course.id, course.dayOfWeek, course.startPeriod, semester, source)
+                                    } else {
+                                        CourseDetailActivity.start(host, group, snapshot.periods, settings.themeColor, false, source)
+                                    }
                                 },
                                 onEmpty = if (editing) {
                                     { day, period -> onAdd(day, period, semester) }
@@ -443,19 +450,6 @@ fun TimetableScreen(
                         }
                     }
                 }
-            }
-            viewingCourses?.let { courses ->
-                CourseDetailSheet(
-                    courses = courses,
-                    periods = snapshot.periods,
-                    themeColor = settings.themeColor,
-                    onDismiss = { viewingCourses = null },
-                    onEdit = { course ->
-                        viewingCourses = null
-                        onEdit(course.id)
-                    },
-                    bottomInset = sheetBottomInset,
-                )
             }
             editingNote?.let { draft ->
                 val note = snapshot.notes.firstOrNull { it.id == draft.id } ?: draft
@@ -743,7 +737,7 @@ internal fun TimetableGrid(
     periods: List<PeriodEntity>,
     courses: List<CourseEntity>,
     weekStart: LocalDate?,
-    onCourses: (List<CourseEntity>) -> Unit,
+    onCourses: (List<CourseEntity>, SeamlessSource) -> Unit,
     onEmpty: ((Int, Int) -> Unit)?,
     themeColor: Long,
     notes: List<StickyNoteEntity> = emptyList(),
@@ -879,6 +873,9 @@ internal fun TimetableGrid(
                 val startIndex = rows.indexOfFirst { it.sectionNumber == startPeriod }.takeIf { it >= 0 }
                     ?: (startPeriod - 1)
                 val span = (endPeriod - startPeriod + 1).coerceAtLeast(1)
+                val hostView = LocalView.current
+                val radiusPx = with(LocalDensity.current) { 5.dp.toPx() }
+                var cardLayout by remember(course.id, startPeriod, course.dayOfWeek) { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
                 Box(
                     Modifier
                         .padding(
@@ -886,9 +883,19 @@ internal fun TimetableGrid(
                             top = headerH + periodH * startIndex + 1.dp,
                         )
                         .size(width = colW - 2.dp, height = periodH * span - 2.dp)
+                        .onGloballyPositioned { cardLayout = it }
                         .clip(RoundedCornerShape(5.dp))
                         .background(Color(cardColor))
-                        .clickable { onCourses(group) }
+                        .clickable {
+                            val coords = cardLayout
+                            val source = SeamlessSource(
+                                view = hostView,
+                                screenRect = coords?.toScreenRect(hostView) ?: android.graphics.Rect(),
+                                radiusPx = radiusPx,
+                                fillColor = (cardColor and 0xFFFFFFFFL).toInt(),
+                            )
+                            onCourses(group, source)
+                        }
                         .padding(horizontal = 2.dp, vertical = 2.dp),
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {

@@ -52,27 +52,44 @@ fun CourseDetailSheet(
         onDismissRequest = onDismiss,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
-        Column(
-            Modifier
+        CourseDetailBody(
+            courses = courses,
+            periods = periods,
+            themeColor = themeColor,
+            onEdit = onEdit,
+            modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(bottom = bottomInset.coerceAtLeast(48.dp) + 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (courses.size > 1) {
-                Text(
-                    "该时段有 ${courses.size} 门课",
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp,
-                    lineHeight = 22.sp,
-                    style = compactText,
-                )
-            }
-            courses.forEachIndexed { index, course ->
-                if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-                CourseDetailBlock(course, periods, themeColor, onEdit)
-            }
+        )
+    }
+}
+
+@Composable
+internal fun CourseDetailBody(
+    courses: List<CourseEntity>,
+    periods: List<PeriodEntity>,
+    themeColor: Long,
+    onEdit: ((CourseEntity) -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (courses.size > 1) {
+            Text(
+                "该时段有 ${courses.size} 门课",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp,
+                lineHeight = 22.sp,
+                style = compactText,
+            )
+        }
+        courses.forEachIndexed { index, course ->
+            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+            CourseDetailBlock(course, periods, themeColor, onEdit)
         }
     }
 }

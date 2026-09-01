@@ -46,6 +46,22 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ui.course.CourseDetailActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Kcb" />
+
+        <activity
+            android:name=".ui.course.CourseEditActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Kcb"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".ui.exam.ExamDetailActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Kcb" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
