@@ -325,7 +325,12 @@ fun TimetableScreen(
                                 leadingIcon = { Icon(Icons.AutoMirrored.Outlined.StickyNote2, contentDescription = null) },
                                 onClick = {
                                     moreMenu = false
-                                    viewModel.addStickyNote(semester, snapshot.notes.size)
+                                    val weekForNote = if (termOverview) {
+                                        academicWeek ?: selectedWeek.coerceAtLeast(1)
+                                    } else {
+                                        displayedWeekNo(pagerState, selectedWeek, syncingPager)
+                                    }
+                                    viewModel.addStickyNote(semester, snapshot.notes.size, weekForNote)
                                 },
                             )
                             DropdownMenuItem(
@@ -413,7 +418,7 @@ fun TimetableScreen(
                                     null
                                 },
                                 themeColor = settings.themeColor,
-                                notes = snapshot.notes,
+                                notes = stickyNotesOnWeek(snapshot.notes, weekNo),
                                 noteEditable = true,
                                 onNoteChange = { viewModel.saveStickyNote(it) },
                                 onNoteEdit = { editingNote = it },
@@ -457,6 +462,12 @@ fun TimetableScreen(
                 StickyNoteEditorDialog(
                     note = note,
                     themeColor = settings.themeColor,
+                    maxWeek = maxWeek,
+                    currentWeek = if (termOverview) {
+                        academicWeek ?: selectedWeek.coerceAtLeast(1)
+                    } else {
+                        displayedWeekNo(pagerState, selectedWeek, syncingPager)
+                    },
                     onSave = {
                         viewModel.saveStickyNote(it)
                         editingNote = null

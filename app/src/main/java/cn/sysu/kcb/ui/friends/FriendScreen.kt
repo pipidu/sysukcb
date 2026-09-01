@@ -74,6 +74,7 @@ import cn.sysu.kcb.ui.timetable.WeekPickerDialog
 import cn.sysu.kcb.ui.timetable.WeekTitleText
 import cn.sysu.kcb.ui.timetable.displayedWeekNo
 import cn.sysu.kcb.ui.timetable.resolveWeekStart
+import cn.sysu.kcb.ui.timetable.stickyNotesOnWeek
 import cn.sysu.kcb.ui.timetable.weekRangeLabel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -397,7 +398,7 @@ private fun FriendTimetablePane(pack: SharePack, themeColor: Long) {
                         onCourses = { viewingCourses = it },
                         onEmpty = null,
                         themeColor = themeColor,
-                        notes = notes,
+                        notes = stickyNotesOnWeek(notes, weekNo),
                         noteEditable = false,
                         onNoteEdit = { viewingNote = it },
                     )

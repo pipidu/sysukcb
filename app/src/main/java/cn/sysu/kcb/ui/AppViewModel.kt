@@ -444,15 +444,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         WidgetData.refreshAll(getApplication())
     }
 
-    fun addStickyNote(semester: String, existingCount: Int = 0) = viewModelScope.launch {
+    fun addStickyNote(semester: String, existingCount: Int = 0, week: Int = 1) = viewModelScope.launch {
         val id = semester.trim()
         if (id.isBlank()) {
             message.value = "请先选择学年"
             return@launch
         }
         container.timetable.ensureSemester(id)
-        container.timetable.saveNote(defaultStickyNote(id, existingCount))
-        message.value = "已添加便签，可拖动位置，点按编辑"
+        container.timetable.saveNote(defaultStickyNote(id, existingCount, week))
+        message.value = "已添加便签，默认仅本周显示，可点按改周次"
     }
 
     fun saveStickyNote(note: StickyNoteEntity) = viewModelScope.launch {

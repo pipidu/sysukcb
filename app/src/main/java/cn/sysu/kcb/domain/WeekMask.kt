@@ -11,6 +11,9 @@ object WeekMask {
 
     fun has(mask: Long, week: Int): Boolean = mask and bit(week) != 0L
 
+    /** 0 是旧便签未设周次，按每周都显示。 */
+    fun showsOn(mask: Long, week: Int): Boolean = mask == 0L || has(mask, week)
+
     fun fromRange(start: Int, end: Int, predicate: (Int) -> Boolean = { true }): Long {
         var mask = 0L
         for (week in start..end) {

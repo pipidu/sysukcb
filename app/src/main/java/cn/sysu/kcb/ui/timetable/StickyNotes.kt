@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -59,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.sysu.kcb.data.local.StickyNoteEntity
 import cn.sysu.kcb.domain.CourseColors
+import cn.sysu.kcb.domain.WeekMask
 import kotlin.math.roundToInt
 
 internal val StickyNotePaper = listOf(
@@ -82,8 +84,9 @@ private val noteBody = TextStyle(
     ),
 )
 
-internal fun defaultStickyNote(semester: String, existingCount: Int): StickyNoteEntity {
+internal fun defaultStickyNote(semester: String, existingCount: Int, week: Int = 1): StickyNoteEntity {
     val slot = existingCount % 5
+    val weekNo = week.coerceIn(1, WeekMask.MAX_WEEK)
     return StickyNoteEntity(
         acadYearSemester = semester,
         content = "",
@@ -94,8 +97,12 @@ internal fun defaultStickyNote(semester: String, existingCount: Int): StickyNote
         color = StickyNotePaper[slot % StickyNotePaper.size],
         alpha = 0.92f,
         z = System.currentTimeMillis(),
+        weeksMask = WeekMask.bit(weekNo),
     )
 }
+
+internal fun stickyNotesOnWeek(notes: List<StickyNoteEntity>, weekNo: Int): List<StickyNoteEntity> =
+    notes.filter { WeekMask.showsOn(it.weeksMask, weekNo) }
 
 @Composable
 internal fun StickyNoteLayer(
@@ -249,17 +256,24 @@ internal fun StickyNoteLayer(
 internal fun StickyNoteEditorDialog(
     note: StickyNoteEntity,
     themeColor: Long,
+    maxWeek: Int,
+    currentWeek: Int,
     onSave: (StickyNoteEntity) -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var content by remember(note.id, note.content, note.color, note.alpha, note.wFrac, note.hFrac) {
+    val weekCount = ((maxWeek.coerceAtLeast(1) + 4) / 5 * 5).coerceIn(5, WeekMask.MAX_WEEK)
+    val initialMask = if (note.weeksMask == 0L) WeekMask.fromRange(1, weekCount) else note.weeksMask
+    var content by remember(note.id, note.content, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask) {
         mutableStateOf(note.content)
     }
-    var color by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac) { mutableLongStateOf(note.color) }
-    var alpha by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac) { mutableFloatStateOf(note.alpha) }
-    var wFrac by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac) { mutableFloatStateOf(note.wFrac) }
-    var hFrac by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac) { mutableFloatStateOf(note.hFrac) }
+    var color by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask) { mutableLongStateOf(note.color) }
+    var alpha by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask) { mutableFloatStateOf(note.alpha) }
+    var wFrac by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask) { mutableFloatStateOf(note.wFrac) }
+    var hFrac by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask) { mutableFloatStateOf(note.hFrac) }
+    var weeksMask by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask) {
+        mutableLongStateOf(initialMask)
+    }
     var confirmDelete by remember { mutableStateOf(false) }
     val palette = remember(themeColor) { StickyNotePaper + CourseColors.paletteFor(themeColor) }
     AlertDialog(
@@ -269,7 +283,7 @@ internal fun StickyNoteEditorDialog(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .height(420.dp)
+                    .height(480.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -280,6 +294,63 @@ internal fun StickyNoteEditorDialog(
                     modifier = Modifier.fillMaxWidth().height(120.dp),
                     minLines = 4,
                 )
+                Text("显示周次（${WeekMask.describe(weeksMask, weekCount).ifBlank { "未选" }}）", fontWeight = FontWeight.Medium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    FilterChip(
+                        selected = weeksMask == WeekMask.bit(currentWeek.coerceIn(1, weekCount)),
+                        onClick = { weeksMask = WeekMask.bit(currentWeek.coerceIn(1, weekCount)) },
+                        label = { Text("本周") },
+                    )
+                    FilterChip(
+                        selected = weeksMask == WeekMask.fromRange(1, weekCount),
+                        onClick = { weeksMask = WeekMask.fromRange(1, weekCount) },
+                        label = { Text("全选") },
+                    )
+                    FilterChip(
+                        selected = weeksMask == WeekMask.fromRange(1, weekCount) { it % 2 == 1 },
+                        onClick = { weeksMask = WeekMask.fromRange(1, weekCount) { it % 2 == 1 } },
+                        label = { Text("单周") },
+                    )
+                    FilterChip(
+                        selected = weeksMask == WeekMask.fromRange(1, weekCount) { it % 2 == 0 },
+                        onClick = { weeksMask = WeekMask.fromRange(1, weekCount) { it % 2 == 0 } },
+                        label = { Text("双周") },
+                    )
+                    FilterChip(
+                        selected = weeksMask == 0L,
+                        onClick = { weeksMask = 0L },
+                        label = { Text("清空") },
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    repeat(weekCount / 5) { row ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            repeat(5) { col ->
+                                val w = row * 5 + col + 1
+                                val on = WeekMask.has(weeksMask, w)
+                                val bg = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                                val fg = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                Box(
+                                    Modifier
+                                        .weight(1f)
+                                        .height(32.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(bg)
+                                        .clickable {
+                                            weeksMask = if (on) {
+                                                weeksMask and WeekMask.bit(w).inv()
+                                            } else {
+                                                weeksMask or WeekMask.bit(w)
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text("$w", color = fg, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
                 Text("颜色", fontWeight = FontWeight.Medium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     palette.forEach { swatch ->
@@ -316,6 +387,7 @@ internal fun StickyNoteEditorDialog(
                             alpha = alpha,
                             wFrac = wFrac,
                             hFrac = hFrac,
+                            weeksMask = weeksMask,
                             z = System.currentTimeMillis(),
                         ),
                     )
@@ -355,7 +427,18 @@ internal fun StickyNoteViewDialog(note: StickyNoteEntity, onDismiss: () -> Unit)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("便签") },
-        text = { Text(note.content.ifBlank { "（空白便签）" }) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(note.content.ifBlank { "（空白便签）" })
+                if (note.weeksMask != 0L) {
+                    Text(
+                        WeekMask.describe(note.weeksMask),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+        },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("关闭") }
         },

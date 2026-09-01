@@ -143,6 +143,7 @@ data class StickyNoteEntity(
     val color: Long = 0xFFFFF59D,
     val alpha: Float = 0.92f,
     val z: Long = 0L,
+    val weeksMask: Long = 0L,
 )
 
 @Entity(tableName = "friend_packs")
