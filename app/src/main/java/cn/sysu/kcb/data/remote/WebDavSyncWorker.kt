@@ -18,7 +18,7 @@ class WebDavSyncWorker(
     override suspend fun doWork(): Result {
         return runCatching {
             val app = applicationContext as? KcbApp ?: return Result.success()
-            app.container.webdav.autoSync(force = true)
+            app.container.webdav.autoSync(force = false)
             Result.success()
         }.getOrElse {
             if (runAttemptCount < 3) Result.retry() else Result.success()
@@ -43,7 +43,7 @@ class WebDavSyncWorker(
                 .build()
             manager.enqueueUniquePeriodicWork(
                 UNIQUE_NAME,
-                ExistingPeriodicWorkPolicy.UPDATE,
+                ExistingPeriodicWorkPolicy.KEEP,
                 request,
             )
         }

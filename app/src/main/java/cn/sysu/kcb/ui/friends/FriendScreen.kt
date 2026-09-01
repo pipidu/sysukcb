@@ -89,12 +89,10 @@ fun FriendScreen(viewModel: AppViewModel, onSetupSync: () -> Unit) {
     var selectedId by rememberSaveable { mutableStateOf("") }
     var userPickedFriend by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        val now = System.currentTimeMillis()
-        if (settings.webdavUrl.isNotBlank() &&
-            settings.webdavNickname.isNotBlank() &&
-            now - settings.webdavLastSyncAt > 10 * 60 * 1000L
-        ) {
+    val canSync = settings.webdavUrl.isNotBlank() && settings.webdavNickname.isNotBlank()
+
+    LaunchedEffect(settings.webdavUrl, settings.webdavNickname, settings.webdavLastSyncAt) {
+        if (canSync && System.currentTimeMillis() - settings.webdavLastSyncAt > 10 * 60 * 1000L) {
             viewModel.refreshFriends(silent = true)
         }
     }
@@ -159,6 +157,21 @@ fun FriendScreen(viewModel: AppViewModel, onSetupSync: () -> Unit) {
                             Icon(Icons.Outlined.Sync, contentDescription = "同步好友")
                         }
                     }
+                } else if (canSync) {
+                    IconButton(
+                        onClick = { viewModel.refreshFriends(silent = false) },
+                        enabled = !webdavBusy,
+                    ) {
+                        if (webdavBusy) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(Icons.Outlined.Sync, contentDescription = "同步好友")
+                        }
+                    }
                 }
             }
         },
@@ -185,7 +198,7 @@ fun FriendScreen(viewModel: AppViewModel, onSetupSync: () -> Unit) {
                 }
             }
             when {
-                selected == null -> FriendEmpty(onSetupSync = onSetupSync)
+                selected == null -> FriendEmpty(configured = canSync, busy = webdavBusy, onSetupSync = onSetupSync, onSync = { viewModel.refreshFriends(silent = false) })
                 pack == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("这份好友课表无法读取", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                 }
@@ -197,7 +210,12 @@ fun FriendScreen(viewModel: AppViewModel, onSetupSync: () -> Unit) {
 }
 
 @Composable
-private fun FriendEmpty(onSetupSync: () -> Unit) {
+private fun FriendEmpty(
+    configured: Boolean,
+    busy: Boolean,
+    onSetupSync: () -> Unit,
+    onSync: () -> Unit,
+) {
     Column(
         Modifier.fillMaxSize().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -209,11 +227,16 @@ private fun FriendEmpty(onSetupSync: () -> Unit) {
             textAlign = TextAlign.Center,
         )
         Text(
-            "同一网盘账号、不同昵称上传后会出现在这里",
+            if (configured) "点同步拉取同一网盘目录里其他昵称的课表"
+            else "同一网盘账号、不同昵称上传后会出现在这里",
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
         )
-        Button(onClick = onSetupSync) { Text("去设置同步") }
+        if (configured) {
+            Button(onClick = onSync, enabled = !busy) { Text(if (busy) "同步中…" else "同步好友") }
+        } else {
+            Button(onClick = onSetupSync) { Text("去设置同步") }
+        }
     }
 }
 

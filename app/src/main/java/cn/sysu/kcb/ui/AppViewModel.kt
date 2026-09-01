@@ -307,8 +307,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         nickname: String,
         autoSync: Boolean,
     ) = viewModelScope.launch {
-        persistWebDav(url, user, password, nickname, autoSync)
-        message.value = "已保存 WebDAV 设置"
+        runCatching { persistWebDav(url, user, password, nickname, autoSync) }
+            .onSuccess { message.value = "已保存 WebDAV 设置" }
+            .onFailure { message.value = it.message ?: "保存失败" }
     }
 
     fun uploadWebDav(
@@ -318,9 +319,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         nickname: String,
         autoSync: Boolean,
     ) = viewModelScope.launch {
-        persistWebDav(url, user, password, nickname, autoSync)
         webdavBusy.value = true
-        runCatching { container.webdav.upload() }
+        runCatching {
+            persistWebDav(url, user, password, nickname, autoSync)
+            container.webdav.upload()
+        }
             .onSuccess { message.value = "已上传课表到 WebDAV" }
             .onFailure { message.value = it.message ?: "上传失败" }
         webdavBusy.value = false
@@ -333,10 +336,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         nickname: String,
         autoSync: Boolean,
     ) = viewModelScope.launch {
-        persistWebDav(url, user, password, nickname, autoSync)
         webdavBusy.value = true
         importing.value = true
-        runCatching { container.webdav.download() }
+        runCatching {
+            persistWebDav(url, user, password, nickname, autoSync)
+            container.webdav.download()
+        }
             .onSuccess {
                 if (it.isNotBlank()) container.settings.setSelectedSemester(it)
                 message.value = "已从 WebDAV 导入课表"
@@ -356,9 +361,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         nickname: String,
         autoSync: Boolean,
     ) = viewModelScope.launch {
-        persistWebDav(url, user, password, nickname, autoSync)
         webdavBusy.value = true
-        runCatching { container.webdav.syncFriends() }
+        runCatching {
+            persistWebDav(url, user, password, nickname, autoSync)
+            container.webdav.syncFriends()
+        }
             .onSuccess { message.value = it }
             .onFailure { message.value = it.message ?: "同步好友失败" }
         webdavBusy.value = false
@@ -386,7 +393,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         val raw = url.trim().ifBlank { WebDavClient.DEFAULT_NUTSTORE_FILE_URL }
         val canonical = runCatching { WebDavClient.normalizeFileUrl(raw).toString() }.getOrDefault(raw)
-        container.settings.setWebDav(canonical, user.trim(), nickname, autoSync)
+        val nick = nickname.trim().let { value ->
+            if (value.isBlank()) "" else WebDavClient.sanitizeNickname(value)
+        }
+        container.settings.setWebDav(canonical, user.trim(), nick, autoSync)
         if (password.isNotBlank()) container.webdavSecrets.save(password)
         webdavHasPassword.value = container.webdavSecrets.hasPassword()
         WebDavSyncWorker.schedule(getApplication(), autoSync)

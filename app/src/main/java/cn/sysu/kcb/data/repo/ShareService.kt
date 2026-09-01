@@ -63,7 +63,7 @@ class ShareService(
     }
 
     fun decodePack(text: String): SharePack {
-        val pack = json.decodeFromString(SharePack.serializer(), text)
+        val pack = json.decodeFromString(SharePack.serializer(), text.removePrefix("\uFEFF"))
         if (pack.format != "sysukcb") {
             error("不是课程表D导出文件")
         }
@@ -89,7 +89,7 @@ class ShareService(
     }
 
     suspend fun importJson(text: String): String {
-        val pack = json.decodeFromString(SharePack.serializer(), text)
+        val pack = json.decodeFromString(SharePack.serializer(), text.removePrefix("\uFEFF"))
         if (pack.format != "sysukcb") {
             error("不是课程表D导出文件")
         }

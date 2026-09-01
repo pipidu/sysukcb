@@ -5,6 +5,7 @@ import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.prefs.WebDavSecrets
 import cn.sysu.kcb.data.repo.FriendRepository
 import cn.sysu.kcb.data.repo.ShareService
+import kotlinx.coroutines.CancellationException
 
 class WebDavSyncService(
     private val client: WebDavClient,
@@ -44,14 +45,23 @@ class WebDavSyncService(
         if (!force && snap.webdavLastSyncAt > 0L && now - snap.webdavLastSyncAt < MIN_AUTO_INTERVAL_MS) {
             return snap.webdavLastMessage
         }
-        val creds = requireCreds(needNickname = false)
-        val body = share.exportAllJson(creds.nickname)
-        client.upload(creds.url, creds.user, creds.password, body)
-        return if (creds.nickname.isNotBlank()) {
-            pullFriends(creds, body)
-        } else {
-            settings.setWebDavLastSync(now, "已自动上传到云端")
-            "已自动上传到云端"
+        return try {
+            val creds = requireCreds(needNickname = false)
+            val body = share.exportAllJson(creds.nickname)
+            client.upload(creds.url, creds.user, creds.password, body)
+            if (creds.nickname.isNotBlank()) {
+                pullFriends(creds, body)
+            } else {
+                settings.setWebDavLastSync(now, "已自动上传到云端")
+                "已自动上传到云端"
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            runCatching {
+                settings.setWebDavLastSync(now, e.message ?: "自动同步失败")
+            }
+            throw e
         }
     }
 
@@ -66,6 +76,7 @@ class WebDavSyncService(
                 !name.equals(ownBackup, ignoreCase = true) &&
                 !name.equals(WebDavClient.DEFAULT_FILE, ignoreCase = true)
         }
+        val existing = friends.list().associateBy { it.id }
         val kept = mutableListOf<String>()
         val now = System.currentTimeMillis()
         for (filename in remote) {
@@ -74,20 +85,23 @@ class WebDavSyncService(
             val fileUrl = WebDavClient.fileInDirectory(ownUrl, filename).toString()
             val json = runCatching {
                 client.download(fileUrl, creds.user, creds.password)
-            }.getOrNull() ?: continue
-            val pack = runCatching { share.decodePack(json) }.getOrNull() ?: continue
-            val nickname = pack.nickname.ifBlank { id }
-            friends.upsert(
-                FriendPackEntity(
-                    id = id,
-                    nickname = nickname,
-                    filename = filename,
-                    payload = json,
-                    exportedAt = pack.exportedAt,
-                    syncedAt = now,
-                ),
-            )
-            kept += id
+            }.getOrNull()
+            val pack = json?.let { runCatching { share.decodePack(it) }.getOrNull() }
+            if (pack != null) {
+                friends.upsert(
+                    FriendPackEntity(
+                        id = id,
+                        nickname = pack.nickname.ifBlank { id },
+                        filename = filename,
+                        payload = json,
+                        exportedAt = pack.exportedAt,
+                        syncedAt = now,
+                    ),
+                )
+                kept += id
+            } else {
+                existing[id]?.let { kept += it.id }
+            }
         }
         friends.keepOnly(kept)
         val message = when (kept.size) {

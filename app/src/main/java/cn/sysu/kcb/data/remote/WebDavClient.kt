@@ -5,11 +5,13 @@ import kotlinx.coroutines.withContext
 import okhttp3.Credentials
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.logging.HttpLoggingInterceptor
+import java.net.URLDecoder
 import java.util.concurrent.TimeUnit
 
 class WebDavClient {
@@ -17,9 +19,9 @@ class WebDavClient {
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(45, TimeUnit.SECONDS)
         .writeTimeout(45, TimeUnit.SECONDS)
+        .protocols(listOf(Protocol.HTTP_1_1))
         .followRedirects(false)
         .followSslRedirects(false)
-        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
         .build()
 
     suspend fun upload(fileUrl: String, user: String, password: String, body: String) = withContext(Dispatchers.IO) {
@@ -46,7 +48,7 @@ class WebDavClient {
                 .build(),
         )
         when (response.code) {
-            in 200..299 -> response.body
+            in 200..299 -> response.body.removePrefix("\uFEFF")
             404, 409 -> throw ImportFailedException("云端还没有课表文件，请先上传")
             else -> throw ImportFailedException(errorMessage("下载", response.code, response.body))
         }
@@ -60,10 +62,11 @@ class WebDavClient {
                 .header("Authorization", davAuth(user, password))
                 .header("User-Agent", UA)
                 .header("Depth", "1")
+                .header("Accept", "*/*")
                 .method("PROPFIND", PROPFIND_BODY.toRequestBody(XML))
                 .build(),
         )
-        if (response.code !in 200..299 && response.code != 207) {
+        if (response.code !in 200..299) {
             throw ImportFailedException(errorMessage("列出好友课表", response.code, response.body))
         }
         parseJsonHrefs(response.body, dir)
@@ -71,34 +74,45 @@ class WebDavClient {
 
     private fun parseJsonHrefs(xml: String, dir: HttpUrl): List<String> {
         val names = linkedSetOf<String>()
-        val dirPath = dir.encodedPath.trimEnd('/')
+        val dirPath = decodePath(dir.encodedPath).trimEnd('/')
         for (match in HREF_REGEX.findAll(xml)) {
             val raw = match.groupValues[1].trim()
+                .replace("&amp;", "&")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
             if (raw.isBlank()) continue
-            val decoded = runCatching {
-                java.net.URLDecoder.decode(raw.replace("&amp;", "&"), Charsets.UTF_8.name())
-            }.getOrDefault(raw)
-            val name = if ("://" in decoded) {
-                runCatching { decoded.toHttpUrl().pathSegments.lastOrNull().orEmpty() }.getOrDefault("")
-            } else {
-                val path = decoded.trimEnd('/')
-                if (path.equals(dirPath, ignoreCase = true) || path.isBlank()) continue
-                path.substringAfterLast('/')
-            }
-            if (name.isBlank() || !name.endsWith(".json", ignoreCase = true)) continue
-            names += name
+            val decoded = decodePath(raw)
+            val name = hrefFileName(decoded, dirPath) ?: continue
+            if (name.endsWith(".json", ignoreCase = true)) names += name
         }
         return names.toList()
+    }
+
+    private fun hrefFileName(decoded: String, dirPath: String): String? {
+        val path = if ("://" in decoded) {
+            val url = decoded.toHttpUrlOrNull() ?: return null
+            "/" + url.pathSegments.filter { it.isNotEmpty() }.joinToString("/")
+        } else {
+            val raw = decoded.trim().trimEnd('/')
+            if (raw.startsWith("/")) raw else "$dirPath/$raw"
+        }
+        if (path.isBlank() || path.equals(dirPath, ignoreCase = true)) return null
+        val parent = path.substringBeforeLast('/', missingDelimiterValue = "")
+        if (!parent.equals(dirPath, ignoreCase = true)) return null
+        return path.substringAfterLast('/').takeIf { it.isNotBlank() }
     }
 
     private fun ensureParents(fileUrl: HttpUrl, user: String, password: String) {
         val segments = fileUrl.pathSegments.filter { it.isNotEmpty() }
         if (segments.size < 2) return
-        var path = ""
+        val builder = fileUrl.newBuilder().query(null).fragment(null).encodedPath("/")
         for (i in 0 until segments.lastIndex) {
-            path += "/" + segments[i]
-            if (path.equals("/dav", ignoreCase = true)) continue
-            val dir = fileUrl.newBuilder().encodedPath("$path/").query(null).fragment(null).build()
+            builder.addPathSegment(segments[i])
+            val soFar = builder.build().pathSegments.filter { it.isNotEmpty() }
+            if (soFar.size == 1 && soFar[0].equals("dav", ignoreCase = true)) continue
+            val dir = builder.build().let { url ->
+                url.newBuilder().encodedPath(url.encodedPath.trimEnd('/') + "/").build()
+            }
             val response = execute(
                 Request.Builder()
                     .url(dir)
@@ -107,9 +121,10 @@ class WebDavClient {
                     .method("MKCOL", ByteArray(0).toRequestBody(null))
                     .build(),
             )
-            // 坚果云对已有根目录 /dav 会回 403，不是密码错。目录已存在时 405/409 也正常。
-            if (response.code == 401) {
-                throw ImportFailedException(errorMessage("创建目录", response.code, response.body))
+            when (response.code) {
+                401 -> throw ImportFailedException(errorMessage("创建目录", response.code, response.body))
+                in MKCOL_OK -> Unit
+                else -> throw ImportFailedException(errorMessage("创建目录", response.code, response.body))
             }
         }
     }
@@ -120,7 +135,8 @@ class WebDavClient {
                 .url(url)
                 .header("Authorization", davAuth(user, password))
                 .header("User-Agent", UA)
-                .put(body.toRequestBody(JSON))
+                .header("Overwrite", "T")
+                .put(body.toByteArray(Charsets.UTF_8).toRequestBody(OCTET))
                 .build(),
         )
 
@@ -143,7 +159,8 @@ class WebDavClient {
     private fun errorMessage(action: String, code: Int, body: String): String = when (code) {
         401 -> "WebDAV 用户名或密码错误。坚果云请用邮箱和应用密码，不要用登录密码"
         403 -> "网盘拒绝访问。坚果云请用应用密码，并在网页端「安全选项」关闭微信二次验证"
-        404 -> "${action}失败：路径不存在。坚果云不能把文件直接放在 /dav 根目录，请用 /dav/sysukcb/sysukcb.json"
+        404 -> "${action}失败：路径不存在。坚果云请把文件放在子文件夹，例如 /dav/sysukcb/sysukcb.json"
+        405 -> "${action}失败：网盘不支持该操作"
         507 -> "网盘空间不足"
         else -> {
             val hint = body.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim().take(80)
@@ -159,13 +176,14 @@ class WebDavClient {
         )
 
     companion object {
-        private val JSON = "application/json; charset=utf-8".toMediaType()
+        private val OCTET = "application/octet-stream".toMediaType()
         private val XML = "application/xml; charset=utf-8".toMediaType()
         private const val UA = "sysukcb/android"
         const val DEFAULT_FILE = "sysukcb.json"
         const val RESERVED_STEM = "sysukcb"
         const val DEFAULT_NUTSTORE_FILE_URL = "https://dav.jianguoyun.com/dav/sysukcb/sysukcb.json"
-        private val HREF_REGEX = Regex("(?i)<[^<>]*:?href[^<>]*>([^<]+)</[^<>]*:?href>")
+        private val MKCOL_OK = setOf(200, 201, 204, 301, 302, 403, 405, 409)
+        private val HREF_REGEX = Regex("(?is)<(?:[\\w-]+:)?href\\s*>(.*?)</(?:[\\w-]+:)?href\\s*>")
         private const val PROPFIND_BODY =
             """<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:resourcetype/></d:prop></d:propfind>"""
 
@@ -209,11 +227,14 @@ class WebDavClient {
             directoryOf(fileUrl).newBuilder().addPathSegment(filename).build()
 
         fun sanitizeNickname(raw: String): String {
-            val cleaned = raw.trim()
+            var cleaned = raw.trim()
                 .replace(Regex("[\\\\/:*?\"<>|\\u0000-\\u001F]"), "")
                 .replace(Regex("\\s+"), " ")
                 .trim()
-                .take(32)
+            if (cleaned.endsWith(".json", ignoreCase = true)) {
+                cleaned = cleaned.dropLast(5).trim()
+            }
+            cleaned = cleaned.take(32)
             if (cleaned.isBlank()) throw ImportFailedException("请填写昵称")
             if (cleaned.equals(RESERVED_STEM, ignoreCase = true) ||
                 cleaned.equals(DEFAULT_FILE, ignoreCase = true)
@@ -226,6 +247,11 @@ class WebDavClient {
         fun nicknameFilename(nickname: String): String = "${sanitizeNickname(nickname)}.json"
 
         fun stemOf(filename: String): String = filename.removeSuffix(".json").removeSuffix(".JSON")
+
+        private fun decodePath(value: String): String =
+            runCatching {
+                URLDecoder.decode(value.replace("+", "%2B"), Charsets.UTF_8.name())
+            }.getOrDefault(value)
     }
 
     private data class DavResponse(val code: Int, val body: String)
