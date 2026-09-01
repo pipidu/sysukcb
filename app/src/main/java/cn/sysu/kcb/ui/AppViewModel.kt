@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import cn.sysu.kcb.BuildConfig
 import cn.sysu.kcb.KcbApp
 import cn.sysu.kcb.data.local.CourseEntity
+import cn.sysu.kcb.data.local.StickyNoteEntity
 import cn.sysu.kcb.data.prefs.UserSettings
 import cn.sysu.kcb.data.remote.AppUpdate
 import cn.sysu.kcb.data.remote.SessionCheckResult
@@ -20,6 +21,7 @@ import cn.sysu.kcb.data.remote.isNewerThan
 import cn.sysu.kcb.data.remote.WebDavClient
 import cn.sysu.kcb.data.remote.WebDavSyncWorker
 import cn.sysu.kcb.data.school.School
+import cn.sysu.kcb.ui.timetable.defaultStickyNote
 import cn.sysu.kcb.widget.WidgetData
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -440,6 +442,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         container.timetable.deleteCourse(course)
         refreshAlarms()
         WidgetData.refreshAll(getApplication())
+    }
+
+    fun addStickyNote(semester: String, existingCount: Int = 0) = viewModelScope.launch {
+        val id = semester.trim()
+        if (id.isBlank()) {
+            message.value = "请先选择学年"
+            return@launch
+        }
+        container.timetable.ensureSemester(id)
+        container.timetable.saveNote(defaultStickyNote(id, existingCount))
+        message.value = "已添加便签，可拖动位置，点按编辑"
+    }
+
+    fun saveStickyNote(note: StickyNoteEntity) = viewModelScope.launch {
+        container.timetable.saveNote(note)
+    }
+
+    fun deleteStickyNote(note: StickyNoteEntity) = viewModelScope.launch {
+        container.timetable.deleteNote(note)
     }
 
     suspend fun getCourse(id: Long) = container.timetable.getCourse(id)

@@ -18,8 +18,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         RawImportEntity::class,
         WeekdayEntity::class,
         FriendPackEntity::class,
+        StickyNoteEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -32,6 +33,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun rawImportDao(): RawImportDao
     abstract fun weekdayDao(): WeekdayDao
     abstract fun friendPackDao(): FriendPackDao
+    abstract fun stickyNoteDao(): StickyNoteDao
 
     companion object {
         private val MIGRATION_2_3 = object : Migration(2, 3) {
@@ -51,9 +53,33 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS sticky_notes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        acadYearSemester TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        xFrac REAL NOT NULL,
+                        yFrac REAL NOT NULL,
+                        wFrac REAL NOT NULL,
+                        hFrac REAL NOT NULL,
+                        color INTEGER NOT NULL,
+                        alpha REAL NOT NULL,
+                        z INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_sticky_notes_acadYearSemester ON sticky_notes (acadYearSemester)",
+                )
+            }
+        }
+
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "sysu-kcb.db")
-                .addMigrations(MIGRATION_2_3)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                 .fallbackToDestructiveMigrationFrom(1)
                 .build()
     }

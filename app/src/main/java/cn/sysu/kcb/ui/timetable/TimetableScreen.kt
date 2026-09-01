@@ -80,6 +80,7 @@ import cn.sysu.kcb.KcbApp
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.PeriodEntity
 import cn.sysu.kcb.data.local.SemesterEntity
+import cn.sysu.kcb.data.local.StickyNoteEntity
 import cn.sysu.kcb.data.local.WeekEntity
 import cn.sysu.kcb.data.prefs.UserSettings
 import cn.sysu.kcb.data.repo.TimetableSnapshot
@@ -157,6 +158,7 @@ fun TimetableScreen(
     var editing by rememberSaveable { mutableStateOf(false) }
     var termOverview by rememberSaveable { mutableStateOf(false) }
     var viewingCourses by remember { mutableStateOf<List<CourseEntity>?>(null) }
+    var editingNote by remember { mutableStateOf<StickyNoteEntity?>(null) }
     val maxWeek = snapshot.weeks.maxOfOrNull { it.weekly } ?: 30
     val academicWeek = remember(snapshot.weeks, snapshot.semester?.startMillis) {
         ClassAlarmScheduler.resolveWeek(
@@ -310,6 +312,13 @@ fun TimetableScreen(
                                 },
                             )
                             DropdownMenuItem(
+                                text = { Text("添加便签") },
+                                onClick = {
+                                    moreMenu = false
+                                    viewModel.addStickyNote(semester, snapshot.notes.size)
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text(if (editing) "退出编辑模式" else "进入编辑模式") },
                                 leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
                                 onClick = {
@@ -346,7 +355,7 @@ fun TimetableScreen(
                     }
                 }
                 Box(Modifier.weight(1f)) {
-                    val empty = snapshot.courses.isEmpty() && !editing
+                    val empty = snapshot.courses.isEmpty() && snapshot.notes.isEmpty() && !editing
                     if (termOverview) {
                         TimetableGrid(
                             periods = snapshot.periods,
@@ -367,6 +376,10 @@ fun TimetableScreen(
                                 null
                             },
                             themeColor = settings.themeColor,
+                            notes = snapshot.notes,
+                            noteEditable = true,
+                            onNoteChange = { viewModel.saveStickyNote(it) },
+                            onNoteEdit = { editingNote = it },
                         )
                     } else {
                         HorizontalPager(
@@ -390,6 +403,10 @@ fun TimetableScreen(
                                     null
                                 },
                                 themeColor = settings.themeColor,
+                                notes = snapshot.notes,
+                                noteEditable = true,
+                                onNoteChange = { viewModel.saveStickyNote(it) },
+                                onNoteEdit = { editingNote = it },
                             )
                         }
                     }
@@ -423,6 +440,21 @@ fun TimetableScreen(
                         onEdit(course.id)
                     },
                     bottomInset = sheetBottomInset,
+                )
+            }
+            editingNote?.let { note ->
+                StickyNoteEditorDialog(
+                    note = note,
+                    themeColor = settings.themeColor,
+                    onSave = {
+                        viewModel.saveStickyNote(it)
+                        editingNote = null
+                    },
+                    onDelete = {
+                        viewModel.deleteStickyNote(note)
+                        editingNote = null
+                    },
+                    onDismiss = { editingNote = null },
                 )
             }
         }
@@ -692,6 +724,10 @@ internal fun TimetableGrid(
     onCourses: (List<CourseEntity>) -> Unit,
     onEmpty: ((Int, Int) -> Unit)?,
     themeColor: Long,
+    notes: List<StickyNoteEntity> = emptyList(),
+    noteEditable: Boolean = false,
+    onNoteChange: ((StickyNoteEntity) -> Unit)? = null,
+    onNoteEdit: ((StickyNoteEntity) -> Unit)? = null,
 ) {
     val periodH = 58.dp
     val headerH = 40.dp
@@ -714,6 +750,7 @@ internal fun TimetableGrid(
     val vScroll = rememberScrollState()
     BoxWithConstraints(Modifier.fillMaxSize().verticalScroll(vScroll)) {
         val colW = (maxWidth - timeW) / 7
+        val gridW = maxWidth
         val gridH = headerH + periodH * rows.size
         Box(Modifier.height(gridH).fillMaxWidth()) {
             Row(Modifier.fillMaxWidth().height(headerH), verticalAlignment = Alignment.CenterVertically) {
@@ -883,6 +920,16 @@ internal fun TimetableGrid(
                         )
                     }
                 }
+            }
+            if (notes.isNotEmpty() && onNoteEdit != null) {
+                StickyNoteLayer(
+                    notes = notes,
+                    gridW = gridW,
+                    gridH = gridH,
+                    editable = noteEditable && onNoteChange != null,
+                    onChange = { onNoteChange?.invoke(it) },
+                    onEdit = onNoteEdit,
+                )
             }
         }
     }

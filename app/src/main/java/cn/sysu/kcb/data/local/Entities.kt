@@ -127,6 +127,24 @@ data class WeekdayEntity(
     val dataName: String,
 )
 
+@Serializable
+@Entity(
+    tableName = "sticky_notes",
+    indices = [Index("acadYearSemester")],
+)
+data class StickyNoteEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val acadYearSemester: String,
+    val content: String = "",
+    val xFrac: Float = 0.18f,
+    val yFrac: Float = 0.14f,
+    val wFrac: Float = 0.28f,
+    val hFrac: Float = 0.16f,
+    val color: Long = 0xFFFFF59D,
+    val alpha: Float = 0.92f,
+    val z: Long = 0L,
+)
+
 @Entity(tableName = "friend_packs")
 data class FriendPackEntity(
     @PrimaryKey val id: String,

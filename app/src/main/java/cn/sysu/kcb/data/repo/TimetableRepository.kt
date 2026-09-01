@@ -9,6 +9,7 @@ import cn.sysu.kcb.data.local.PeriodEntity
 import cn.sysu.kcb.data.local.RawImportEntity
 import cn.sysu.kcb.data.local.SemesterEntity
 import cn.sysu.kcb.data.local.WeekEntity
+import cn.sysu.kcb.data.local.StickyNoteEntity
 import cn.sysu.kcb.data.local.WeekdayEntity
 import cn.sysu.kcb.domain.CourseColors
 import cn.sysu.kcb.domain.DefaultPeriods
@@ -33,12 +34,14 @@ class TimetableRepository(private val db: AppDatabase) {
             db.weekDao().observe(semester),
             db.periodDao().observe(semester),
             db.semesterDao().observeAll(),
-        ) { courses, weeks, periods, semesters ->
+            db.stickyNoteDao().observe(semester),
+        ) { courses, weeks, periods, semesters, notes ->
             TimetableSnapshot(
                 semester = semesters.firstOrNull { it.acadYearSemester == semester },
                 courses = courses,
                 weeks = weeks,
                 periods = periods.ifEmpty { defaultPeriods(semester) },
+                notes = notes,
             )
         }
 
@@ -55,6 +58,8 @@ class TimetableRepository(private val db: AppDatabase) {
     suspend fun listAllPeriods() = db.periodDao().listAll()
     suspend fun listExamWeeks(semester: String) = db.examWeekDao().list(semester)
     suspend fun listAllExamWeeks() = db.examWeekDao().listAll()
+    suspend fun listNotes(semester: String) = db.stickyNoteDao().list(semester)
+    suspend fun listAllNotes() = db.stickyNoteDao().listAll()
     suspend fun listSemesters() = db.semesterDao().list()
     suspend fun getCourse(id: Long) = db.courseDao().get(id)
     suspend fun currentSemester() = db.semesterDao().current()
@@ -146,6 +151,22 @@ class TimetableRepository(private val db: AppDatabase) {
     suspend fun updateCourse(item: CourseEntity) = db.courseDao().update(item)
     suspend fun deleteCourse(item: CourseEntity) = db.courseDao().delete(item)
 
+    suspend fun saveNote(item: StickyNoteEntity): Long {
+        return if (item.id == 0L) db.stickyNoteDao().insert(item) else {
+            db.stickyNoteDao().update(item)
+            item.id
+        }
+    }
+
+    suspend fun deleteNote(item: StickyNoteEntity) = db.stickyNoteDao().delete(item)
+
+    suspend fun replaceNotes(semester: String, items: List<StickyNoteEntity>) {
+        db.withTransaction {
+            db.stickyNoteDao().deleteSemester(semester)
+            items.forEach { db.stickyNoteDao().insert(it.copy(id = 0)) }
+        }
+    }
+
     suspend fun recolorToTheme(fromTheme: Long, toTheme: Long) {
         if (fromTheme == toTheme) return
         val all = db.courseDao().listAll()
@@ -196,6 +217,7 @@ class TimetableRepository(private val db: AppDatabase) {
         db.courseDao().clear()
         db.examDao().clear()
         db.examWeekDao().clear()
+        db.stickyNoteDao().clear()
         db.semesterDao().clear()
         db.rawImportDao().clear()
     }
@@ -218,4 +240,5 @@ data class TimetableSnapshot(
     val courses: List<CourseEntity>,
     val weeks: List<WeekEntity>,
     val periods: List<PeriodEntity>,
+    val notes: List<StickyNoteEntity> = emptyList(),
 )

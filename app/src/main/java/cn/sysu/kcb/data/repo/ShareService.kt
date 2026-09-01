@@ -8,6 +8,7 @@ import cn.sysu.kcb.data.local.ExamEntity
 import cn.sysu.kcb.data.local.ExamWeekEntity
 import cn.sysu.kcb.data.local.PeriodEntity
 import cn.sysu.kcb.data.local.SemesterEntity
+import cn.sysu.kcb.data.local.StickyNoteEntity
 import cn.sysu.kcb.data.local.WeekEntity
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -26,6 +27,7 @@ data class SharePack(
     val courses: List<CourseEntity> = emptyList(),
     val exams: List<ExamEntity> = emptyList(),
     val examWeeks: List<ExamWeekEntity> = emptyList(),
+    val notes: List<StickyNoteEntity> = emptyList(),
 )
 
 class ShareService(
@@ -35,12 +37,14 @@ class ShareService(
 ) {
     suspend fun exportSemester(semester: String): File {
         val pack = SharePack(
+            version = 2,
             semesters = repo.listSemesters().filter { it.acadYearSemester == semester },
             weeks = repo.listWeeks(semester).map { it.copy(id = 0) },
             periods = repo.listPeriods(semester).map { it.copy(id = 0) },
             courses = repo.listCourses(semester).map { it.copy(id = 0) },
             exams = repo.listExams(semester).map { it.copy(id = 0) },
             examWeeks = repo.listExamWeeks(semester).map { it.copy(id = 0) },
+            notes = repo.listNotes(semester).map { it.copy(id = 0) },
         )
         val dir = File(context.cacheDir, "share").apply { mkdirs() }
         val file = File(dir, "课程表D-$semester.sysukcb.json")
@@ -51,6 +55,7 @@ class ShareService(
     suspend fun exportAllJson(nickname: String = ""): String {
         return encode(
             SharePack(
+                version = 2,
                 nickname = nickname,
                 semesters = repo.listSemesters(),
                 weeks = repo.listAllWeeks().map { it.copy(id = 0) },
@@ -58,6 +63,7 @@ class ShareService(
                 courses = repo.listAllCourses().map { it.copy(id = 0) },
                 exams = repo.listAllExams().map { it.copy(id = 0) },
                 examWeeks = repo.listAllExamWeeks().map { it.copy(id = 0) },
+                notes = repo.listAllNotes().map { it.copy(id = 0) },
             ),
         )
     }
@@ -98,6 +104,7 @@ class ShareService(
         val groupedPeriods = pack.periods.groupBy { it.acadYearSemester }
         val groupedExams = pack.exams.groupBy { it.acadYearSemester }
         val groupedExamWeeks = pack.examWeeks.groupBy { it.acadYearSemester }
+        val groupedNotes = pack.notes.groupBy { it.acadYearSemester }
         val semesters = pack.semesters.ifEmpty {
             groupedCourses.keys.map {
                 SemesterEntity(it, it, 0, 0, 0, false)
@@ -114,6 +121,16 @@ class ShareService(
                 exams = groupedExams[semester.acadYearSemester].orEmpty(),
                 examWeeks = groupedExamWeeks[semester.acadYearSemester].orEmpty(),
             )
+            if (pack.version >= 2) {
+                repo.replaceNotes(semester.acadYearSemester, groupedNotes[semester.acadYearSemester].orEmpty())
+            }
+        }
+        if (pack.version >= 2) {
+            for ((sem, items) in groupedNotes) {
+                if (semesters.none { it.acadYearSemester == sem }) {
+                    repo.replaceNotes(sem, items)
+                }
+            }
         }
         return semesters.firstOrNull()?.acadYearSemester.orEmpty()
     }

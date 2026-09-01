@@ -60,6 +60,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.sysu.kcb.KcbApp
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.ExamEntity
+import cn.sysu.kcb.data.local.StickyNoteEntity
 import cn.sysu.kcb.data.repo.SharePack
 import cn.sysu.kcb.domain.SemesterRange
 import cn.sysu.kcb.domain.WeekMask
@@ -67,6 +68,7 @@ import cn.sysu.kcb.notify.ClassAlarmScheduler
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.course.CourseDetailSheet
 import cn.sysu.kcb.ui.theme.KcbTopBar
+import cn.sysu.kcb.ui.timetable.StickyNoteViewDialog
 import cn.sysu.kcb.ui.timetable.TimetableGrid
 import cn.sysu.kcb.ui.timetable.WeekPickerDialog
 import cn.sysu.kcb.ui.timetable.WeekTitleText
@@ -250,10 +252,12 @@ private fun FriendTimetablePane(pack: SharePack, themeColor: Long) {
     var termOverview by rememberSaveable(semester, pack.exportedAt) { mutableStateOf(false) }
     var weekPicker by remember { mutableStateOf(false) }
     var viewingCourses by remember { mutableStateOf<List<CourseEntity>?>(null) }
+    var viewingNote by remember { mutableStateOf<StickyNoteEntity?>(null) }
 
     val courses = pack.courses.filter { it.acadYearSemester == semester }
     val weeks = pack.weeks.filter { it.acadYearSemester == semester }
     val periods = pack.periods.filter { it.acadYearSemester == semester }
+    val notes = pack.notes.filter { it.acadYearSemester == semester }
     val semesterEntity = pack.semesters.firstOrNull { it.acadYearSemester == semester }
     val maxWeek = packMaxWeek(weeks, courses)
     val academicWeek = ClassAlarmScheduler.resolveWeek(
@@ -357,7 +361,7 @@ private fun FriendTimetablePane(pack: SharePack, themeColor: Long) {
             TextButton(onClick = { weekPicker = true }) { Text("周次") }
         }
         Box(Modifier.weight(1f)) {
-            if (courses.isEmpty() && weeks.isEmpty() && periods.isEmpty()) {
+            if (courses.isEmpty() && weeks.isEmpty() && periods.isEmpty() && notes.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("该学期暂无课表", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                 }
@@ -374,6 +378,9 @@ private fun FriendTimetablePane(pack: SharePack, themeColor: Long) {
                     onCourses = { viewingCourses = it },
                     onEmpty = null,
                     themeColor = themeColor,
+                    notes = notes,
+                    noteEditable = false,
+                    onNoteEdit = { viewingNote = it },
                 )
             } else {
                 HorizontalPager(
@@ -390,6 +397,9 @@ private fun FriendTimetablePane(pack: SharePack, themeColor: Long) {
                         onCourses = { viewingCourses = it },
                         onEmpty = null,
                         themeColor = themeColor,
+                        notes = notes,
+                        noteEditable = false,
+                        onNoteEdit = { viewingNote = it },
                     )
                 }
             }
@@ -402,6 +412,9 @@ private fun FriendTimetablePane(pack: SharePack, themeColor: Long) {
                     onEdit = null,
                     bottomInset = sheetBottomInset,
                 )
+            }
+            viewingNote?.let { note ->
+                StickyNoteViewDialog(note = note, onDismiss = { viewingNote = null })
             }
         }
     }
@@ -583,7 +596,8 @@ private fun examKey(exam: ExamEntity, index: Int): String =
 private fun packSemesterOptions(pack: SharePack): List<String> {
     val fromPack = pack.semesters.map { it.acadYearSemester } +
         pack.courses.map { it.acadYearSemester } +
-        pack.exams.map { it.acadYearSemester }
+        pack.exams.map { it.acadYearSemester } +
+        pack.notes.map { it.acadYearSemester }
     val current = pack.semesters.firstOrNull { it.isCurrent }?.acadYearSemester
         ?: fromPack.maxOrNull()
         ?: SemesterRange.guessCurrent()

@@ -193,3 +193,30 @@ interface FriendPackDao {
     @Query("DELETE FROM friend_packs")
     suspend fun clear()
 }
+
+@Dao
+interface StickyNoteDao {
+    @Query("SELECT * FROM sticky_notes WHERE acadYearSemester = :sem ORDER BY z, id")
+    fun observe(sem: String): Flow<List<StickyNoteEntity>>
+
+    @Query("SELECT * FROM sticky_notes WHERE acadYearSemester = :sem ORDER BY z, id")
+    suspend fun list(sem: String): List<StickyNoteEntity>
+
+    @Query("SELECT * FROM sticky_notes")
+    suspend fun listAll(): List<StickyNoteEntity>
+
+    @Insert
+    suspend fun insert(item: StickyNoteEntity): Long
+
+    @Update
+    suspend fun update(item: StickyNoteEntity)
+
+    @Delete
+    suspend fun delete(item: StickyNoteEntity)
+
+    @Query("DELETE FROM sticky_notes WHERE acadYearSemester = :sem")
+    suspend fun deleteSemester(sem: String)
+
+    @Query("DELETE FROM sticky_notes")
+    suspend fun clear()
+}
