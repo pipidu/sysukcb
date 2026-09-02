@@ -38,6 +38,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -68,6 +69,7 @@ import cn.sysu.kcb.domain.WeekMask
 import cn.sysu.kcb.notify.ClassAlarmScheduler
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.course.CourseDetailSheet
+import cn.sysu.kcb.ui.me.JoinWebDavShareDialog
 import cn.sysu.kcb.ui.theme.KcbTopBar
 import cn.sysu.kcb.ui.timetable.StickyNoteViewDialog
 import cn.sysu.kcb.ui.timetable.TimetableGrid
@@ -92,6 +94,7 @@ fun FriendScreen(viewModel: AppViewModel, onSetupSync: () -> Unit) {
     var pane by rememberSaveable { mutableStateOf("timetable") }
     var selectedId by rememberSaveable { mutableStateOf("") }
     var userPickedFriend by rememberSaveable { mutableStateOf(false) }
+    var joinOpen by remember { mutableStateOf(false) }
 
     val canSync = settings.webdavUrl.isNotBlank() && settings.webdavNickname.isNotBlank()
 
@@ -202,7 +205,13 @@ fun FriendScreen(viewModel: AppViewModel, onSetupSync: () -> Unit) {
                 }
             }
             when {
-                selected == null -> FriendEmpty(configured = canSync, busy = webdavBusy, onSetupSync = onSetupSync, onSync = { viewModel.refreshFriends(silent = false) })
+                selected == null -> FriendEmpty(
+                    configured = canSync,
+                    busy = webdavBusy,
+                    onSetupSync = onSetupSync,
+                    onJoinShare = { joinOpen = true },
+                    onSync = { viewModel.refreshFriends(silent = false) },
+                )
                 pack == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("这份好友课表无法读取", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                 }
@@ -211,6 +220,17 @@ fun FriendScreen(viewModel: AppViewModel, onSetupSync: () -> Unit) {
             }
         }
     }
+    if (joinOpen) {
+        JoinWebDavShareDialog(
+            busy = webdavBusy,
+            onJoin = { code, nick ->
+                viewModel.joinWebDavShareCode(code, nick) { ok ->
+                    if (ok) joinOpen = false
+                }
+            },
+            onDismiss = { joinOpen = false },
+        )
+    }
 }
 
 @Composable
@@ -218,6 +238,7 @@ private fun FriendEmpty(
     configured: Boolean,
     busy: Boolean,
     onSetupSync: () -> Unit,
+    onJoinShare: () -> Unit,
     onSync: () -> Unit,
 ) {
     Column(
@@ -232,14 +253,15 @@ private fun FriendEmpty(
         )
         Text(
             if (configured) "点同步拉取同一网盘目录里其他昵称的课表"
-            else "同一网盘账号、不同昵称上传后会出现在这里",
+            else "同一网盘账号、不同昵称上传后会出现在这里。有分享码可以直接加入。",
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
         )
         if (configured) {
             Button(onClick = onSync, enabled = !busy) { Text(if (busy) "同步中…" else "同步好友") }
         } else {
-            Button(onClick = onSetupSync) { Text("去设置同步") }
+            Button(onClick = onJoinShare) { Text("用分享码加入") }
+            OutlinedButton(onClick = onSetupSync) { Text("去设置同步") }
         }
     }
 }

@@ -19,6 +19,7 @@ import cn.sysu.kcb.data.remote.SessionStatus
 import cn.sysu.kcb.data.remote.mirroredGithubUrl
 import cn.sysu.kcb.data.remote.isNewerThan
 import cn.sysu.kcb.data.remote.WebDavClient
+import cn.sysu.kcb.data.remote.WebDavShareCode
 import cn.sysu.kcb.data.remote.WebDavSyncWorker
 import cn.sysu.kcb.data.repo.TimetableSnapshot
 import cn.sysu.kcb.data.school.School
@@ -99,6 +100,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun consumeMessage() {
         message.value = null
+    }
+
+    fun showMessage(text: String) {
+        message.value = text
     }
 
     fun checkForUpdate(manual: Boolean = false) = viewModelScope.launch {
@@ -367,6 +372,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val file = container.share.exportSemester(semester)
             container.share.shareFile(file)
         }.onFailure { message.value = it.message ?: "导出失败" }
+    }
+
+    fun makeWebDavShareCode(url: String, user: String, typedPassword: String): String {
+        val password = typedPassword.trim().ifBlank { container.webdavSecrets.password() }
+        return WebDavShareCode.encode(url, user, password)
+    }
+
+    fun joinWebDavShareCode(
+        code: String,
+        nickname: String,
+        onDone: ((Boolean) -> Unit)? = null,
+    ) = viewModelScope.launch {
+        webdavBusy.value = true
+        val ok = runCatching {
+            val (url, user, password) = WebDavShareCode.decode(code)
+            persistWebDav(url, user, password, nickname, autoSync = true)
+            container.webdav.syncFriends()
+        }
+            .onSuccess { message.value = it }
+            .onFailure { message.value = it.message ?: "加入失败" }
+            .isSuccess
+        webdavBusy.value = false
+        onDone?.invoke(ok)
     }
 
     fun saveWebDav(
