@@ -774,9 +774,26 @@ internal fun TimetableGrid(
         val colW = (maxWidth - timeW) / 7
         val gridW = maxWidth
         val gridH = headerH + periodH * rows.size
+        val dayDates = (0..6).map { weekStart?.plusDays(it.toLong()) }
+        val todayCol = dayDates.indexOfFirst { it == today }
         Box(Modifier.height(gridH).fillMaxWidth()) {
+            if (todayCol >= 0) {
+                Box(
+                    Modifier
+                        .padding(start = timeW + colW * todayCol)
+                        .width(colW)
+                        .height(gridH)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
+                )
+                Box(
+                    Modifier
+                        .padding(start = timeW + colW * todayCol)
+                        .width(colW)
+                        .height(2.dp)
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+            }
             Row(Modifier.fillMaxWidth().height(headerH), verticalAlignment = Alignment.CenterVertically) {
-                val dayDates = (0..6).map { weekStart?.plusDays(it.toLong()) }
                 val months = dayDates.mapNotNull { it?.monthValue }.distinct()
                 val cornerMonth = when {
                     months.size >= 2 -> "${months.first()}/${months.last()}月"
