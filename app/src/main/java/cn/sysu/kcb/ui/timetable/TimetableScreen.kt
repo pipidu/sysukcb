@@ -94,7 +94,6 @@ import cn.sysu.kcb.domain.WeekMask
 import cn.sysu.kcb.notify.ClassAlarmScheduler
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.course.CourseDetailSheet
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.time.LocalDate
 
@@ -110,8 +109,9 @@ fun TimetableScreen(
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val repo = KcbApp.instance.container.timetable
+    val loadedSnapshot by viewModel.timetableSnapshot.collectAsStateWithLifecycle()
+    val snapshot = loadedSnapshot ?: TimetableSnapshot(null, emptyList(), emptyList(), emptyList())
     val semesters by repo.semesters.collectAsStateWithLifecycle(emptyList())
-    var snapshot by remember { mutableStateOf(TimetableSnapshot(null, emptyList(), emptyList(), emptyList())) }
     val semesterAnchor = remember(settings.selectedSemester, semesters) {
         semesters.firstOrNull { it.isCurrent }?.acadYearSemester
             ?: settings.selectedSemester.takeIf { it.isNotBlank() }
@@ -125,23 +125,17 @@ fun TimetableScreen(
         SemesterRange.span(semesterAnchor, before = 8, after = 8)
             .filterNot { it in populatedSemesters }
     }
-    val semester = remember(settings.selectedSemester, semesters, populatedSemesters) {
+    val semester = remember(settings.selectedSemester, semesters, populatedSemesters, loadedSnapshot) {
         pickSemester(settings, semesters, populatedSemesters)
+            .ifBlank { loadedSnapshot?.semester?.acadYearSemester.orEmpty() }
     }
     LaunchedEffect(semester, settings.selectedSemester, semesters) {
-        if (semester.isBlank()) {
-            snapshot = TimetableSnapshot(null, emptyList(), emptyList(), emptyList())
-            return@LaunchedEffect
-        }
-        // Only persist a semester that actually exists in the DB. Cold start used to
-        // write a guessed empty future term over the saved selection, so the grid
-        // looked like imported data had vanished.
+        if (semester.isBlank()) return@LaunchedEffect
         if (settings.selectedSemester.isBlank() &&
             semesters.any { it.acadYearSemester == semester }
         ) {
             viewModel.setSemester(semester)
         }
-        repo.timetableState(semester).collectLatest { snapshot = it }
     }
     var selectedWeek by rememberSaveable { mutableIntStateOf(0) }
     var userPickedWeek by rememberSaveable { mutableStateOf(false) }
@@ -371,7 +365,10 @@ fun TimetableScreen(
                     }
                 }
                 Box(Modifier.weight(1f)) {
-                    val empty = snapshot.courses.isEmpty() && snapshot.notes.isEmpty() && !editing
+                    val empty = loadedSnapshot != null &&
+                        snapshot.courses.isEmpty() &&
+                        snapshot.notes.isEmpty() &&
+                        !editing
                     if (termOverview) {
                         TimetableGrid(
                             periods = snapshot.periods,
@@ -580,7 +577,7 @@ internal fun weekRangeLabel(
     return "${start.monthValue}/${start.dayOfMonth}–${end.monthValue}/${end.dayOfMonth}"
 }
 
-private fun pickSemester(
+internal fun pickSemester(
     settings: UserSettings,
     semesters: List<SemesterEntity>,
     populated: List<String>,

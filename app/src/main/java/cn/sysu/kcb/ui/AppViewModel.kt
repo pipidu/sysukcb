@@ -20,14 +20,23 @@ import cn.sysu.kcb.data.remote.mirroredGithubUrl
 import cn.sysu.kcb.data.remote.isNewerThan
 import cn.sysu.kcb.data.remote.WebDavClient
 import cn.sysu.kcb.data.remote.WebDavSyncWorker
+import cn.sysu.kcb.data.repo.TimetableSnapshot
 import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.ui.timetable.defaultStickyNote
+import cn.sysu.kcb.ui.timetable.pickSemester
 import cn.sysu.kcb.widget.WidgetData
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
@@ -41,21 +50,52 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         UserSettings(),
     )
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val timetableSnapshot: StateFlow<TimetableSnapshot?> = container.settings.settings
+        .map { it.selectedSemester }
+        .distinctUntilChanged()
+        .flatMapLatest { saved ->
+            if (saved.isNotBlank()) {
+                container.timetable.timetableState(saved)
+            } else {
+                combine(
+                    container.timetable.semesters,
+                    container.timetable.populatedCourseSemesters,
+                ) { semesters, populated ->
+                    pickSemester(UserSettings(selectedSemester = saved), semesters, populated)
+                }.distinctUntilChanged().flatMapLatest { sem ->
+                    if (sem.isBlank()) {
+                        flowOf(TimetableSnapshot(null, emptyList(), emptyList(), emptyList()))
+                    } else {
+                        container.timetable.timetableState(sem)
+                    }
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     val message = MutableStateFlow<String?>(null)
     val importing = MutableStateFlow(false)
     val importProgress = MutableStateFlow("")
-    val loggedIn = MutableStateFlow(container.cookies.hasAnySession())
-    val sessionStatus = MutableStateFlow(
-        if (container.cookies.hasAnySession()) SessionStatus.Valid else SessionStatus.LoggedOut,
-    )
+    val loggedIn = MutableStateFlow(false)
+    val sessionStatus = MutableStateFlow(SessionStatus.LoggedOut)
     val checkingSession = MutableStateFlow(false)
     val openTimetableAt = MutableStateFlow(0L)
     val updateState = MutableStateFlow<UpdateCheckState>(UpdateCheckState.Idle)
     val apkDownload = MutableStateFlow<ApkDownloadState>(ApkDownloadState.Idle)
     val webdavBusy = MutableStateFlow(false)
-    val webdavHasPassword = MutableStateFlow(container.webdavSecrets.hasPassword())
+    val webdavHasPassword = MutableStateFlow(false)
     private var lastUpdateCheckAt = 0L
     private var downloadJob: Job? = null
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            val hasSession = container.cookies.hasAnySession()
+            loggedIn.value = hasSession
+            sessionStatus.value = if (hasSession) SessionStatus.Valid else SessionStatus.LoggedOut
+            webdavHasPassword.value = container.webdavSecrets.hasPassword()
+        }
+    }
 
     fun consumeMessage() {
         message.value = null

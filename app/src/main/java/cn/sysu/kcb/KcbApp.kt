@@ -6,6 +6,7 @@ import cn.sysu.kcb.data.remote.WebDavSyncWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class KcbApp : Application() {
@@ -19,9 +20,11 @@ class KcbApp : Application() {
         instance = this
         container = AppContainer(this)
         appScope.launch {
+            runCatching { container.timetable.listSemesters() }
             val enabled = runCatching { container.settings.snapshot().webdavAutoSync }.getOrDefault(true)
             WebDavSyncWorker.schedule(this@KcbApp, enabled)
             if (enabled) {
+                delay(2_500)
                 runCatching { container.webdav.autoSync() }
             }
         }

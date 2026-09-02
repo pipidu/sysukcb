@@ -10,20 +10,8 @@ import androidx.security.crypto.MasterKey
 import cn.sysu.kcb.data.school.School
 
 class CookieStore(context: Context) {
-    private val prefs: SharedPreferences = runCatching {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        EncryptedSharedPreferences.create(
-            context,
-            "kcb_cookies",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
-    }.getOrElse {
-        context.getSharedPreferences("kcb_cookies_plain", Context.MODE_PRIVATE)
-    }
+    private val appContext = context.applicationContext
+    private val prefs: SharedPreferences by lazy { openPrefs(appContext) }
 
     fun cookieHeader(): String = prefs.getString(KEY, "").orEmpty()
 
@@ -81,5 +69,20 @@ class CookieStore(context: Context) {
         const val JWXT_ORIGIN = "https://jwxt.sysu.edu.cn"
         const val LOGIN_URL =
             "https://jwxt.sysu.edu.cn/jwxt/api/sso/cas/login?pattern=student-login"
+
+        private fun openPrefs(context: Context): SharedPreferences = runCatching {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            EncryptedSharedPreferences.create(
+                context,
+                "kcb_cookies",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+            )
+        }.getOrElse {
+            context.getSharedPreferences("kcb_cookies_plain", Context.MODE_PRIVATE)
+        }
     }
 }
