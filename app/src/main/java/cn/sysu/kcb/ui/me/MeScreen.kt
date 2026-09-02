@@ -100,6 +100,7 @@ fun MeScreen(
     val checkingSession by viewModel.checkingSession.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showColor by remember { mutableStateOf(false) }
+    var showHighlightColor by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var confirmAllImport by remember { mutableStateOf(false) }
     var showWakeUp by remember { mutableStateOf(false) }
@@ -283,6 +284,60 @@ fun MeScreen(
                     },
                     modifier = Modifier.clickable { showColor = true },
                 )
+                Text("课表格子高度 ${settings.periodHeightDp} dp", style = MaterialTheme.typography.labelLarge)
+                Slider(
+                    value = settings.periodHeightDp.toFloat(),
+                    onValueChange = { viewModel.setPeriodHeightDp(it.toInt()) },
+                    valueRange = SettingsRepository.MIN_PERIOD_HEIGHT_DP.toFloat()..SettingsRepository.MAX_PERIOD_HEIGHT_DP.toFloat(),
+                    steps = SettingsRepository.MAX_PERIOD_HEIGHT_DP - SettingsRepository.MIN_PERIOD_HEIGHT_DP - 1,
+                )
+                ListItem(
+                    headlineContent = { Text("今天列高亮") },
+                    supportingContent = { Text("当前周里把今天那一列标出来") },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.todayHighlightEnabled,
+                            onCheckedChange = { viewModel.setTodayHighlightEnabled(it) },
+                        )
+                    },
+                )
+                AnimatedVisibility(
+                    visible = settings.todayHighlightEnabled,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        val followTheme = settings.todayHighlightColor == 0L
+                        val preview = if (followTheme) settings.themeColor else settings.todayHighlightColor
+                        ListItem(
+                            headlineContent = { Text("高亮颜色") },
+                            supportingContent = { Text(if (followTheme) "跟随主题色" else themeColorName(settings.todayHighlightColor)) },
+                            trailingContent = {
+                                Box(
+                                    Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(preview)),
+                                )
+                            },
+                            modifier = Modifier.clickable { showHighlightColor = true },
+                        )
+                        Text("透明度 ${settings.todayHighlightAlpha}%")
+                        Slider(
+                            value = settings.todayHighlightAlpha.toFloat(),
+                            onValueChange = { viewModel.setTodayHighlightAlpha(it.toInt()) },
+                            valueRange = SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA.toFloat()..SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA.toFloat(),
+                            steps = SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA - SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA - 1,
+                        )
+                        Text("顶条 ${settings.todayHighlightBarDp} dp")
+                        Slider(
+                            value = settings.todayHighlightBarDp.toFloat(),
+                            onValueChange = { viewModel.setTodayHighlightBarDp(it.toInt()) },
+                            valueRange = SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP.toFloat()..SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP.toFloat(),
+                            steps = SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP - SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP - 1,
+                        )
+                    }
+                }
                 ListItem(
                     headlineContent = { Text("上课提醒") },
                     trailingContent = {
@@ -399,11 +454,28 @@ fun MeScreen(
     }
     if (showColor) {
         ColorPickerDialog(
+            title = "主题色",
             current = settings.themeColor,
             onDismiss = { showColor = false },
             onPick = {
                 viewModel.setThemeColor(it)
                 showColor = false
+            },
+        )
+    }
+    if (showHighlightColor) {
+        ColorPickerDialog(
+            title = "今天列高亮",
+            current = settings.todayHighlightColor.takeIf { it != 0L } ?: settings.themeColor,
+            followThemeLabel = "跟随主题色",
+            onFollowTheme = {
+                viewModel.setTodayHighlightColor(0L)
+                showHighlightColor = false
+            },
+            onDismiss = { showHighlightColor = false },
+            onPick = {
+                viewModel.setTodayHighlightColor(it)
+                showHighlightColor = false
             },
         )
     }
@@ -524,6 +596,9 @@ private fun ColorPickerDialog(
     current: Long,
     onDismiss: () -> Unit,
     onPick: (Long) -> Unit,
+    title: String = "主题色",
+    followThemeLabel: String? = null,
+    onFollowTheme: (() -> Unit)? = null,
 ) {
     val rgb = remember(current) { rgbOf(current) }
     var r by remember { mutableFloatStateOf(rgb[0]) }
@@ -540,7 +615,7 @@ private fun ColorPickerDialog(
     val livePacked = packedRgb(r, g, b)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("主题色") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 FlowRow(
@@ -604,6 +679,11 @@ private fun ColorPickerDialog(
                     label = { Text("十六进制") },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (followThemeLabel != null && onFollowTheme != null) {
+                    TextButton(onClick = onFollowTheme, modifier = Modifier.fillMaxWidth()) {
+                        Text(followThemeLabel)
+                    }
+                }
             }
         },
         confirmButton = {
@@ -659,5 +739,5 @@ private fun appearanceSummary(settings: UserSettings): String {
         SettingsRepository.THEME_MODE_DARK -> "深色"
         else -> "跟随系统"
     }
-    return "${themeColorName(settings.themeColor)} · $mode"
+    return "${themeColorName(settings.themeColor)} · $mode · 格子${settings.periodHeightDp}"
 }

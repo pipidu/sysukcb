@@ -61,6 +61,7 @@ import cn.sysu.kcb.KcbApp
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.ExamEntity
 import cn.sysu.kcb.data.local.StickyNoteEntity
+import cn.sysu.kcb.data.prefs.UserSettings
 import cn.sysu.kcb.data.repo.SharePack
 import cn.sysu.kcb.domain.SemesterRange
 import cn.sysu.kcb.domain.WeekMask
@@ -206,7 +207,7 @@ fun FriendScreen(viewModel: AppViewModel, onSetupSync: () -> Unit) {
                     Text("这份好友课表无法读取", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                 }
                 pane == "exam" -> FriendExamPane(pack)
-                else -> FriendTimetablePane(pack, settings.themeColor)
+                else -> FriendTimetablePane(pack, settings)
             }
         }
     }
@@ -244,7 +245,8 @@ private fun FriendEmpty(
 }
 
 @Composable
-private fun FriendTimetablePane(pack: SharePack, themeColor: Long) {
+private fun FriendTimetablePane(pack: SharePack, settings: UserSettings) {
+    val themeColor = settings.themeColor
     val semesterOptions = remember(pack) { packSemesterOptions(pack) }
     var semester by rememberSaveable(pack.exportedAt) { mutableStateOf(pickPackSemester(pack, semesterOptions)) }
     var semesterMenu by remember { mutableStateOf(false) }
@@ -382,6 +384,11 @@ private fun FriendTimetablePane(pack: SharePack, themeColor: Long) {
                     notes = notes,
                     noteEditable = false,
                     onNoteEdit = { viewingNote = it },
+                    periodHeightDp = settings.periodHeightDp,
+                    todayHighlightEnabled = settings.todayHighlightEnabled,
+                    todayHighlightColor = settings.todayHighlightColor,
+                    todayHighlightAlpha = settings.todayHighlightAlpha,
+                    todayHighlightBarDp = settings.todayHighlightBarDp,
                 )
             } else {
                 HorizontalPager(
@@ -401,6 +408,11 @@ private fun FriendTimetablePane(pack: SharePack, themeColor: Long) {
                         notes = stickyNotesOnWeek(notes, weekNo),
                         noteEditable = false,
                         onNoteEdit = { viewingNote = it },
+                        periodHeightDp = settings.periodHeightDp,
+                        todayHighlightEnabled = settings.todayHighlightEnabled,
+                        todayHighlightColor = settings.todayHighlightColor,
+                        todayHighlightAlpha = settings.todayHighlightAlpha,
+                        todayHighlightBarDp = settings.todayHighlightBarDp,
                     )
                 }
             }

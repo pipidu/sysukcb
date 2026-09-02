@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -173,7 +174,13 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             title = { Text("发现新版本 ${update.versionName}") },
             text = {
                 Column {
-                    Text(update.notes.ifBlank { "下载安装包后按系统提示安装。" })
+                    Column(
+                        Modifier
+                            .heightIn(max = 280.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Text(update.notes.ifBlank { "下载安装包后按系统提示安装。" })
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,

@@ -166,6 +166,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         container.settings.setThemeMode(mode)
     }
 
+    fun setPeriodHeightDp(dp: Int) = viewModelScope.launch {
+        container.settings.setPeriodHeightDp(dp)
+    }
+
+    fun setTodayHighlightEnabled(enabled: Boolean) = viewModelScope.launch {
+        container.settings.setTodayHighlightEnabled(enabled)
+    }
+
+    fun setTodayHighlightColor(color: Long) = viewModelScope.launch {
+        container.settings.setTodayHighlightColor(color)
+    }
+
+    fun setTodayHighlightAlpha(percent: Int) = viewModelScope.launch {
+        container.settings.setTodayHighlightAlpha(percent)
+    }
+
+    fun setTodayHighlightBarDp(dp: Int) = viewModelScope.launch {
+        container.settings.setTodayHighlightBarDp(dp)
+    }
+
     fun setReminderEnabled(enabled: Boolean) = viewModelScope.launch {
         container.settings.setReminderEnabled(enabled)
         refreshAlarms()

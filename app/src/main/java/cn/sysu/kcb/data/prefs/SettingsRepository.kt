@@ -31,6 +31,11 @@ data class UserSettings(
     val webdavLastMessage: String = "",
     val updateUseMirror: Boolean = false,
     val selectedFriendId: String = "",
+    val periodHeightDp: Int = SettingsRepository.DEFAULT_PERIOD_HEIGHT_DP,
+    val todayHighlightEnabled: Boolean = true,
+    val todayHighlightColor: Long = 0L,
+    val todayHighlightAlpha: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA,
+    val todayHighlightBarDp: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -95,6 +100,30 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.selectedFriendId] = id }
     }
 
+    suspend fun setPeriodHeightDp(dp: Int) {
+        context.dataStore.edit { it[Keys.periodHeightDp] = dp.coerceIn(MIN_PERIOD_HEIGHT_DP, MAX_PERIOD_HEIGHT_DP) }
+    }
+
+    suspend fun setTodayHighlightEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.todayHighlightEnabled] = enabled }
+    }
+
+    suspend fun setTodayHighlightColor(color: Long) {
+        context.dataStore.edit { it[Keys.todayHighlightColor] = color }
+    }
+
+    suspend fun setTodayHighlightAlpha(percent: Int) {
+        context.dataStore.edit {
+            it[Keys.todayHighlightAlpha] = percent.coerceIn(MIN_TODAY_HIGHLIGHT_ALPHA, MAX_TODAY_HIGHLIGHT_ALPHA)
+        }
+    }
+
+    suspend fun setTodayHighlightBarDp(dp: Int) {
+        context.dataStore.edit {
+            it[Keys.todayHighlightBarDp] = dp.coerceIn(MIN_TODAY_HIGHLIGHT_BAR_DP, MAX_TODAY_HIGHLIGHT_BAR_DP)
+        }
+    }
+
     suspend fun setWebDavLastSync(at: Long, message: String) {
         context.dataStore.edit {
             it[Keys.webdavLastSyncAt] = at
@@ -119,6 +148,14 @@ class SettingsRepository(private val context: Context) {
         webdavLastMessage = this[Keys.webdavLastMessage].orEmpty(),
         updateUseMirror = this[Keys.updateUseMirror] ?: false,
         selectedFriendId = this[Keys.selectedFriendId].orEmpty(),
+        periodHeightDp = (this[Keys.periodHeightDp] ?: SettingsRepository.DEFAULT_PERIOD_HEIGHT_DP)
+            .coerceIn(SettingsRepository.MIN_PERIOD_HEIGHT_DP, SettingsRepository.MAX_PERIOD_HEIGHT_DP),
+        todayHighlightEnabled = this[Keys.todayHighlightEnabled] ?: true,
+        todayHighlightColor = this[Keys.todayHighlightColor] ?: 0L,
+        todayHighlightAlpha = (this[Keys.todayHighlightAlpha] ?: SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA)
+            .coerceIn(SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA, SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA),
+        todayHighlightBarDp = (this[Keys.todayHighlightBarDp] ?: SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP)
+            .coerceIn(SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP, SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP),
     )
 
     private object Keys {
@@ -138,6 +175,11 @@ class SettingsRepository(private val context: Context) {
         val webdavLastMessage = stringPreferencesKey("webdav_last_message")
         val updateUseMirror = booleanPreferencesKey("update_use_mirror")
         val selectedFriendId = stringPreferencesKey("selected_friend_id")
+        val periodHeightDp = intPreferencesKey("period_height_dp")
+        val todayHighlightEnabled = booleanPreferencesKey("today_highlight_enabled")
+        val todayHighlightColor = longPreferencesKey("today_highlight_color")
+        val todayHighlightAlpha = intPreferencesKey("today_highlight_alpha")
+        val todayHighlightBarDp = intPreferencesKey("today_highlight_bar_dp")
     }
 
     companion object {
@@ -146,5 +188,14 @@ class SettingsRepository(private val context: Context) {
         const val THEME_MODE_SYSTEM = "system"
         const val THEME_MODE_LIGHT = "light"
         const val THEME_MODE_DARK = "dark"
+        const val DEFAULT_PERIOD_HEIGHT_DP = 58
+        const val MIN_PERIOD_HEIGHT_DP = 40
+        const val MAX_PERIOD_HEIGHT_DP = 88
+        const val DEFAULT_TODAY_HIGHLIGHT_ALPHA = 22
+        const val MIN_TODAY_HIGHLIGHT_ALPHA = 8
+        const val MAX_TODAY_HIGHLIGHT_ALPHA = 50
+        const val DEFAULT_TODAY_HIGHLIGHT_BAR_DP = 3
+        const val MIN_TODAY_HIGHLIGHT_BAR_DP = 0
+        const val MAX_TODAY_HIGHLIGHT_BAR_DP = 8
     }
 }

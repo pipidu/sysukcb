@@ -85,6 +85,7 @@ import cn.sysu.kcb.data.local.PeriodEntity
 import cn.sysu.kcb.data.local.SemesterEntity
 import cn.sysu.kcb.data.local.StickyNoteEntity
 import cn.sysu.kcb.data.local.WeekEntity
+import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.prefs.UserSettings
 import cn.sysu.kcb.data.repo.TimetableSnapshot
 import cn.sysu.kcb.domain.CourseColors
@@ -395,6 +396,11 @@ fun TimetableScreen(
                             noteEditable = true,
                             onNoteChange = { viewModel.saveStickyNote(it) },
                             onNoteEdit = { editingNote = it },
+                            periodHeightDp = settings.periodHeightDp,
+                            todayHighlightEnabled = settings.todayHighlightEnabled,
+                            todayHighlightColor = settings.todayHighlightColor,
+                            todayHighlightAlpha = settings.todayHighlightAlpha,
+                            todayHighlightBarDp = settings.todayHighlightBarDp,
                         )
                     } else {
                         HorizontalPager(
@@ -422,6 +428,11 @@ fun TimetableScreen(
                                 noteEditable = true,
                                 onNoteChange = { viewModel.saveStickyNote(it) },
                                 onNoteEdit = { editingNote = it },
+                                periodHeightDp = settings.periodHeightDp,
+                                todayHighlightEnabled = settings.todayHighlightEnabled,
+                                todayHighlightColor = settings.todayHighlightColor,
+                                todayHighlightAlpha = settings.todayHighlightAlpha,
+                                todayHighlightBarDp = settings.todayHighlightBarDp,
                             )
                         }
                     }
@@ -750,8 +761,16 @@ internal fun TimetableGrid(
     noteEditable: Boolean = false,
     onNoteChange: ((StickyNoteEntity) -> Unit)? = null,
     onNoteEdit: ((StickyNoteEntity) -> Unit)? = null,
+    periodHeightDp: Int = SettingsRepository.DEFAULT_PERIOD_HEIGHT_DP,
+    todayHighlightEnabled: Boolean = true,
+    todayHighlightColor: Long = 0L,
+    todayHighlightAlpha: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA,
+    todayHighlightBarDp: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP,
 ) {
-    val periodH = 58.dp
+    val periodH = periodHeightDp.coerceIn(
+        SettingsRepository.MIN_PERIOD_HEIGHT_DP,
+        SettingsRepository.MAX_PERIOD_HEIGHT_DP,
+    ).dp
     val headerH = 40.dp
     val timeW = 40.dp
     val today = LocalDate.now()
@@ -777,21 +796,28 @@ internal fun TimetableGrid(
         val dayDates = (0..6).map { weekStart?.plusDays(it.toLong()) }
         val todayCol = dayDates.indexOfFirst { it == today }
         Box(Modifier.height(gridH).fillMaxWidth()) {
-            if (todayCol >= 0) {
+            if (todayCol >= 0 && todayHighlightEnabled) {
+                val fill = if (todayHighlightColor == 0L) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    Color(todayHighlightColor)
+                }
                 Box(
                     Modifier
                         .padding(start = timeW + colW * todayCol)
                         .width(colW)
                         .height(gridH)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)),
+                        .background(fill.copy(alpha = todayHighlightAlpha.coerceIn(8, 50) / 100f)),
                 )
-                Box(
-                    Modifier
-                        .padding(start = timeW + colW * todayCol)
-                        .width(colW)
-                        .height(3.dp)
-                        .background(MaterialTheme.colorScheme.primary),
-                )
+                if (todayHighlightBarDp > 0) {
+                    Box(
+                        Modifier
+                            .padding(start = timeW + colW * todayCol)
+                            .width(colW)
+                            .height(todayHighlightBarDp.dp)
+                            .background(fill),
+                    )
+                }
             }
             Row(Modifier.fillMaxWidth().height(headerH), verticalAlignment = Alignment.CenterVertically) {
                 val months = dayDates.mapNotNull { it?.monthValue }.distinct()

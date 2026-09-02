@@ -82,11 +82,26 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+          name = "${{ steps.ver.outputs.name }}"
+          code = "${{ steps.ver.outputs.code }}"
+          text = Path("CHANGELOG.md").read_text(encoding="utf-8") if Path("CHANGELOG.md").exists() else ""
+          match = re.search(rf"(?ms)^##\s+{re.escape(name)}\s*\n(.*?)(?=^##\s|\Z)", text)
+          notes = ""
+          if match:
+              notes = re.sub(r"^(versionCode|versionName)\s*=.*\n?", "", match.group(1), flags=re.M).strip()
+          if not notes:
+              notes = "修复与改进。"
+          Path("release-notes.txt").write_text(
+              f"versionCode={code}\nversionName={name}\n\n{notes}\n",
+              encoding="utf-8",
+          )
+          PY
           APK="app/build/outputs/apk/release/app-release.apk"
           OUT="sysukcb-${{ steps.ver.outputs.name }}.apk"
           cp "$APK" "$OUT"
-          printf 'versionCode=%s\nversionName=%s\n\n从 GitHub Releases 下载 APK 安装。签名包可覆盖本机已装的正式版。\n' \
-            "${{ steps.ver.outputs.code }}" "${{ steps.ver.outputs.name }}" > release-notes.txt
           gh release create "${{ steps.ver.outputs.tag }}" "$OUT" \
             --title "课程表D ${{ steps.ver.outputs.name }}" \
             --latest \
