@@ -783,13 +783,13 @@ internal fun TimetableGrid(
                         .padding(start = timeW + colW * todayCol)
                         .width(colW)
                         .height(gridH)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)),
                 )
                 Box(
                     Modifier
                         .padding(start = timeW + colW * todayCol)
                         .width(colW)
-                        .height(2.dp)
+                        .height(3.dp)
                         .background(MaterialTheme.colorScheme.primary),
                 )
             }
