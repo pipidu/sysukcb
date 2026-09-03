@@ -39,6 +39,8 @@ import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -92,6 +94,7 @@ fun MeScreen(
     onLogin: () -> Unit,
     onAbout: () -> Unit,
     onWebDav: () -> Unit,
+    showAboutUpdateBadge: Boolean = false,
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val importing by viewModel.importing.collectAsStateWithLifecycle()
@@ -101,6 +104,7 @@ fun MeScreen(
     val context = LocalContext.current
     var showColor by remember { mutableStateOf(false) }
     var showHighlightColor by remember { mutableStateOf(false) }
+    var showPeriodHighlightColor by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var confirmAllImport by remember { mutableStateOf(false) }
     var showWakeUp by remember { mutableStateOf(false) }
@@ -339,6 +343,53 @@ fun MeScreen(
                     }
                 }
                 ListItem(
+                    headlineContent = { Text("当前节次行高亮") },
+                    supportingContent = { Text("正在上课的那一行标出来") },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.periodHighlightEnabled,
+                            onCheckedChange = { viewModel.setPeriodHighlightEnabled(it) },
+                        )
+                    },
+                )
+                AnimatedVisibility(
+                    visible = settings.periodHighlightEnabled,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        val followTheme = settings.periodHighlightColor == 0L
+                        val preview = if (followTheme) settings.themeColor else settings.periodHighlightColor
+                        ListItem(
+                            headlineContent = { Text("高亮颜色") },
+                            supportingContent = { Text(if (followTheme) "跟随主题色" else themeColorName(settings.periodHighlightColor)) },
+                            trailingContent = {
+                                Box(
+                                    Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(preview)),
+                                )
+                            },
+                            modifier = Modifier.clickable { showPeriodHighlightColor = true },
+                        )
+                        Text("透明度 ${settings.periodHighlightAlpha}%")
+                        Slider(
+                            value = settings.periodHighlightAlpha.toFloat(),
+                            onValueChange = { viewModel.setPeriodHighlightAlpha(it.toInt()) },
+                            valueRange = SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA.toFloat()..SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA.toFloat(),
+                            steps = SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA - SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA - 1,
+                        )
+                        Text("左边条 ${settings.periodHighlightBarDp} dp")
+                        Slider(
+                            value = settings.periodHighlightBarDp.toFloat(),
+                            onValueChange = { viewModel.setPeriodHighlightBarDp(it.toInt()) },
+                            valueRange = SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP.toFloat()..SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP.toFloat(),
+                            steps = SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP - SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP - 1,
+                        )
+                    }
+                }
+                ListItem(
                     headlineContent = { Text("上课提醒") },
                     trailingContent = {
                         Switch(
@@ -443,7 +494,9 @@ fun MeScreen(
                     )
                 },
                 leadingContent = {
-                    Icon(Icons.Outlined.Info, contentDescription = null)
+                    BadgedBox(badge = { if (showAboutUpdateBadge) Badge() }) {
+                        Icon(Icons.Outlined.Info, contentDescription = null)
+                    }
                 },
                 trailingContent = {
                     Icon(Icons.Outlined.ChevronRight, contentDescription = null)
@@ -476,6 +529,22 @@ fun MeScreen(
             onPick = {
                 viewModel.setTodayHighlightColor(it)
                 showHighlightColor = false
+            },
+        )
+    }
+    if (showPeriodHighlightColor) {
+        ColorPickerDialog(
+            title = "当前节次高亮",
+            current = settings.periodHighlightColor.takeIf { it != 0L } ?: settings.themeColor,
+            followThemeLabel = "跟随主题色",
+            onFollowTheme = {
+                viewModel.setPeriodHighlightColor(0L)
+                showPeriodHighlightColor = false
+            },
+            onDismiss = { showPeriodHighlightColor = false },
+            onPick = {
+                viewModel.setPeriodHighlightColor(it)
+                showPeriodHighlightColor = false
             },
         )
     }

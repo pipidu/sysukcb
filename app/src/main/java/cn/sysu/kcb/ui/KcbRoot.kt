@@ -21,6 +21,8 @@ import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -33,7 +35,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -220,6 +225,15 @@ private fun HomeTabs(
     val current by tabNav.currentBackStackEntryAsState()
     val route = current?.destination?.route ?: "timetable"
     val openTimetableAt by viewModel.openTimetableAt.collectAsStateWithLifecycle()
+    val updateState by viewModel.updateState.collectAsStateWithLifecycle()
+    val hasUpdate = updateState is UpdateCheckState.Available
+    var meOpenedForUpdate by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(hasUpdate) {
+        if (!hasUpdate) meOpenedForUpdate = false
+    }
+    LaunchedEffect(route, hasUpdate) {
+        if (hasUpdate && route == "me") meOpenedForUpdate = true
+    }
     LaunchedEffect(openTimetableAt) {
         if (openTimetableAt == 0L) return@LaunchedEffect
         tabNav.navigate("timetable") {
@@ -256,7 +270,11 @@ private fun HomeTabs(
                 NavigationBarItem(
                     selected = route == "me",
                     onClick = { tabNav.navigate("me") { popUpTo("timetable"); launchSingleTop = true } },
-                    icon = { Icon(Icons.Outlined.Person, contentDescription = "我的", modifier = Modifier.size(20.dp)) },
+                    icon = {
+                        BadgedBox(badge = { if (hasUpdate && !meOpenedForUpdate) Badge() }) {
+                            Icon(Icons.Outlined.Person, contentDescription = "我的", modifier = Modifier.size(20.dp))
+                        }
+                    },
                     label = { Text("我的", fontSize = 11.sp, lineHeight = 12.sp) },
                 )
             }
@@ -277,7 +295,13 @@ private fun HomeTabs(
             composable("exam") { ExamScreen(viewModel) }
             composable("friends") { FriendScreen(viewModel, onSetupSync = onWebDav) }
             composable("me") {
-                MeScreen(viewModel = viewModel, onLogin = onLogin, onAbout = onAbout, onWebDav = onWebDav)
+                MeScreen(
+                    viewModel = viewModel,
+                    onLogin = onLogin,
+                    onAbout = onAbout,
+                    onWebDav = onWebDav,
+                    showAboutUpdateBadge = hasUpdate && meOpenedForUpdate,
+                )
             }
         }
     }

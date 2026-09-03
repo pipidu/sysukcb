@@ -35,6 +35,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -95,6 +97,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             loggedIn.value = hasSession
             sessionStatus.value = if (hasSession) SessionStatus.Valid else SessionStatus.LoggedOut
             webdavHasPassword.value = container.webdavSecrets.hasPassword()
+        }
+        viewModelScope.launch {
+            timetableSnapshot.filterNotNull().first()
+            checkForUpdate(manual = false)
         }
     }
 
@@ -229,6 +235,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setTodayHighlightBarDp(dp: Int) = viewModelScope.launch {
         container.settings.setTodayHighlightBarDp(dp)
+    }
+
+    fun setPeriodHighlightEnabled(enabled: Boolean) = viewModelScope.launch {
+        container.settings.setPeriodHighlightEnabled(enabled)
+    }
+
+    fun setPeriodHighlightColor(color: Long) = viewModelScope.launch {
+        container.settings.setPeriodHighlightColor(color)
+    }
+
+    fun setPeriodHighlightAlpha(percent: Int) = viewModelScope.launch {
+        container.settings.setPeriodHighlightAlpha(percent)
+    }
+
+    fun setPeriodHighlightBarDp(dp: Int) = viewModelScope.launch {
+        container.settings.setPeriodHighlightBarDp(dp)
     }
 
     fun setReminderEnabled(enabled: Boolean) = viewModelScope.launch {

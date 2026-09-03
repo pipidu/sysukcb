@@ -279,6 +279,12 @@ private fun FriendTimetablePane(pack: SharePack, settings: UserSettings) {
     var viewingCourses by remember { mutableStateOf<List<CourseEntity>?>(null) }
     var viewingNote by remember { mutableStateOf<StickyNoteEntity?>(null) }
 
+    LaunchedEffect(semesterOptions) {
+        if (semesterOptions.isNotEmpty() && semester !in semesterOptions) {
+            semester = pickPackSemester(pack, semesterOptions)
+        }
+    }
+
     val courses = pack.courses.filter { it.acadYearSemester == semester }
     val weeks = pack.weeks.filter { it.acadYearSemester == semester }
     val periods = pack.periods.filter { it.acadYearSemester == semester }
@@ -411,6 +417,10 @@ private fun FriendTimetablePane(pack: SharePack, settings: UserSettings) {
                     todayHighlightColor = settings.todayHighlightColor,
                     todayHighlightAlpha = settings.todayHighlightAlpha,
                     todayHighlightBarDp = settings.todayHighlightBarDp,
+                    periodHighlightEnabled = settings.periodHighlightEnabled,
+                    periodHighlightColor = settings.periodHighlightColor,
+                    periodHighlightAlpha = settings.periodHighlightAlpha,
+                    periodHighlightBarDp = settings.periodHighlightBarDp,
                 )
             } else {
                 HorizontalPager(
@@ -435,6 +445,10 @@ private fun FriendTimetablePane(pack: SharePack, settings: UserSettings) {
                         todayHighlightColor = settings.todayHighlightColor,
                         todayHighlightAlpha = settings.todayHighlightAlpha,
                         todayHighlightBarDp = settings.todayHighlightBarDp,
+                        periodHighlightEnabled = settings.periodHighlightEnabled,
+                        periodHighlightColor = settings.periodHighlightColor,
+                        periodHighlightAlpha = settings.periodHighlightAlpha,
+                        periodHighlightBarDp = settings.periodHighlightBarDp,
                     )
                 }
             }
@@ -480,7 +494,10 @@ private fun FriendTimetablePane(pack: SharePack, settings: UserSettings) {
 private fun FriendExamPane(pack: SharePack) {
     val allExams = pack.exams
     val semesterOptions = remember(pack) {
-        (packSemesterOptions(pack) + allExams.map { it.acadYearSemester }).distinct()
+        allExams.map { it.acadYearSemester }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sortedByDescending { SemesterRange.ordinal(it) ?: Int.MIN_VALUE }
     }
     var examSemester by rememberSaveable(pack.exportedAt) {
         mutableStateOf(pickPackExamSemester(pack, semesterOptions))
@@ -491,6 +508,11 @@ private fun FriendExamPane(pack: SharePack) {
     val exams = allExams.filter { it.acadYearSemester == examSemester }
     val visible = exams.filter { selectedWeekId == "all" || it.examWeekId == selectedWeekId }
 
+    LaunchedEffect(semesterOptions) {
+        if (semesterOptions.isNotEmpty() && examSemester !in semesterOptions) {
+            examSemester = pickPackExamSemester(pack, semesterOptions)
+        }
+    }
     LaunchedEffect(examSemester) { selectedWeekId = "all" }
 
     Column(Modifier.fillMaxSize()) {
@@ -629,14 +651,10 @@ private fun examKey(exam: ExamEntity, index: Int): String =
     listOf(exam.acadYearSemester, exam.subjectName, exam.examDate, exam.startTime, index.toString()).joinToString("|")
 
 private fun packSemesterOptions(pack: SharePack): List<String> {
-    val fromPack = pack.semesters.map { it.acadYearSemester } +
-        pack.courses.map { it.acadYearSemester } +
-        pack.exams.map { it.acadYearSemester } +
-        pack.notes.map { it.acadYearSemester }
-    val current = pack.semesters.firstOrNull { it.isCurrent }?.acadYearSemester
-        ?: fromPack.maxOrNull()
-        ?: SemesterRange.guessCurrent()
-    return (SemesterRange.span(current, before = 8, after = 8) + fromPack).distinct()
+    return (pack.courses.map { it.acadYearSemester } + pack.notes.map { it.acadYearSemester })
+        .filter { it.isNotBlank() }
+        .distinct()
+        .sortedByDescending { SemesterRange.ordinal(it) ?: Int.MIN_VALUE }
 }
 
 private fun pickPackSemester(pack: SharePack, options: List<String>): String {
@@ -650,7 +668,7 @@ private fun pickPackExamSemester(pack: SharePack, options: List<String>): String
     val current = pack.semesters.firstOrNull { it.isCurrent }?.acadYearSemester
     if (current != null && pack.exams.any { it.acadYearSemester == current }) return current
     return pack.exams.groupingBy { it.acadYearSemester }.eachCount().maxByOrNull { it.value }?.key
-        ?: pickPackSemester(pack, options)
+        ?: options.firstOrNull().orEmpty()
 }
 
 private fun packMaxWeek(

@@ -14,17 +14,28 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import cn.sysu.kcb.data.prefs.SettingsRepository
 
-val PresetThemeColors = listOf(
-    0xFF8C1A1A to "中大红",
-    0xFF1B7A4E to "广大绿",
-    0xFFC62828 to "朱红",
-    0xFF1A237E to "靛蓝",
-    0xFF00695C to "青绿",
-    0xFF1B5E20 to "墨绿",
-    0xFF4A148C to "暮紫",
-    0xFFE65100 to "琥珀",
-    0xFF37474F to "石板",
+val NamedStickyNoteColors = listOf(
+    0xFFFFF59DL to "鹅黄",
+    0xFFFFCCBCL to "蜜桃",
+    0xFFC8E6C9L to "薄荷绿",
+    0xFFBBDEFBL to "晴空蓝",
+    0xFFF8BBD0L to "花粉",
+    0xFFE1BEE7L to "丁香",
+    0xFFFFE0B2L to "杏橙",
+    0xFFFFFFFFL to "雪白",
 )
+
+val PresetThemeColors = listOf(
+    0xFF8C1A1AL to "中大红",
+    0xFF1B7A4EL to "广大绿",
+    0xFFC62828L to "朱红",
+    0xFF1A237EL to "靛蓝",
+    0xFF00695CL to "青绿",
+    0xFF1B5E20L to "墨绿",
+    0xFF4A148CL to "暮紫",
+    0xFFE65100L to "琥珀",
+    0xFF37474FL to "石板",
+) + NamedStickyNoteColors
 
 fun colorSchemeFromSeed(seed: Long, dark: Boolean): ColorScheme {
     val primary = Color(seed)

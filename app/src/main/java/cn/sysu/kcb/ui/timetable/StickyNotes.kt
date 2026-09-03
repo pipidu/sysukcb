@@ -27,11 +27,14 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,18 +64,11 @@ import androidx.compose.ui.unit.sp
 import cn.sysu.kcb.data.local.StickyNoteEntity
 import cn.sysu.kcb.domain.CourseColors
 import cn.sysu.kcb.domain.WeekMask
+import cn.sysu.kcb.ui.theme.NamedStickyNoteColors
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
-internal val StickyNotePaper = listOf(
-    0xFFFFF59DL,
-    0xFFFFCCBCL,
-    0xFFC8E6C9L,
-    0xFFBBDEFBL,
-    0xFFF8BBD0L,
-    0xFFE1BEE7L,
-    0xFFFFE0B2L,
-    0xFFFFFFFFL,
-)
+internal val StickyNotePaper = NamedStickyNoteColors.map { it.first }
 
 private val noteBody = TextStyle(
     fontSize = 11.sp,
@@ -83,6 +79,28 @@ private val noteBody = TextStyle(
         trim = LineHeightStyle.Trim.Both,
     ),
 )
+
+private fun noteTextStyle(note: StickyNoteEntity): TextStyle {
+    val size = note.fontSizeSp.coerceIn(MIN_NOTE_FONT_SP, MAX_NOTE_FONT_SP)
+    return noteBody.copy(
+        fontSize = size.sp,
+        lineHeight = (size + 2).sp,
+        fontWeight = if (note.fontHighlight) FontWeight.SemiBold else FontWeight.Normal,
+        background = if (note.fontHighlight) noteHighlightColor(note.color) else Color.Unspecified,
+    )
+}
+
+private fun noteHighlightColor(paper: Long): Color {
+    val fill = Color(paper)
+    return if (fill.luminance() > 0.82f) {
+        Color(0xFFFFD54F).copy(alpha = 0.72f)
+    } else {
+        Color(0xFFFFEA00).copy(alpha = 0.55f)
+    }
+}
+
+private const val MIN_NOTE_FONT_SP = 9
+private const val MAX_NOTE_FONT_SP = 22
 
 internal fun defaultStickyNote(semester: String, existingCount: Int, week: Int = 1): StickyNoteEntity {
     val slot = existingCount % 5
@@ -104,6 +122,13 @@ internal fun defaultStickyNote(semester: String, existingCount: Int, week: Int =
 internal fun stickyNotesOnWeek(notes: List<StickyNoteEntity>, weekNo: Int): List<StickyNoteEntity> =
     notes.filter { WeekMask.showsOn(it.weeksMask, weekNo) }
 
+private data class NoteLayout(
+    val xFrac: Float,
+    val yFrac: Float,
+    val wFrac: Float,
+    val hFrac: Float,
+)
+
 @Composable
 internal fun StickyNoteLayer(
     notes: List<StickyNoteEntity>,
@@ -121,19 +146,38 @@ internal fun StickyNoteLayer(
     val notesLatest = rememberUpdatedState(notes)
     val onChangeLatest = rememberUpdatedState(onChange)
     val onEditLatest = rememberUpdatedState(onEdit)
+    var overlay by remember { mutableStateOf<Map<Long, NoteLayout>>(emptyMap()) }
+    val overlayLatest = rememberUpdatedState(overlay)
     var dragId by remember { mutableStateOf<Long?>(null) }
     var dragPx by remember { mutableStateOf(Offset.Zero) }
     var resizeId by remember { mutableStateOf<Long?>(null) }
     var resizePx by remember { mutableStateOf(Offset.Zero) }
-    fun latest(id: Long) = notesLatest.value.firstOrNull { it.id == id }
+    fun laidOut(note: StickyNoteEntity): NoteLayout =
+        overlay[note.id] ?: NoteLayout(note.xFrac, note.yFrac, note.wFrac, note.hFrac)
+    fun latest(id: Long): StickyNoteEntity? {
+        val note = notesLatest.value.firstOrNull { it.id == id } ?: return null
+        val layout = overlayLatest.value[id] ?: return note
+        return note.copy(xFrac = layout.xFrac, yFrac = layout.yFrac, wFrac = layout.wFrac, hFrac = layout.hFrac)
+    }
+    LaunchedEffect(notes) {
+        if (overlay.isEmpty()) return@LaunchedEffect
+        overlay = overlay.filter { (id, layout) ->
+            val note = notes.firstOrNull { it.id == id } ?: return@filter false
+            abs(note.xFrac - layout.xFrac) > 0.0001f ||
+                abs(note.yFrac - layout.yFrac) > 0.0001f ||
+                abs(note.wFrac - layout.wFrac) > 0.0001f ||
+                abs(note.hFrac - layout.hFrac) > 0.0001f
+        }
+    }
 
     notes.sortedBy { it.z }.forEach { note ->
         val dragging = dragId == note.id
         val resizing = resizeId == note.id
-        val w = gridW * note.wFrac.coerceIn(0.12f, 0.7f)
-        val h = gridH * note.hFrac.coerceIn(0.08f, 0.6f)
-        val x = gridW * note.xFrac.coerceIn(0f, 0.88f)
-        val y = gridH * note.yFrac.coerceIn(0f, 0.9f)
+        val layout = laidOut(note)
+        val w = gridW * layout.wFrac.coerceIn(0.12f, 0.7f)
+        val h = gridH * layout.hFrac.coerceIn(0.08f, 0.6f)
+        val x = gridW * layout.xFrac.coerceIn(0f, 0.88f)
+        val y = gridH * layout.yFrac.coerceIn(0f, 0.9f)
         val baseWpx = with(density) { w.toPx() }.coerceAtLeast(1f)
         val baseHpx = with(density) { h.toPx() }.coerceAtLeast(1f)
         val fill = Color(note.color).copy(alpha = note.alpha.coerceIn(0.35f, 1f))
@@ -160,12 +204,19 @@ internal fun StickyNoteLayer(
                                 }
                                 if (dragged) {
                                     latest(note.id)?.let { current ->
+                                        val next = NoteLayout(
+                                            xFrac = (current.xFrac + moved.x / gridWpx)
+                                                .coerceIn(0f, 1f - current.wFrac),
+                                            yFrac = (current.yFrac + moved.y / gridHpx)
+                                                .coerceIn(0f, 1f - current.hFrac),
+                                            wFrac = current.wFrac,
+                                            hFrac = current.hFrac,
+                                        )
+                                        overlay = overlayLatest.value + (note.id to next)
                                         onChangeLatest.value(
                                             current.copy(
-                                                xFrac = (current.xFrac + moved.x / gridWpx)
-                                                    .coerceIn(0f, 1f - current.wFrac),
-                                                yFrac = (current.yFrac + moved.y / gridHpx)
-                                                    .coerceIn(0f, 1f - current.hFrac),
+                                                xFrac = next.xFrac,
+                                                yFrac = next.yFrac,
                                                 z = System.currentTimeMillis(),
                                             ),
                                         )
@@ -203,7 +254,7 @@ internal fun StickyNoteLayer(
                 Text(
                     note.content.ifBlank { "便签" },
                     color = ink.copy(alpha = if (note.content.isBlank()) 0.55f else 1f),
-                    style = noteBody,
+                    style = noteTextStyle(note),
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (editable) {
@@ -222,12 +273,19 @@ internal fun StickyNoteLayer(
                                         resizePx = moved
                                     }
                                     latest(note.id)?.let { current ->
+                                        val next = NoteLayout(
+                                            xFrac = current.xFrac,
+                                            yFrac = current.yFrac,
+                                            wFrac = (current.wFrac + moved.x / gridWpx)
+                                                .coerceIn(0.12f, 0.7f),
+                                            hFrac = (current.hFrac + moved.y / gridHpx)
+                                                .coerceIn(0.08f, 0.6f),
+                                        )
+                                        overlay = overlayLatest.value + (note.id to next)
                                         onChangeLatest.value(
                                             current.copy(
-                                                wFrac = (current.wFrac + moved.x / gridWpx)
-                                                    .coerceIn(0.12f, 0.7f),
-                                                hFrac = (current.hFrac + moved.y / gridHpx)
-                                                    .coerceIn(0.08f, 0.6f),
+                                                wFrac = next.wFrac,
+                                                hFrac = next.hFrac,
                                                 z = System.currentTimeMillis(),
                                             ),
                                         )
@@ -264,15 +322,21 @@ internal fun StickyNoteEditorDialog(
 ) {
     val weekCount = ((maxWeek.coerceAtLeast(1) + 4) / 5 * 5).coerceIn(5, WeekMask.MAX_WEEK)
     val initialMask = if (note.weeksMask == 0L) WeekMask.fromRange(1, weekCount) else note.weeksMask
-    var content by remember(note.id, note.content, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask) {
+    var content by remember(note.id, note.content, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask, note.fontSizeSp, note.fontHighlight) {
         mutableStateOf(note.content)
     }
-    var color by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask) { mutableLongStateOf(note.color) }
-    var alpha by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask) { mutableFloatStateOf(note.alpha) }
-    var wFrac by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask) { mutableFloatStateOf(note.wFrac) }
-    var hFrac by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask) { mutableFloatStateOf(note.hFrac) }
-    var weeksMask by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask) {
+    var color by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask, note.fontSizeSp, note.fontHighlight) { mutableLongStateOf(note.color) }
+    var alpha by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask, note.fontSizeSp, note.fontHighlight) { mutableFloatStateOf(note.alpha) }
+    var wFrac by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask, note.fontSizeSp, note.fontHighlight) { mutableFloatStateOf(note.wFrac) }
+    var hFrac by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask, note.fontSizeSp, note.fontHighlight) { mutableFloatStateOf(note.hFrac) }
+    var weeksMask by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask, note.fontSizeSp, note.fontHighlight) {
         mutableLongStateOf(initialMask)
+    }
+    var fontSizeSp by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask, note.fontSizeSp, note.fontHighlight) {
+        mutableIntStateOf(note.fontSizeSp.coerceIn(MIN_NOTE_FONT_SP, MAX_NOTE_FONT_SP))
+    }
+    var fontHighlight by remember(note.id, note.color, note.alpha, note.wFrac, note.hFrac, note.weeksMask, note.fontSizeSp, note.fontHighlight) {
+        mutableStateOf(note.fontHighlight)
     }
     var confirmDelete by remember { mutableStateOf(false) }
     val palette = remember(themeColor) { StickyNotePaper + CourseColors.paletteFor(themeColor) }
@@ -283,7 +347,7 @@ internal fun StickyNoteEditorDialog(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .height(480.dp)
+                    .height(540.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -375,6 +439,20 @@ internal fun StickyNoteEditorDialog(
                 Slider(value = wFrac, onValueChange = { wFrac = it }, valueRange = 0.12f..0.7f)
                 Text("高度 ${(hFrac * 100).roundToInt()}%")
                 Slider(value = hFrac, onValueChange = { hFrac = it }, valueRange = 0.08f..0.6f)
+                Text("字号 ${fontSizeSp} sp")
+                Slider(
+                    value = fontSizeSp.toFloat(),
+                    onValueChange = { fontSizeSp = it.toInt().coerceIn(MIN_NOTE_FONT_SP, MAX_NOTE_FONT_SP) },
+                    valueRange = MIN_NOTE_FONT_SP.toFloat()..MAX_NOTE_FONT_SP.toFloat(),
+                    steps = MAX_NOTE_FONT_SP - MIN_NOTE_FONT_SP - 1,
+                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("文字高亮", fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                    Switch(checked = fontHighlight, onCheckedChange = { fontHighlight = it })
+                }
             }
         },
         confirmButton = {
@@ -388,6 +466,8 @@ internal fun StickyNoteEditorDialog(
                             wFrac = wFrac,
                             hFrac = hFrac,
                             weeksMask = weeksMask,
+                            fontSizeSp = fontSizeSp,
+                            fontHighlight = fontHighlight,
                             z = System.currentTimeMillis(),
                         ),
                     )
@@ -429,7 +509,11 @@ internal fun StickyNoteViewDialog(note: StickyNoteEntity, onDismiss: () -> Unit)
         title = { Text("便签") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(note.content.ifBlank { "（空白便签）" })
+                Text(
+                    note.content.ifBlank { "（空白便签）" },
+                    style = noteTextStyle(note),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
                 if (note.weeksMask != 0L) {
                     Text(
                         WeekMask.describe(note.weeksMask),

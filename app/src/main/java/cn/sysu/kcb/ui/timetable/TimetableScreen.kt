@@ -94,8 +94,11 @@ import cn.sysu.kcb.domain.WeekMask
 import cn.sysu.kcb.notify.ClassAlarmScheduler
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.course.CourseDetailSheet
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 private val dayNames = listOf("一", "二", "三", "四", "五", "六", "日")
 
@@ -398,6 +401,10 @@ fun TimetableScreen(
                             todayHighlightColor = settings.todayHighlightColor,
                             todayHighlightAlpha = settings.todayHighlightAlpha,
                             todayHighlightBarDp = settings.todayHighlightBarDp,
+                            periodHighlightEnabled = settings.periodHighlightEnabled,
+                            periodHighlightColor = settings.periodHighlightColor,
+                            periodHighlightAlpha = settings.periodHighlightAlpha,
+                            periodHighlightBarDp = settings.periodHighlightBarDp,
                         )
                     } else {
                         HorizontalPager(
@@ -430,6 +437,10 @@ fun TimetableScreen(
                                 todayHighlightColor = settings.todayHighlightColor,
                                 todayHighlightAlpha = settings.todayHighlightAlpha,
                                 todayHighlightBarDp = settings.todayHighlightBarDp,
+                                periodHighlightEnabled = settings.periodHighlightEnabled,
+                                periodHighlightColor = settings.periodHighlightColor,
+                                periodHighlightAlpha = settings.periodHighlightAlpha,
+                                periodHighlightBarDp = settings.periodHighlightBarDp,
                             )
                         }
                     }
@@ -763,6 +774,10 @@ internal fun TimetableGrid(
     todayHighlightColor: Long = 0L,
     todayHighlightAlpha: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA,
     todayHighlightBarDp: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP,
+    periodHighlightEnabled: Boolean = true,
+    periodHighlightColor: Long = 0L,
+    periodHighlightAlpha: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA,
+    periodHighlightBarDp: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP,
 ) {
     val periodH = periodHeightDp.coerceIn(
         SettingsRepository.MIN_PERIOD_HEIGHT_DP,
@@ -771,6 +786,14 @@ internal fun TimetableGrid(
     val headerH = 40.dp
     val timeW = 40.dp
     val today = LocalDate.now()
+    var now by remember { mutableStateOf(LocalTime.now()) }
+    LaunchedEffect(periodHighlightEnabled) {
+        if (!periodHighlightEnabled) return@LaunchedEffect
+        while (true) {
+            now = LocalTime.now()
+            delay(15_000)
+        }
+    }
     val rows = periods.ifEmpty {
         (1..11).map {
             PeriodEntity(
@@ -792,13 +815,10 @@ internal fun TimetableGrid(
         val gridH = headerH + periodH * rows.size
         val dayDates = (0..6).map { weekStart?.plusDays(it.toLong()) }
         val todayCol = dayDates.indexOfFirst { it == today }
+        val currentPeriodIndex = if (periodHighlightEnabled) findCurrentPeriodIndex(rows, now) else -1
         Box(Modifier.height(gridH).fillMaxWidth()) {
             if (todayCol >= 0 && todayHighlightEnabled) {
-                val fill = if (todayHighlightColor == 0L) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    Color(todayHighlightColor)
-                }
+                val fill = highlightFill(todayHighlightColor)
                 Box(
                     Modifier
                         .padding(start = timeW + colW * todayCol)
@@ -812,6 +832,26 @@ internal fun TimetableGrid(
                             .padding(start = timeW + colW * todayCol)
                             .width(colW)
                             .height(todayHighlightBarDp.dp)
+                            .background(fill),
+                    )
+                }
+            }
+            if (currentPeriodIndex >= 0) {
+                val fill = highlightFill(periodHighlightColor)
+                val y = headerH + periodH * currentPeriodIndex
+                Box(
+                    Modifier
+                        .padding(top = y)
+                        .fillMaxWidth()
+                        .height(periodH)
+                        .background(fill.copy(alpha = periodHighlightAlpha.coerceIn(8, 50) / 100f)),
+                )
+                if (periodHighlightBarDp > 0) {
+                    Box(
+                        Modifier
+                            .padding(top = y)
+                            .width(periodHighlightBarDp.dp)
+                            .height(periodH)
                             .background(fill),
                     )
                 }
@@ -870,6 +910,7 @@ internal fun TimetableGrid(
             }
             rows.forEachIndexed { index, period ->
                 val y = headerH + periodH * index
+                val isCurrentPeriod = index == currentPeriodIndex
                 Row(
                     Modifier
                         .padding(top = y)
@@ -881,19 +922,33 @@ internal fun TimetableGrid(
                         verticalArrangement = Arrangement.spacedBy(0.dp, Alignment.CenterVertically),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Text("${period.sectionNumber}", style = compactPeriod)
+                        Text(
+                            "${period.sectionNumber}",
+                            style = compactPeriod,
+                            fontWeight = if (isCurrentPeriod) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isCurrentPeriod) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        )
                         if (period.startTime.isNotBlank()) {
                             Text(
                                 period.startTime,
                                 style = compactTime,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                fontWeight = if (isCurrentPeriod) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isCurrentPeriod) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                                },
                             )
                         }
                         if (period.endTime.isNotBlank()) {
                             Text(
                                 period.endTime,
                                 style = compactTime,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                color = if (isCurrentPeriod) {
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                },
                             )
                         }
                     }
@@ -1025,3 +1080,25 @@ private fun overlapGroups(courses: List<CourseEntity>): List<List<CourseEntity>>
 
 private fun displayPlace(place: String): String =
     place.replace(Regex("（\\d+座）|\\(\\d+座\\)"), "").replace("/", "\n").trim()
+
+@Composable
+private fun highlightFill(color: Long): Color {
+    return if (color == 0L) MaterialTheme.colorScheme.primary else Color(color)
+}
+
+private val periodClockFormat = DateTimeFormatter.ofPattern("H:mm")
+
+private fun parsePeriodClock(raw: String): LocalTime? {
+    val value = raw.trim()
+    if (value.isBlank()) return null
+    return runCatching { LocalTime.parse(value) }.getOrNull()
+        ?: runCatching { LocalTime.parse(value, periodClockFormat) }.getOrNull()
+}
+
+private fun findCurrentPeriodIndex(periods: List<PeriodEntity>, now: LocalTime): Int {
+    return periods.indexOfFirst { period ->
+        val start = parsePeriodClock(period.startTime) ?: return@indexOfFirst false
+        val end = parsePeriodClock(period.endTime) ?: return@indexOfFirst false
+        !now.isBefore(start) && now.isBefore(end)
+    }
+}

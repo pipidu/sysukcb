@@ -36,6 +36,10 @@ data class UserSettings(
     val todayHighlightColor: Long = 0L,
     val todayHighlightAlpha: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA,
     val todayHighlightBarDp: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP,
+    val periodHighlightEnabled: Boolean = true,
+    val periodHighlightColor: Long = 0L,
+    val periodHighlightAlpha: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA,
+    val periodHighlightBarDp: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -124,6 +128,26 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun setPeriodHighlightEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.periodHighlightEnabled] = enabled }
+    }
+
+    suspend fun setPeriodHighlightColor(color: Long) {
+        context.dataStore.edit { it[Keys.periodHighlightColor] = color }
+    }
+
+    suspend fun setPeriodHighlightAlpha(percent: Int) {
+        context.dataStore.edit {
+            it[Keys.periodHighlightAlpha] = percent.coerceIn(MIN_TODAY_HIGHLIGHT_ALPHA, MAX_TODAY_HIGHLIGHT_ALPHA)
+        }
+    }
+
+    suspend fun setPeriodHighlightBarDp(dp: Int) {
+        context.dataStore.edit {
+            it[Keys.periodHighlightBarDp] = dp.coerceIn(MIN_TODAY_HIGHLIGHT_BAR_DP, MAX_TODAY_HIGHLIGHT_BAR_DP)
+        }
+    }
+
     suspend fun setWebDavLastSync(at: Long, message: String) {
         context.dataStore.edit {
             it[Keys.webdavLastSyncAt] = at
@@ -156,6 +180,12 @@ class SettingsRepository(private val context: Context) {
             .coerceIn(SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA, SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA),
         todayHighlightBarDp = (this[Keys.todayHighlightBarDp] ?: SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP)
             .coerceIn(SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP, SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP),
+        periodHighlightEnabled = this[Keys.periodHighlightEnabled] ?: true,
+        periodHighlightColor = this[Keys.periodHighlightColor] ?: 0L,
+        periodHighlightAlpha = (this[Keys.periodHighlightAlpha] ?: SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA)
+            .coerceIn(SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA, SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA),
+        periodHighlightBarDp = (this[Keys.periodHighlightBarDp] ?: SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP)
+            .coerceIn(SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP, SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP),
     )
 
     private object Keys {
@@ -180,6 +210,10 @@ class SettingsRepository(private val context: Context) {
         val todayHighlightColor = longPreferencesKey("today_highlight_color")
         val todayHighlightAlpha = intPreferencesKey("today_highlight_alpha")
         val todayHighlightBarDp = intPreferencesKey("today_highlight_bar_dp")
+        val periodHighlightEnabled = booleanPreferencesKey("period_highlight_enabled")
+        val periodHighlightColor = longPreferencesKey("period_highlight_color")
+        val periodHighlightAlpha = intPreferencesKey("period_highlight_alpha")
+        val periodHighlightBarDp = intPreferencesKey("period_highlight_bar_dp")
     }
 
     companion object {
