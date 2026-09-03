@@ -106,6 +106,8 @@ fun MeScreen(
     var showColor by remember { mutableStateOf(false) }
     var showHighlightColor by remember { mutableStateOf(false) }
     var showPeriodHighlightColor by remember { mutableStateOf(false) }
+    var showFriendHighlightColor by remember { mutableStateOf(false) }
+    var showFriendPeriodHighlightColor by remember { mutableStateOf(false) }
     var showBgColor by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var confirmAllImport by remember { mutableStateOf(false) }
@@ -358,100 +360,62 @@ fun MeScreen(
                     valueRange = SettingsRepository.MIN_PERIOD_HEIGHT_DP.toFloat()..SettingsRepository.MAX_PERIOD_HEIGHT_DP.toFloat(),
                     steps = SettingsRepository.MAX_PERIOD_HEIGHT_DP - SettingsRepository.MIN_PERIOD_HEIGHT_DP - 1,
                 )
-                ListItem(
-                    headlineContent = { Text("今天列高亮") },
-                    supportingContent = { Text("当前周里把今天那一列标出来") },
-                    trailingContent = {
-                        Switch(
-                            checked = settings.todayHighlightEnabled,
-                            onCheckedChange = { viewModel.setTodayHighlightEnabled(it) },
-                        )
-                    },
+                HighlightSwitchBlock(
+                    title = "今天列高亮",
+                    subtitle = "自己的课表里，当前周标出今天那一列",
+                    enabled = settings.todayHighlightEnabled,
+                    onEnabled = { viewModel.setTodayHighlightEnabled(it) },
+                    color = settings.todayHighlightColor,
+                    themeColor = settings.themeColor,
+                    alpha = settings.todayHighlightAlpha,
+                    barDp = settings.todayHighlightBarDp,
+                    barLabel = "顶条",
+                    onColorClick = { showHighlightColor = true },
+                    onAlpha = { viewModel.setTodayHighlightAlpha(it) },
+                    onBar = { viewModel.setTodayHighlightBarDp(it) },
                 )
-                AnimatedVisibility(
-                    visible = settings.todayHighlightEnabled,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut(),
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        val followTheme = settings.todayHighlightColor == 0L
-                        val preview = if (followTheme) settings.themeColor else settings.todayHighlightColor
-                        ListItem(
-                            headlineContent = { Text("高亮颜色") },
-                            supportingContent = { Text(if (followTheme) "跟随主题色" else themeColorName(settings.todayHighlightColor)) },
-                            trailingContent = {
-                                Box(
-                                    Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(preview)),
-                                )
-                            },
-                            modifier = Modifier.clickable { showHighlightColor = true },
-                        )
-                        Text("透明度 ${settings.todayHighlightAlpha}%")
-                        Slider(
-                            value = settings.todayHighlightAlpha.toFloat(),
-                            onValueChange = { viewModel.setTodayHighlightAlpha(it.toInt()) },
-                            valueRange = SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA.toFloat()..SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA.toFloat(),
-                            steps = SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA - SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA - 1,
-                        )
-                        Text("顶条 ${settings.todayHighlightBarDp} dp")
-                        Slider(
-                            value = settings.todayHighlightBarDp.toFloat(),
-                            onValueChange = { viewModel.setTodayHighlightBarDp(it.toInt()) },
-                            valueRange = SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP.toFloat()..SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP.toFloat(),
-                            steps = SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP - SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP - 1,
-                        )
-                    }
-                }
-                ListItem(
-                    headlineContent = { Text("当前节次行高亮") },
-                    supportingContent = { Text("正在上课的那一行标出来") },
-                    trailingContent = {
-                        Switch(
-                            checked = settings.periodHighlightEnabled,
-                            onCheckedChange = { viewModel.setPeriodHighlightEnabled(it) },
-                        )
-                    },
+                HighlightSwitchBlock(
+                    title = "好友今天列高亮",
+                    subtitle = "好友课表里标出今天那一列",
+                    enabled = settings.friendTodayHighlightEnabled,
+                    onEnabled = { viewModel.setFriendTodayHighlightEnabled(it) },
+                    color = settings.friendTodayHighlightColor,
+                    themeColor = settings.themeColor,
+                    alpha = settings.friendTodayHighlightAlpha,
+                    barDp = settings.friendTodayHighlightBarDp,
+                    barLabel = "顶条",
+                    onColorClick = { showFriendHighlightColor = true },
+                    onAlpha = { viewModel.setFriendTodayHighlightAlpha(it) },
+                    onBar = { viewModel.setFriendTodayHighlightBarDp(it) },
                 )
-                AnimatedVisibility(
-                    visible = settings.periodHighlightEnabled,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut(),
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        val followTheme = settings.periodHighlightColor == 0L
-                        val preview = if (followTheme) settings.themeColor else settings.periodHighlightColor
-                        ListItem(
-                            headlineContent = { Text("高亮颜色") },
-                            supportingContent = { Text(if (followTheme) "跟随主题色" else themeColorName(settings.periodHighlightColor)) },
-                            trailingContent = {
-                                Box(
-                                    Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(preview)),
-                                )
-                            },
-                            modifier = Modifier.clickable { showPeriodHighlightColor = true },
-                        )
-                        Text("透明度 ${settings.periodHighlightAlpha}%")
-                        Slider(
-                            value = settings.periodHighlightAlpha.toFloat(),
-                            onValueChange = { viewModel.setPeriodHighlightAlpha(it.toInt()) },
-                            valueRange = SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA.toFloat()..SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA.toFloat(),
-                            steps = SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA - SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA - 1,
-                        )
-                        Text("左边条 ${settings.periodHighlightBarDp} dp")
-                        Slider(
-                            value = settings.periodHighlightBarDp.toFloat(),
-                            onValueChange = { viewModel.setPeriodHighlightBarDp(it.toInt()) },
-                            valueRange = SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP.toFloat()..SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP.toFloat(),
-                            steps = SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP - SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP - 1,
-                        )
-                    }
-                }
+                HighlightSwitchBlock(
+                    title = "当前节次行高亮",
+                    subtitle = "自己的课表里标出正在上课的那一行",
+                    enabled = settings.periodHighlightEnabled,
+                    onEnabled = { viewModel.setPeriodHighlightEnabled(it) },
+                    color = settings.periodHighlightColor,
+                    themeColor = settings.themeColor,
+                    alpha = settings.periodHighlightAlpha,
+                    barDp = settings.periodHighlightBarDp,
+                    barLabel = "左边条",
+                    onColorClick = { showPeriodHighlightColor = true },
+                    onAlpha = { viewModel.setPeriodHighlightAlpha(it) },
+                    onBar = { viewModel.setPeriodHighlightBarDp(it) },
+                )
+                HighlightSwitchBlock(
+                    title = "好友当前节次行高亮",
+                    subtitle = "好友课表里标出正在上课的那一行",
+                    enabled = settings.friendPeriodHighlightEnabled,
+                    onEnabled = { viewModel.setFriendPeriodHighlightEnabled(it) },
+                    color = settings.friendPeriodHighlightColor,
+                    themeColor = settings.themeColor,
+                    alpha = settings.friendPeriodHighlightAlpha,
+                    barDp = settings.friendPeriodHighlightBarDp,
+                    barLabel = "左边条",
+                    onColorClick = { showFriendPeriodHighlightColor = true },
+                    onAlpha = { viewModel.setFriendPeriodHighlightAlpha(it) },
+                    onBar = { viewModel.setFriendPeriodHighlightBarDp(it) },
+                )
                 ListItem(
                     headlineContent = { Text("上课提醒") },
                     trailingContent = {
@@ -611,6 +575,38 @@ fun MeScreen(
             },
         )
     }
+    if (showFriendHighlightColor) {
+        ColorPickerDialog(
+            title = "好友今天列高亮",
+            current = settings.friendTodayHighlightColor.takeIf { it != 0L } ?: settings.themeColor,
+            followThemeLabel = "跟随主题色",
+            onFollowTheme = {
+                viewModel.setFriendTodayHighlightColor(0L)
+                showFriendHighlightColor = false
+            },
+            onDismiss = { showFriendHighlightColor = false },
+            onPick = {
+                viewModel.setFriendTodayHighlightColor(it)
+                showFriendHighlightColor = false
+            },
+        )
+    }
+    if (showFriendPeriodHighlightColor) {
+        ColorPickerDialog(
+            title = "好友当前节次高亮",
+            current = settings.friendPeriodHighlightColor.takeIf { it != 0L } ?: settings.themeColor,
+            followThemeLabel = "跟随主题色",
+            onFollowTheme = {
+                viewModel.setFriendPeriodHighlightColor(0L)
+                showFriendPeriodHighlightColor = false
+            },
+            onDismiss = { showFriendPeriodHighlightColor = false },
+            onPick = {
+                viewModel.setFriendPeriodHighlightColor(it)
+                showFriendPeriodHighlightColor = false
+            },
+        )
+    }
     if (showBgColor) {
         ColorPickerDialog(
             title = "课表背景",
@@ -734,6 +730,67 @@ private fun ExpandableCard(
                     content = content,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun HighlightSwitchBlock(
+    title: String,
+    subtitle: String,
+    enabled: Boolean,
+    onEnabled: (Boolean) -> Unit,
+    color: Long,
+    themeColor: Long,
+    alpha: Int,
+    barDp: Int,
+    barLabel: String,
+    onColorClick: () -> Unit,
+    onAlpha: (Int) -> Unit,
+    onBar: (Int) -> Unit,
+) {
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = { Text(subtitle) },
+        trailingContent = {
+            Switch(checked = enabled, onCheckedChange = onEnabled)
+        },
+    )
+    AnimatedVisibility(
+        visible = enabled,
+        enter = expandVertically() + fadeIn(),
+        exit = shrinkVertically() + fadeOut(),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            val followTheme = color == 0L
+            val preview = if (followTheme) themeColor else color
+            ListItem(
+                headlineContent = { Text("高亮颜色") },
+                supportingContent = { Text(if (followTheme) "跟随主题色" else themeColorName(color)) },
+                trailingContent = {
+                    Box(
+                        Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(Color(preview)),
+                    )
+                },
+                modifier = Modifier.clickable(onClick = onColorClick),
+            )
+            Text("透明度 $alpha%")
+            Slider(
+                value = alpha.toFloat(),
+                onValueChange = { onAlpha(it.toInt()) },
+                valueRange = SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA.toFloat()..SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA.toFloat(),
+                steps = SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA - SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA - 1,
+            )
+            Text("$barLabel $barDp dp")
+            Slider(
+                value = barDp.toFloat(),
+                onValueChange = { onBar(it.toInt()) },
+                valueRange = SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP.toFloat()..SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP.toFloat(),
+                steps = SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP - SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP - 1,
+            )
         }
     }
 }

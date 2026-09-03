@@ -266,6 +266,38 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         container.settings.setPeriodHighlightBarDp(dp)
     }
 
+    fun setFriendTodayHighlightEnabled(enabled: Boolean) = viewModelScope.launch {
+        container.settings.setFriendTodayHighlightEnabled(enabled)
+    }
+
+    fun setFriendTodayHighlightColor(color: Long) = viewModelScope.launch {
+        container.settings.setFriendTodayHighlightColor(color)
+    }
+
+    fun setFriendTodayHighlightAlpha(percent: Int) = viewModelScope.launch {
+        container.settings.setFriendTodayHighlightAlpha(percent)
+    }
+
+    fun setFriendTodayHighlightBarDp(dp: Int) = viewModelScope.launch {
+        container.settings.setFriendTodayHighlightBarDp(dp)
+    }
+
+    fun setFriendPeriodHighlightEnabled(enabled: Boolean) = viewModelScope.launch {
+        container.settings.setFriendPeriodHighlightEnabled(enabled)
+    }
+
+    fun setFriendPeriodHighlightColor(color: Long) = viewModelScope.launch {
+        container.settings.setFriendPeriodHighlightColor(color)
+    }
+
+    fun setFriendPeriodHighlightAlpha(percent: Int) = viewModelScope.launch {
+        container.settings.setFriendPeriodHighlightAlpha(percent)
+    }
+
+    fun setFriendPeriodHighlightBarDp(dp: Int) = viewModelScope.launch {
+        container.settings.setFriendPeriodHighlightBarDp(dp)
+    }
+
     fun setTimetableBgColor(color: Long) = viewModelScope.launch {
         container.settings.setTimetableBgColor(color)
         if (color != 0L) {

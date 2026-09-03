@@ -42,6 +42,14 @@ data class UserSettings(
     val periodHighlightColor: Long = 0L,
     val periodHighlightAlpha: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA,
     val periodHighlightBarDp: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP,
+    val friendTodayHighlightEnabled: Boolean = true,
+    val friendTodayHighlightColor: Long = 0L,
+    val friendTodayHighlightAlpha: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA,
+    val friendTodayHighlightBarDp: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP,
+    val friendPeriodHighlightEnabled: Boolean = true,
+    val friendPeriodHighlightColor: Long = 0L,
+    val friendPeriodHighlightAlpha: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA,
+    val friendPeriodHighlightBarDp: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP,
     val timetableBgColor: Long = 0L,
     val timetableBgImageRev: Long = 0L,
     val timetableBgDim: Int = SettingsRepository.DEFAULT_TIMETABLE_BG_DIM,
@@ -58,6 +66,24 @@ class SettingsRepository(private val context: Context) {
                 prefs[Keys.friendPeriodHeightDp] = (
                     prefs[Keys.periodHeightDp] ?: DEFAULT_PERIOD_HEIGHT_DP
                     ).coerceIn(MIN_PERIOD_HEIGHT_DP, MAX_PERIOD_HEIGHT_DP)
+            }
+            if (prefs[Keys.friendTodayHighlightEnabled] == null) {
+                prefs[Keys.friendTodayHighlightEnabled] = prefs[Keys.todayHighlightEnabled] ?: true
+                prefs[Keys.friendTodayHighlightColor] = prefs[Keys.todayHighlightColor] ?: 0L
+                prefs[Keys.friendTodayHighlightAlpha] = (
+                    prefs[Keys.todayHighlightAlpha] ?: DEFAULT_TODAY_HIGHLIGHT_ALPHA
+                    ).coerceIn(MIN_TODAY_HIGHLIGHT_ALPHA, MAX_TODAY_HIGHLIGHT_ALPHA)
+                prefs[Keys.friendTodayHighlightBarDp] = (
+                    prefs[Keys.todayHighlightBarDp] ?: DEFAULT_TODAY_HIGHLIGHT_BAR_DP
+                    ).coerceIn(MIN_TODAY_HIGHLIGHT_BAR_DP, MAX_TODAY_HIGHLIGHT_BAR_DP)
+                prefs[Keys.friendPeriodHighlightEnabled] = prefs[Keys.periodHighlightEnabled] ?: true
+                prefs[Keys.friendPeriodHighlightColor] = prefs[Keys.periodHighlightColor] ?: 0L
+                prefs[Keys.friendPeriodHighlightAlpha] = (
+                    prefs[Keys.periodHighlightAlpha] ?: DEFAULT_TODAY_HIGHLIGHT_ALPHA
+                    ).coerceIn(MIN_TODAY_HIGHLIGHT_ALPHA, MAX_TODAY_HIGHLIGHT_ALPHA)
+                prefs[Keys.friendPeriodHighlightBarDp] = (
+                    prefs[Keys.periodHighlightBarDp] ?: DEFAULT_TODAY_HIGHLIGHT_BAR_DP
+                    ).coerceIn(MIN_TODAY_HIGHLIGHT_BAR_DP, MAX_TODAY_HIGHLIGHT_BAR_DP)
             }
         }
     }
@@ -173,6 +199,46 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun setFriendTodayHighlightEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.friendTodayHighlightEnabled] = enabled }
+    }
+
+    suspend fun setFriendTodayHighlightColor(color: Long) {
+        context.dataStore.edit { it[Keys.friendTodayHighlightColor] = color }
+    }
+
+    suspend fun setFriendTodayHighlightAlpha(percent: Int) {
+        context.dataStore.edit {
+            it[Keys.friendTodayHighlightAlpha] = percent.coerceIn(MIN_TODAY_HIGHLIGHT_ALPHA, MAX_TODAY_HIGHLIGHT_ALPHA)
+        }
+    }
+
+    suspend fun setFriendTodayHighlightBarDp(dp: Int) {
+        context.dataStore.edit {
+            it[Keys.friendTodayHighlightBarDp] = dp.coerceIn(MIN_TODAY_HIGHLIGHT_BAR_DP, MAX_TODAY_HIGHLIGHT_BAR_DP)
+        }
+    }
+
+    suspend fun setFriendPeriodHighlightEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.friendPeriodHighlightEnabled] = enabled }
+    }
+
+    suspend fun setFriendPeriodHighlightColor(color: Long) {
+        context.dataStore.edit { it[Keys.friendPeriodHighlightColor] = color }
+    }
+
+    suspend fun setFriendPeriodHighlightAlpha(percent: Int) {
+        context.dataStore.edit {
+            it[Keys.friendPeriodHighlightAlpha] = percent.coerceIn(MIN_TODAY_HIGHLIGHT_ALPHA, MAX_TODAY_HIGHLIGHT_ALPHA)
+        }
+    }
+
+    suspend fun setFriendPeriodHighlightBarDp(dp: Int) {
+        context.dataStore.edit {
+            it[Keys.friendPeriodHighlightBarDp] = dp.coerceIn(MIN_TODAY_HIGHLIGHT_BAR_DP, MAX_TODAY_HIGHLIGHT_BAR_DP)
+        }
+    }
+
     suspend fun setTimetableBgColor(color: Long) {
         context.dataStore.edit { it[Keys.timetableBgColor] = color }
     }
@@ -228,6 +294,34 @@ class SettingsRepository(private val context: Context) {
             .coerceIn(SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA, SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA),
         periodHighlightBarDp = (this[Keys.periodHighlightBarDp] ?: SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP)
             .coerceIn(SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP, SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP),
+        friendTodayHighlightEnabled = this[Keys.friendTodayHighlightEnabled]
+            ?: this[Keys.todayHighlightEnabled] ?: true,
+        friendTodayHighlightColor = this[Keys.friendTodayHighlightColor]
+            ?: this[Keys.todayHighlightColor] ?: 0L,
+        friendTodayHighlightAlpha = (
+            this[Keys.friendTodayHighlightAlpha]
+                ?: this[Keys.todayHighlightAlpha]
+                ?: SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA
+            ).coerceIn(SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA, SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA),
+        friendTodayHighlightBarDp = (
+            this[Keys.friendTodayHighlightBarDp]
+                ?: this[Keys.todayHighlightBarDp]
+                ?: SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP
+            ).coerceIn(SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP, SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP),
+        friendPeriodHighlightEnabled = this[Keys.friendPeriodHighlightEnabled]
+            ?: this[Keys.periodHighlightEnabled] ?: true,
+        friendPeriodHighlightColor = this[Keys.friendPeriodHighlightColor]
+            ?: this[Keys.periodHighlightColor] ?: 0L,
+        friendPeriodHighlightAlpha = (
+            this[Keys.friendPeriodHighlightAlpha]
+                ?: this[Keys.periodHighlightAlpha]
+                ?: SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA
+            ).coerceIn(SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA, SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA),
+        friendPeriodHighlightBarDp = (
+            this[Keys.friendPeriodHighlightBarDp]
+                ?: this[Keys.periodHighlightBarDp]
+                ?: SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP
+            ).coerceIn(SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP, SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP),
         timetableBgColor = this[Keys.timetableBgColor] ?: 0L,
         timetableBgImageRev = this[Keys.timetableBgImageRev] ?: 0L,
         timetableBgDim = (this[Keys.timetableBgDim] ?: SettingsRepository.DEFAULT_TIMETABLE_BG_DIM)
@@ -262,6 +356,14 @@ class SettingsRepository(private val context: Context) {
         val periodHighlightColor = longPreferencesKey("period_highlight_color")
         val periodHighlightAlpha = intPreferencesKey("period_highlight_alpha")
         val periodHighlightBarDp = intPreferencesKey("period_highlight_bar_dp")
+        val friendTodayHighlightEnabled = booleanPreferencesKey("friend_today_highlight_enabled")
+        val friendTodayHighlightColor = longPreferencesKey("friend_today_highlight_color")
+        val friendTodayHighlightAlpha = intPreferencesKey("friend_today_highlight_alpha")
+        val friendTodayHighlightBarDp = intPreferencesKey("friend_today_highlight_bar_dp")
+        val friendPeriodHighlightEnabled = booleanPreferencesKey("friend_period_highlight_enabled")
+        val friendPeriodHighlightColor = longPreferencesKey("friend_period_highlight_color")
+        val friendPeriodHighlightAlpha = intPreferencesKey("friend_period_highlight_alpha")
+        val friendPeriodHighlightBarDp = intPreferencesKey("friend_period_highlight_bar_dp")
         val timetableBgColor = longPreferencesKey("timetable_bg_color")
         val timetableBgImageRev = longPreferencesKey("timetable_bg_image_rev")
         val timetableBgDim = intPreferencesKey("timetable_bg_dim")
