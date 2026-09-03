@@ -27,6 +27,7 @@ app/release/
 output.json
 *.hprof
 .cursor/
+image.png
 CLAUDE.md
 claude.md
 .claude/

@@ -2,6 +2,10 @@
 
 每次发版把对应 `versionName` 的一节写进 GitHub Release；应用检查更新时显示同一段（会去掉 `versionCode=` / `versionName=` 行）。
 
+## 1.1.11
+
+- 更换了应用图标
+
 ## 1.1.10
 
 - WebDAV 默认同步只走 Wi‑Fi，用流量时不上传、不下载、不同步好友；可在同步页关掉
