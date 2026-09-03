@@ -4,7 +4,6 @@ import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.ExamEntity
 import cn.sysu.kcb.data.local.ExamWeekEntity
 import cn.sysu.kcb.data.local.PeriodEntity
-import cn.sysu.kcb.data.local.RawImportEntity
 import cn.sysu.kcb.data.local.SemesterEntity
 import cn.sysu.kcb.data.local.WeekEntity
 import cn.sysu.kcb.data.local.WeekdayEntity
@@ -287,7 +286,7 @@ class JwxtImportService(
                 dayOfWeek = el.str("week").toIntOrNull() ?: el.int("week"),
                 startPeriod = el.int("startClassTimes"),
                 endPeriod = el.int("endClassTimes"),
-                extraJson = el.toString(),
+                extraJson = "{}",
             )
         }
     }
@@ -335,7 +334,7 @@ class JwxtImportService(
                     weeksMask = WeekMask.parse(o.str("timeDetail"), startWeek),
                     timeDetail = o.str("timeDetail").cleanJwxt(),
                     color = CourseColors.of(name, themeColor),
-                    extraJson = o.toString(),
+                    extraJson = "{}",
                 )
             }
         }
@@ -343,15 +342,7 @@ class JwxtImportService(
     }
 
     private suspend fun saveRaw(endpoint: String, semester: String, body: JsonObject) {
-        repo.saveRaw(
-            RawImportEntity(
-                key = "$endpoint|$semester",
-                acadYearSemester = semester,
-                endpoint = endpoint,
-                json = json.encodeToString(JsonObject.serializer(), body),
-                fetchedAt = System.currentTimeMillis(),
-            ),
-        )
+        // 不再把教务原文写入 raw_imports。
     }
 
     private fun requireOk(body: JsonObject) {

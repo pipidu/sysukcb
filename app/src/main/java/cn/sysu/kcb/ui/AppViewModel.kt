@@ -171,6 +171,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         downloadJob?.cancel()
         downloadJob = null
         apkDownload.value = ApkDownloadState.Idle
+        runCatching {
+            File(getApplication<Application>().cacheDir, "updates").listFiles()?.forEach { file ->
+                if (file.name.endsWith(".part", ignoreCase = true)) file.delete()
+            }
+        }
     }
 
     fun denyInstallPermission() {

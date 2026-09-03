@@ -6,7 +6,6 @@ import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.ExamEntity
 import cn.sysu.kcb.data.local.ExamWeekEntity
 import cn.sysu.kcb.data.local.PeriodEntity
-import cn.sysu.kcb.data.local.RawImportEntity
 import cn.sysu.kcb.data.local.SemesterEntity
 import cn.sysu.kcb.data.local.WeekEntity
 import cn.sysu.kcb.data.local.StickyNoteEntity
@@ -145,7 +144,18 @@ class TimetableRepository(private val db: AppDatabase) {
         }
     }
 
-    suspend fun saveRaw(item: RawImportEntity) = db.rawImportDao().upsert(item)
+    suspend fun compactStorage() {
+        val raw = db.rawImportDao().count()
+        val extra = db.courseDao().countExtraJson() + db.examDao().countExtraJson()
+        if (raw > 0) db.rawImportDao().clear()
+        if (extra > 0) {
+            db.courseDao().clearExtraJson()
+            db.examDao().clearExtraJson()
+        }
+        if (raw > 0 || extra > 0) {
+            runCatching { db.openHelper.writableDatabase.execSQL("VACUUM") }
+        }
+    }
 
     suspend fun addCourse(item: CourseEntity): Long = db.courseDao().insert(item)
     suspend fun updateCourse(item: CourseEntity) = db.courseDao().update(item)

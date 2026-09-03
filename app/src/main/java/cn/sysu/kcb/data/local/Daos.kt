@@ -105,6 +105,12 @@ interface CourseDao {
 
     @Query("DELETE FROM courses")
     suspend fun clear()
+
+    @Query("SELECT COUNT(*) FROM courses WHERE extraJson != '{}'")
+    suspend fun countExtraJson(): Int
+
+    @Query("UPDATE courses SET extraJson = '{}' WHERE extraJson != '{}'")
+    suspend fun clearExtraJson()
 }
 
 @Dao
@@ -129,6 +135,12 @@ interface ExamDao {
 
     @Query("DELETE FROM exams")
     suspend fun clear()
+
+    @Query("SELECT COUNT(*) FROM exams WHERE extraJson != '{}'")
+    suspend fun countExtraJson(): Int
+
+    @Query("UPDATE exams SET extraJson = '{}' WHERE extraJson != '{}'")
+    suspend fun clearExtraJson()
 }
 
 @Dao
@@ -165,6 +177,9 @@ interface RawImportDao {
 
     @Query("DELETE FROM raw_imports")
     suspend fun clear()
+
+    @Query("SELECT COUNT(*) FROM raw_imports")
+    suspend fun count(): Int
 }
 
 @Dao

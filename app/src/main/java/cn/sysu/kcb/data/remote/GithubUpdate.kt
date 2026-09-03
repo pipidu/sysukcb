@@ -72,6 +72,11 @@ class GithubUpdateService(private val json: Json) {
                 val body = response.body ?: error("下载失败")
                 val total = body.contentLength()
                 dest.parentFile?.mkdirs()
+                dest.parentFile?.listFiles()?.forEach { child ->
+                    if (child.name != dest.name && !child.name.endsWith(".part")) {
+                        runCatching { child.delete() }
+                    }
+                }
                 val tmp = File(dest.parentFile, "${dest.name}.part")
                 tmp.outputStream().use { out ->
                     body.byteStream().use { input ->

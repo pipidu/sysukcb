@@ -47,6 +47,9 @@ class ShareService(
             notes = repo.listNotes(semester).map { it.copy(id = 0) },
         )
         val dir = File(context.cacheDir, "share").apply { mkdirs() }
+        dir.listFiles()?.forEach { child ->
+            if (child.isFile) runCatching { child.delete() }
+        }
         val file = File(dir, "课程表D-$semester.sysukcb.json")
         file.writeText(encode(pack))
         return file

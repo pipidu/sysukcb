@@ -4,7 +4,6 @@ import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.ExamEntity
 import cn.sysu.kcb.data.local.ExamWeekEntity
 import cn.sysu.kcb.data.local.PeriodEntity
-import cn.sysu.kcb.data.local.RawImportEntity
 import cn.sysu.kcb.data.local.SemesterEntity
 import cn.sysu.kcb.data.local.WeekEntity
 import cn.sysu.kcb.data.prefs.CookieStore
@@ -305,7 +304,7 @@ class GzhuImportService(
             examStage = "",
             examWeekName = weekName,
             examWeekId = weekId,
-            extraJson = o.toString(),
+            extraJson = "{}",
         )
     }
 
@@ -357,7 +356,7 @@ class GzhuImportService(
                 weeksMask = weeksMask,
                 timeDetail = listOf(zcd, o.firstStr("jcs", "jc")).filter { it.isNotBlank() }.joinToString(" "),
                 color = CourseColors.of(name, themeColor),
-                extraJson = o.toString(),
+                extraJson = "{}",
             )
         }
         return result.distinctBy { listOf(it.classesId, it.dayOfWeek, it.startPeriod, it.endPeriod, it.weeksMask) }
@@ -394,15 +393,7 @@ class GzhuImportService(
     }
 
     private suspend fun saveRaw(endpoint: String, semester: String, body: String) {
-        repo.saveRaw(
-            RawImportEntity(
-                key = "$endpoint|$semester",
-                acadYearSemester = semester,
-                endpoint = endpoint,
-                json = body.take(500_000),
-                fetchedAt = System.currentTimeMillis(),
-            ),
-        )
+        // 不再把教务原文写入 raw_imports。
     }
 
     private fun parseObject(raw: String): JsonObject? {

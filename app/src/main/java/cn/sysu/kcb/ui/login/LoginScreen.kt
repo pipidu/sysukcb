@@ -29,6 +29,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +61,9 @@ fun LoginScreen(
     var checking by remember { mutableStateOf(false) }
     var finished by remember { mutableStateOf(false) }
     val cookies = KcbApp.instance.container.cookies
+    DisposableEffect(Unit) {
+        onDispose { KcbApp.instance.trimCachesAsync() }
+    }
 
     fun tryFinish(requireJwxtCheck: Boolean) {
         if (finished || checking) return
