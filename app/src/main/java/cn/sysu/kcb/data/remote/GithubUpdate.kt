@@ -97,16 +97,21 @@ class GithubUpdateService(private val json: Json) {
                     tmp.copyTo(dest, overwrite = true)
                     tmp.delete()
                 }
-                dest.inputStream().use { input ->
-                    val magic = ByteArray(2)
-                    val n = input.read(magic)
-                    if (n < 2 || magic[0] != 'P'.code.toByte() || magic[1] != 'K'.code.toByte()) {
-                        dest.delete()
-                        error("下载的文件不是安装包，请切换镜像选项后重试")
-                    }
+                if (!dest.isApkZip()) {
+                    dest.delete()
+                    error("下载的文件不是安装包，请切换镜像选项后重试")
                 }
             }
         }
+}
+
+fun File.isApkZip(): Boolean {
+    if (!isFile || length() < 4L) return false
+    return inputStream().use { input ->
+        val magic = ByteArray(2)
+        val n = input.read(magic)
+        n >= 2 && magic[0] == 'P'.code.toByte() && magic[1] == 'K'.code.toByte()
+    }
 }
 
 fun AppUpdate.isNewerThan(localCode: Int, localName: String): Boolean {

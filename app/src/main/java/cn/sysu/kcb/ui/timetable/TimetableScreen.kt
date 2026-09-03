@@ -826,8 +826,9 @@ internal fun TimetableGrid(
         }
     }
     var now by remember { mutableStateOf(LocalTime.now()) }
-    LaunchedEffect(periodHighlightEnabled, rows.size) {
-        if (!periodHighlightEnabled) return@LaunchedEffect
+    val showPeriodHighlight = todayHighlightEnabled && periodHighlightEnabled
+    LaunchedEffect(showPeriodHighlight, rows.size) {
+        if (!showPeriodHighlight) return@LaunchedEffect
         while (true) {
             now = LocalTime.now()
             delay(nextHighlightDelayMs(rows, now))
@@ -841,7 +842,11 @@ internal fun TimetableGrid(
         val gridH = headerH + periodH * rows.size
         val dayDates = (0..6).map { weekStart?.plusDays(it.toLong()) }
         val todayCol = dayDates.indexOfFirst { it == today }
-        val currentPeriodIndex = if (periodHighlightEnabled) findCurrentPeriodIndex(rows, now) else -1
+        val currentPeriodIndex = if (showPeriodHighlight && todayCol >= 0) {
+            findCurrentPeriodIndex(rows, now)
+        } else {
+            -1
+        }
         val context = LocalContext.current
         val density = LocalDensity.current
         val maxPx = with(density) { max(maxWidth.toPx(), gridH.toPx()).toInt().coerceIn(240, 1440) }

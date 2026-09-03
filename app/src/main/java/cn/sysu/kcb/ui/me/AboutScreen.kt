@@ -120,12 +120,20 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             ListItem(
                 headlineContent = { Text("检查更新") },
                 supportingContent = {
+                    val download = apkDownload
                     Text(
                         when (val state = updateState) {
                             UpdateCheckState.Idle -> "应用内下载安装"
                             UpdateCheckState.Checking -> "正在检查…"
                             UpdateCheckState.UpToDate -> "已是最新版本"
-                            is UpdateCheckState.Available -> "发现新版本 ${state.update.versionName}"
+                            is UpdateCheckState.Available -> if (
+                                download !is ApkDownloadState.Progress &&
+                                viewModel.hasCachedUpdateApk(state.update)
+                            ) {
+                                "已下载 ${state.update.versionName}，可直接安装"
+                            } else {
+                                "发现新版本 ${state.update.versionName}"
+                            }
                             is UpdateCheckState.Failed -> state.message
                         },
                     )
@@ -163,6 +171,9 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val available = updateState as? UpdateCheckState.Available
     if (showUpdate && available != null) {
         val update = available.update
+        val apkReady = remember(update.versionName, apkDownload) {
+            viewModel.hasCachedUpdateApk(update)
+        }
         val downloading = apkDownload is ApkDownloadState.Progress || apkDownload is ApkDownloadState.Installing
         AlertDialog(
             onDismissRequest = {
@@ -181,23 +192,25 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                     ) {
                         Text(update.notes.ifBlank { "下载安装包后按系统提示安装。" })
                     }
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
-                            Text("使用镜像下载", fontWeight = FontWeight.Medium)
-                            Text(
-                                "国内访问 GitHub 较慢时可开",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    if (!apkReady) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                                Text("使用镜像下载", fontWeight = FontWeight.Medium)
+                                Text(
+                                    "国内访问 GitHub 较慢时可开",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                )
+                            }
+                            Switch(
+                                checked = settings.updateUseMirror,
+                                onCheckedChange = { viewModel.setUpdateUseMirror(it) },
+                                enabled = !downloading,
                             )
                         }
-                        Switch(
-                            checked = settings.updateUseMirror,
-                            onCheckedChange = { viewModel.setUpdateUseMirror(it) },
-                            enabled = !downloading,
-                        )
                     }
                     when (val dl = apkDownload) {
                         is ApkDownloadState.Progress -> {
@@ -239,7 +252,15 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 TextButton(
                     onClick = { startDownload() },
                     enabled = !downloading,
-                ) { Text(if (apkDownload is ApkDownloadState.Failed) "重试" else "下载更新") }
+                ) {
+                    Text(
+                        when {
+                            apkDownload is ApkDownloadState.Failed -> "重试"
+                            apkReady -> "安装"
+                            else -> "下载更新"
+                        },
+                    )
+                }
             },
             dismissButton = {
                 TextButton(

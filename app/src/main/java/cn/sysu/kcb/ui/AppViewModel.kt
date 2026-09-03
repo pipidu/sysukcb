@@ -18,8 +18,9 @@ import cn.sysu.kcb.data.remote.AppUpdate
 import cn.sysu.kcb.data.remote.SessionCheckResult
 import cn.sysu.kcb.data.remote.SessionExpiredException
 import cn.sysu.kcb.data.remote.SessionStatus
-import cn.sysu.kcb.data.remote.mirroredGithubUrl
+import cn.sysu.kcb.data.remote.isApkZip
 import cn.sysu.kcb.data.remote.isNewerThan
+import cn.sysu.kcb.data.remote.mirroredGithubUrl
 import cn.sysu.kcb.data.remote.WebDavClient
 import cn.sysu.kcb.data.remote.WebDavShareCode
 import cn.sysu.kcb.data.remote.WebDavSyncWorker
@@ -45,6 +46,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -142,6 +144,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
     }
 
+    fun cachedUpdateApk(update: AppUpdate): File {
+        return File(getApplication<Application>().cacheDir, "updates/kcb-${update.versionName}.apk")
+    }
+
+    fun hasCachedUpdateApk(update: AppUpdate): Boolean = cachedUpdateApk(update).isApkZip()
+
     fun downloadAndInstall(update: AppUpdate) {
         val url = update.apkUrl
         if (url.isNullOrBlank()) {
@@ -150,24 +158,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         downloadJob?.cancel()
         downloadJob = viewModelScope.launch {
-            apkDownload.value = ApkDownloadState.Progress(0L, 0L)
-            val dest = File(getApplication<Application>().cacheDir, "updates/kcb-${update.versionName}.apk")
-            runCatching {
-                val downloadUrl = mirroredGithubUrl(url, container.settings.snapshot().updateUseMirror)
-                container.updates.downloadApk(downloadUrl, dest) { received, total ->
-                    apkDownload.value = ApkDownloadState.Progress(received, total)
+            val dest = cachedUpdateApk(update)
+            val cached = withContext(Dispatchers.IO) { dest.isApkZip() }
+            if (!cached) {
+                apkDownload.value = ApkDownloadState.Progress(0L, 0L)
+                runCatching {
+                    val downloadUrl = mirroredGithubUrl(url, container.settings.snapshot().updateUseMirror)
+                    container.updates.downloadApk(downloadUrl, dest) { received, total ->
+                        apkDownload.value = ApkDownloadState.Progress(received, total)
+                    }
+                }.onFailure { error ->
+                    if (error is CancellationException) {
+                        apkDownload.value = ApkDownloadState.Idle
+                        throw error
+                    }
+                    apkDownload.value = ApkDownloadState.Failed(error.message ?: "下载失败")
+                    return@launch
                 }
-            }.onSuccess {
-                apkDownload.value = ApkDownloadState.Installing
-                runCatching { installDownloadedApk(dest) }
-                    .onFailure { apkDownload.value = ApkDownloadState.Failed(it.message ?: "无法打开安装程序") }
-            }.onFailure { error ->
-                if (error is CancellationException) {
-                    apkDownload.value = ApkDownloadState.Idle
-                    throw error
-                }
-                apkDownload.value = ApkDownloadState.Failed(error.message ?: "下载失败")
             }
+            apkDownload.value = ApkDownloadState.Installing
+            runCatching { installDownloadedApk(dest) }
+                .onFailure { apkDownload.value = ApkDownloadState.Failed(it.message ?: "无法打开安装程序") }
         }
     }
 

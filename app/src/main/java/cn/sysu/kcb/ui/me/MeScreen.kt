@@ -388,7 +388,7 @@ fun MeScreen(
                     onAlpha = { viewModel.setFriendTodayHighlightAlpha(it) },
                     onBar = { viewModel.setFriendTodayHighlightBarDp(it) },
                 )
-                HighlightSwitchBlock(
+                if (settings.todayHighlightEnabled) HighlightSwitchBlock(
                     title = "当前节次行高亮",
                     subtitle = "自己的课表里标出正在上课的那一行",
                     enabled = settings.periodHighlightEnabled,
@@ -402,7 +402,7 @@ fun MeScreen(
                     onAlpha = { viewModel.setPeriodHighlightAlpha(it) },
                     onBar = { viewModel.setPeriodHighlightBarDp(it) },
                 )
-                HighlightSwitchBlock(
+                if (settings.friendTodayHighlightEnabled) HighlightSwitchBlock(
                     title = "好友当前节次行高亮",
                     subtitle = "好友课表里标出正在上课的那一行",
                     enabled = settings.friendPeriodHighlightEnabled,
