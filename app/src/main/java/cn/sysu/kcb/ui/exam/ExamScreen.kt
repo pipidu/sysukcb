@@ -53,16 +53,14 @@ fun ExamScreen(viewModel: AppViewModel) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val repo = KcbApp.instance.container.timetable
     val semesters by repo.semesters.collectAsStateWithLifecycle(emptyList())
-    val allExams by repo.allExams().collectAsStateWithLifecycle(emptyList())
+    val examSemesterIds by repo.populatedExamSemesters.collectAsStateWithLifecycle(emptyList())
     val currentAnchor = remember(settings.selectedSemester, semesters) {
         semesters.firstOrNull { it.isCurrent }?.acadYearSemester
             ?: settings.selectedSemester.takeIf { it.isNotBlank() }
             ?: SemesterRange.guessCurrent()
     }
-    val semesterOptions = remember(semesters, allExams) {
-        (semesters.map { it.acadYearSemester } + allExams.map { it.acadYearSemester })
-            .distinct()
-            .filter { id -> allExams.any { it.acadYearSemester == id } }
+    val semesterOptions = remember(examSemesterIds) {
+        examSemesterIds.distinct()
             .sortedByDescending { SemesterRange.ordinal(it) ?: Int.MIN_VALUE }
     }
     var examSemester by rememberSaveable { mutableStateOf("") }
@@ -70,14 +68,14 @@ fun ExamScreen(viewModel: AppViewModel) {
     var selectedWeekId by rememberSaveable { mutableStateOf("all") }
     var semesterMenu by remember { mutableStateOf(false) }
 
-    LaunchedEffect(settings.selectedSemester, semesters, allExams, userPickedSemester, semesterOptions) {
+    LaunchedEffect(settings.selectedSemester, semesters, examSemesterIds, userPickedSemester, semesterOptions) {
         if (userPickedSemester && examSemester.isNotBlank()) return@LaunchedEffect
         val current = settings.selectedSemester.takeIf { it.isNotBlank() }
             ?: semesters.firstOrNull { it.isCurrent }?.acadYearSemester
             ?: currentAnchor
         examSemester = when {
-            current.isNotBlank() && allExams.any { it.acadYearSemester == current } -> current
-            allExams.isNotEmpty() -> allExams.groupingBy { it.acadYearSemester }.eachCount().maxBy { it.value }.key
+            current.isNotBlank() && current in examSemesterIds -> current
+            semesterOptions.isNotEmpty() -> semesterOptions.first()
             else -> current
         }
     }
@@ -90,9 +88,7 @@ fun ExamScreen(viewModel: AppViewModel) {
     }
 
     val visible = exams.filter { selectedWeekId == "all" || it.examWeekId == selectedWeekId }
-    val otherSemesterWithExams = allExams
-        .map { it.acadYearSemester }
-        .firstOrNull { it != examSemester }
+    val otherSemesterWithExams = examSemesterIds.firstOrNull { it != examSemester }
 
     Scaffold(
         topBar = {
@@ -112,12 +108,10 @@ fun ExamScreen(viewModel: AppViewModel) {
                     DropdownMenu(expanded = semesterMenu, onDismissRequest = { semesterMenu = false }) {
                         semesterOptions.forEach { option ->
                             val entity = semesters.firstOrNull { it.acadYearSemester == option }
-                            val count = allExams.count { exam -> exam.acadYearSemester == option }
                             DropdownMenuItem(
                                 text = { Text(buildString {
                                     append(option)
                                     if (entity?.isCurrent == true) append("（当前）")
-                                    if (count > 0) append(" · $count")
                                 }) },
                                 onClick = {
                                     userPickedSemester = true

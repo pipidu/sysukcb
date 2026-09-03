@@ -421,6 +421,9 @@ private fun FriendTimetablePane(pack: SharePack, settings: UserSettings) {
                     periodHighlightColor = settings.periodHighlightColor,
                     periodHighlightAlpha = settings.periodHighlightAlpha,
                     periodHighlightBarDp = settings.periodHighlightBarDp,
+                    timetableBgColor = settings.timetableBgColor,
+                    timetableBgImageRev = settings.timetableBgImageRev,
+                    timetableBgDim = settings.timetableBgDim,
                 )
             } else {
                 HorizontalPager(
@@ -449,6 +452,9 @@ private fun FriendTimetablePane(pack: SharePack, settings: UserSettings) {
                         periodHighlightColor = settings.periodHighlightColor,
                         periodHighlightAlpha = settings.periodHighlightAlpha,
                         periodHighlightBarDp = settings.periodHighlightBarDp,
+                        timetableBgColor = settings.timetableBgColor,
+                        timetableBgImageRev = settings.timetableBgImageRev,
+                        timetableBgDim = settings.timetableBgDim,
                     )
                 }
             }

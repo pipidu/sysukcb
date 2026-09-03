@@ -120,7 +120,21 @@ data class WidgetState(
 )
 
 object WidgetData {
+    @Volatile
+    private var cache: WidgetState? = null
+    @Volatile
+    private var cacheAt = 0L
+
     suspend fun load(context: Context): WidgetState {
+        val now = System.currentTimeMillis()
+        cache?.takeIf { now - cacheAt < 2_000L }?.let { return it }
+        return loadFresh(context).also {
+            cache = it
+            cacheAt = now
+        }
+    }
+
+    private suspend fun loadFresh(context: Context): WidgetState {
         val app = context.applicationContext as? KcbApp ?: KcbApp.instance
         val settings = app.container.settings.snapshot()
         val current = app.container.timetable.currentSemester()
@@ -158,6 +172,8 @@ object WidgetData {
     }
 
     suspend fun refreshAll(context: Context) {
+        cache = null
+        cacheAt = 0L
         TodayWidget().updateAll(context)
         WeekWidget().updateAll(context)
         NextWidget().updateAll(context)

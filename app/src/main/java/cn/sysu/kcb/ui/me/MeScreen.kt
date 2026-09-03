@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -105,6 +106,7 @@ fun MeScreen(
     var showColor by remember { mutableStateOf(false) }
     var showHighlightColor by remember { mutableStateOf(false) }
     var showPeriodHighlightColor by remember { mutableStateOf(false) }
+    var showBgColor by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var confirmAllImport by remember { mutableStateOf(false) }
     var showWakeUp by remember { mutableStateOf(false) }
@@ -131,6 +133,9 @@ fun MeScreen(
                 context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
             }.getOrNull()?.let { viewModel.importWakeUp(it) }
         }
+    }
+    val bgPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) viewModel.setTimetableBackgroundImage(uri)
     }
     val notifyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     LaunchedEffect(settings.reminderEnabled, settings.examReminderEnabled) {
@@ -288,6 +293,57 @@ fun MeScreen(
                     },
                     modifier = Modifier.clickable { showColor = true },
                 )
+                val bgMode = when {
+                    settings.timetableBgImageRev > 0L -> "图片"
+                    settings.timetableBgColor != 0L -> "纯色"
+                    else -> "跟随界面"
+                }
+                Text("课表背景", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = bgMode == "跟随界面",
+                        onClick = { viewModel.clearTimetableBackground() },
+                        label = { Text("跟随界面") },
+                    )
+                    FilterChip(
+                        selected = bgMode == "纯色",
+                        onClick = { showBgColor = true },
+                        label = { Text("纯色") },
+                    )
+                    FilterChip(
+                        selected = bgMode == "图片",
+                        onClick = {
+                            bgPicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                            )
+                        },
+                        label = { Text("相册") },
+                    )
+                }
+                if (bgMode == "纯色") {
+                    ListItem(
+                        headlineContent = { Text("背景颜色") },
+                        supportingContent = { Text(themeColorName(settings.timetableBgColor)) },
+                        trailingContent = {
+                            Box(
+                                Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(settings.timetableBgColor)),
+                            )
+                        },
+                        modifier = Modifier.clickable { showBgColor = true },
+                    )
+                }
+                if (bgMode == "图片") {
+                    Text("遮罩 ${settings.timetableBgDim}%", style = MaterialTheme.typography.labelLarge)
+                    Slider(
+                        value = settings.timetableBgDim.toFloat(),
+                        onValueChange = { viewModel.setTimetableBgDim(it.toInt()) },
+                        valueRange = SettingsRepository.MIN_TIMETABLE_BG_DIM.toFloat()..SettingsRepository.MAX_TIMETABLE_BG_DIM.toFloat(),
+                        steps = SettingsRepository.MAX_TIMETABLE_BG_DIM - SettingsRepository.MIN_TIMETABLE_BG_DIM - 1,
+                    )
+                }
                 Text("课表格子高度 ${settings.periodHeightDp} dp", style = MaterialTheme.typography.labelLarge)
                 Slider(
                     value = settings.periodHeightDp.toFloat(),
@@ -555,6 +611,22 @@ fun MeScreen(
             },
         )
     }
+    if (showBgColor) {
+        ColorPickerDialog(
+            title = "课表背景",
+            current = settings.timetableBgColor.takeIf { it != 0L } ?: 0xFFF5F0E6L,
+            followThemeLabel = "跟随界面",
+            onFollowTheme = {
+                viewModel.clearTimetableBackground()
+                showBgColor = false
+            },
+            onDismiss = { showBgColor = false },
+            onPick = {
+                viewModel.setTimetableBgColor(it)
+                showBgColor = false
+            },
+        )
+    }
     if (confirmAllImport) {
         AlertDialog(
             onDismissRequest = { confirmAllImport = false },
@@ -815,5 +887,10 @@ private fun appearanceSummary(settings: UserSettings): String {
         SettingsRepository.THEME_MODE_DARK -> "深色"
         else -> "跟随系统"
     }
-    return "${themeColorName(settings.themeColor)} · $mode · 格子${settings.periodHeightDp} · 好友${settings.friendPeriodHeightDp}"
+    return "${themeColorName(settings.themeColor)} · $mode · 格子${settings.periodHeightDp}" +
+        when {
+            settings.timetableBgImageRev > 0L -> " · 背景图"
+            settings.timetableBgColor != 0L -> " · 背景色"
+            else -> ""
+        }
 }

@@ -30,7 +30,8 @@ class KcbApp : Application() {
             val wifiOnly = snap?.webdavWifiOnly ?: true
             WebDavSyncWorker.schedule(this@KcbApp, enabled, wifiOnly)
             delay(2_500)
-            runCatching { container.timetable.compactStorage() }
+            val vacuumed = runCatching { container.timetable.compactStorage() }.getOrDefault(false)
+            if (vacuumed) delay(1_500)
             if (enabled) {
                 runCatching { container.webdav.autoSync() }
             }

@@ -2,6 +2,7 @@ package cn.sysu.kcb.ui
 
 import android.app.Application
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
@@ -9,6 +10,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cn.sysu.kcb.BuildConfig
 import cn.sysu.kcb.KcbApp
+import cn.sysu.kcb.data.TimetableBackground
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.StickyNoteEntity
 import cn.sysu.kcb.data.prefs.UserSettings
@@ -262,6 +264,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setPeriodHighlightBarDp(dp: Int) = viewModelScope.launch {
         container.settings.setPeriodHighlightBarDp(dp)
+    }
+
+    fun setTimetableBgColor(color: Long) = viewModelScope.launch {
+        container.settings.setTimetableBgColor(color)
+        if (color != 0L) {
+            TimetableBackground.clear(getApplication())
+            container.settings.setTimetableBgImageRev(0L)
+        }
+    }
+
+    fun setTimetableBackgroundImage(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
+        val ok = runCatching { TimetableBackground.importUri(getApplication(), uri) }.getOrDefault(false)
+        if (ok) {
+            container.settings.setTimetableBgImageRev(System.currentTimeMillis())
+        } else {
+            message.value = "无法使用这张图片"
+        }
+    }
+
+    fun clearTimetableBackground() = viewModelScope.launch(Dispatchers.IO) {
+        TimetableBackground.clear(getApplication())
+        container.settings.setTimetableBgColor(0L)
+        container.settings.setTimetableBgImageRev(0L)
+    }
+
+    fun setTimetableBgDim(percent: Int) = viewModelScope.launch {
+        container.settings.setTimetableBgDim(percent)
     }
 
     fun setReminderEnabled(enabled: Boolean) = viewModelScope.launch {

@@ -42,6 +42,9 @@ data class UserSettings(
     val periodHighlightColor: Long = 0L,
     val periodHighlightAlpha: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA,
     val periodHighlightBarDp: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP,
+    val timetableBgColor: Long = 0L,
+    val timetableBgImageRev: Long = 0L,
+    val timetableBgDim: Int = SettingsRepository.DEFAULT_TIMETABLE_BG_DIM,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -170,6 +173,20 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun setTimetableBgColor(color: Long) {
+        context.dataStore.edit { it[Keys.timetableBgColor] = color }
+    }
+
+    suspend fun setTimetableBgImageRev(rev: Long) {
+        context.dataStore.edit { it[Keys.timetableBgImageRev] = rev }
+    }
+
+    suspend fun setTimetableBgDim(percent: Int) {
+        context.dataStore.edit {
+            it[Keys.timetableBgDim] = percent.coerceIn(MIN_TIMETABLE_BG_DIM, MAX_TIMETABLE_BG_DIM)
+        }
+    }
+
     suspend fun setWebDavLastSync(at: Long, message: String) {
         context.dataStore.edit {
             it[Keys.webdavLastSyncAt] = at
@@ -211,6 +228,10 @@ class SettingsRepository(private val context: Context) {
             .coerceIn(SettingsRepository.MIN_TODAY_HIGHLIGHT_ALPHA, SettingsRepository.MAX_TODAY_HIGHLIGHT_ALPHA),
         periodHighlightBarDp = (this[Keys.periodHighlightBarDp] ?: SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP)
             .coerceIn(SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP, SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP),
+        timetableBgColor = this[Keys.timetableBgColor] ?: 0L,
+        timetableBgImageRev = this[Keys.timetableBgImageRev] ?: 0L,
+        timetableBgDim = (this[Keys.timetableBgDim] ?: SettingsRepository.DEFAULT_TIMETABLE_BG_DIM)
+            .coerceIn(SettingsRepository.MIN_TIMETABLE_BG_DIM, SettingsRepository.MAX_TIMETABLE_BG_DIM),
     )
 
     private object Keys {
@@ -241,6 +262,9 @@ class SettingsRepository(private val context: Context) {
         val periodHighlightColor = longPreferencesKey("period_highlight_color")
         val periodHighlightAlpha = intPreferencesKey("period_highlight_alpha")
         val periodHighlightBarDp = intPreferencesKey("period_highlight_bar_dp")
+        val timetableBgColor = longPreferencesKey("timetable_bg_color")
+        val timetableBgImageRev = longPreferencesKey("timetable_bg_image_rev")
+        val timetableBgDim = intPreferencesKey("timetable_bg_dim")
     }
 
     companion object {
@@ -258,5 +282,8 @@ class SettingsRepository(private val context: Context) {
         const val DEFAULT_TODAY_HIGHLIGHT_BAR_DP = 3
         const val MIN_TODAY_HIGHLIGHT_BAR_DP = 0
         const val MAX_TODAY_HIGHLIGHT_BAR_DP = 8
+        const val DEFAULT_TIMETABLE_BG_DIM = 24
+        const val MIN_TIMETABLE_BG_DIM = 0
+        const val MAX_TIMETABLE_BG_DIM = 60
     }
 }

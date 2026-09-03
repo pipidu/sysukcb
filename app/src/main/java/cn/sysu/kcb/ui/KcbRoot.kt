@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -65,7 +67,12 @@ import cn.sysu.kcb.ui.timetable.TimetableScreen
 
 @Composable
 fun KcbRoot(viewModel: AppViewModel) {
-    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val schoolId by remember {
+        viewModel.settings.map { it.schoolId }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(viewModel.settings.value.schoolId)
+    val selectedSemester by remember {
+        viewModel.settings.map { it.selectedSemester }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(viewModel.settings.value.selectedSemester)
     val nav = rememberNavController()
     val snackbar = remember { SnackbarHostState() }
     val message by viewModel.message.collectAsStateWithLifecycle()
@@ -115,7 +122,7 @@ fun KcbRoot(viewModel: AppViewModel) {
             }
             composable("login") {
                 LoginScreen(
-                    schoolId = settings.schoolId,
+                    schoolId = schoolId,
                     onClose = { goHome() },
                     onLoggedIn = {
                         goHome()
@@ -132,7 +139,7 @@ fun KcbRoot(viewModel: AppViewModel) {
                     courseId = entry.arguments?.getLong("courseId"),
                     presetDay = 1,
                     presetPeriod = 1,
-                    semester = settings.selectedSemester,
+                    semester = selectedSemester,
                     onDone = { nav.popBackStack() },
                 )
             }
@@ -149,7 +156,7 @@ fun KcbRoot(viewModel: AppViewModel) {
                     courseId = null,
                     presetDay = entry.arguments?.getInt("day") ?: 1,
                     presetPeriod = entry.arguments?.getInt("period") ?: 1,
-                    semester = entry.arguments?.getString("semester").orEmpty().ifBlank { settings.selectedSemester },
+                    semester = entry.arguments?.getString("semester").orEmpty().ifBlank { selectedSemester },
                     onDone = { nav.popBackStack() },
                 )
             }

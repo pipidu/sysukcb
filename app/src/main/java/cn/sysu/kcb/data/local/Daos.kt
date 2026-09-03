@@ -17,6 +17,9 @@ interface SemesterDao {
     suspend fun list(): List<SemesterEntity>
 
     @Query("SELECT * FROM semesters WHERE acadYearSemester = :id")
+    fun observe(id: String): Flow<SemesterEntity?>
+
+    @Query("SELECT * FROM semesters WHERE acadYearSemester = :id")
     suspend fun get(id: String): SemesterEntity?
 
     @Query("SELECT * FROM semesters WHERE isCurrent = 1 LIMIT 1")
@@ -88,11 +91,17 @@ interface CourseDao {
     @Query("SELECT DISTINCT acadYearSemester FROM courses")
     fun observePopulatedSemesters(): Flow<List<String>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert
     suspend fun insert(item: CourseEntity): Long
+
+    @Insert
+    suspend fun insertAll(items: List<CourseEntity>): List<Long>
 
     @Update
     suspend fun update(item: CourseEntity)
+
+    @Update
+    suspend fun updateAll(items: List<CourseEntity>)
 
     @Delete
     suspend fun delete(item: CourseEntity)
@@ -120,6 +129,9 @@ interface ExamDao {
 
     @Query("SELECT * FROM exams WHERE acadYearSemester = :sem ORDER BY examDate, startTime")
     suspend fun list(sem: String): List<ExamEntity>
+
+    @Query("SELECT DISTINCT acadYearSemester FROM exams")
+    fun observePopulatedSemesters(): Flow<List<String>>
 
     @Query("SELECT * FROM exams ORDER BY examDate, startTime")
     fun observeAll(): Flow<List<ExamEntity>>
@@ -222,6 +234,9 @@ interface StickyNoteDao {
 
     @Insert
     suspend fun insert(item: StickyNoteEntity): Long
+
+    @Insert
+    suspend fun insertAll(items: List<StickyNoteEntity>): List<Long>
 
     @Update
     suspend fun update(item: StickyNoteEntity)

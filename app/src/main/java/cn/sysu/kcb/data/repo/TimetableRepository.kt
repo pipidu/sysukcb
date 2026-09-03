@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.combine
 class TimetableRepository(private val db: AppDatabase) {
     val semesters: Flow<List<SemesterEntity>> = db.semesterDao().observeAll()
     val populatedCourseSemesters: Flow<List<String>> = db.courseDao().observePopulatedSemesters()
+    val populatedExamSemesters: Flow<List<String>> = db.examDao().observePopulatedSemesters()
 
     fun courses(semester: String): Flow<List<CourseEntity>> = db.courseDao().observe(semester)
     fun exams(semester: String): Flow<List<ExamEntity>> = db.examDao().observe(semester)
@@ -32,11 +33,11 @@ class TimetableRepository(private val db: AppDatabase) {
             db.courseDao().observe(semester),
             db.weekDao().observe(semester),
             db.periodDao().observe(semester),
-            db.semesterDao().observeAll(),
+            db.semesterDao().observe(semester),
             db.stickyNoteDao().observe(semester),
-        ) { courses, weeks, periods, semesters, notes ->
+        ) { courses, weeks, periods, semesterRow, notes ->
             TimetableSnapshot(
-                semester = semesters.firstOrNull { it.acadYearSemester == semester },
+                semester = semesterRow,
                 courses = courses,
                 weeks = weeks,
                 periods = periods.ifEmpty { defaultPeriods(semester) },
@@ -105,7 +106,7 @@ class TimetableRepository(private val db: AppDatabase) {
     suspend fun replaceImportedCourses(semester: String, imported: List<CourseEntity>) {
         db.withTransaction {
             db.courseDao().deleteImported(semester)
-            imported.forEach { db.courseDao().insert(it.copy(id = 0)) }
+            if (imported.isNotEmpty()) db.courseDao().insertAll(imported.map { it.copy(id = 0) })
         }
     }
 
@@ -126,7 +127,7 @@ class TimetableRepository(private val db: AppDatabase) {
                 db.periodDao().upsertAll(periods)
             }
             db.courseDao().deleteSemester(semester.acadYearSemester)
-            courses.forEach { db.courseDao().insert(it.copy(id = 0)) }
+            if (courses.isNotEmpty()) db.courseDao().insertAll(courses.map { it.copy(id = 0) })
         }
     }
 
@@ -144,7 +145,7 @@ class TimetableRepository(private val db: AppDatabase) {
         }
     }
 
-    suspend fun compactStorage() {
+    suspend fun compactStorage(): Boolean {
         val raw = db.rawImportDao().count()
         val extra = db.courseDao().countExtraJson() + db.examDao().countExtraJson()
         if (raw > 0) db.rawImportDao().clear()
@@ -152,9 +153,11 @@ class TimetableRepository(private val db: AppDatabase) {
             db.courseDao().clearExtraJson()
             db.examDao().clearExtraJson()
         }
-        if (raw > 0 || extra > 0) {
+        val dirty = raw > 0 || extra > 0
+        if (dirty) {
             runCatching { db.openHelper.writableDatabase.execSQL("VACUUM") }
         }
+        return dirty
     }
 
     suspend fun addCourse(item: CourseEntity): Long = db.courseDao().insert(item)
@@ -173,20 +176,21 @@ class TimetableRepository(private val db: AppDatabase) {
     suspend fun replaceNotes(semester: String, items: List<StickyNoteEntity>) {
         db.withTransaction {
             db.stickyNoteDao().deleteSemester(semester)
-            items.forEach { db.stickyNoteDao().insert(it.copy(id = 0)) }
+            if (items.isNotEmpty()) db.stickyNoteDao().insertAll(items.map { it.copy(id = 0) })
         }
     }
 
     suspend fun recolorToTheme(fromTheme: Long, toTheme: Long) {
         if (fromTheme == toTheme) return
         val all = db.courseDao().listAll()
-        db.withTransaction {
-            for (course in all) {
-                val next = CourseColors.remap(course.color, fromTheme, toTheme, course.courseName)
-                if (next != course.color) db.courseDao().update(course.copy(color = next))
-            }
+        val next = all.mapNotNull { course ->
+            val color = CourseColors.remap(course.color, fromTheme, toTheme, course.courseName)
+            if (color != course.color) course.copy(color = color) else null
         }
+        if (next.isNotEmpty()) db.courseDao().updateAll(next)
     }
+
+    suspend fun <T> withTransaction(block: suspend () -> T): T = db.withTransaction(block)
 
     suspend fun replaceSemesterPack(
         semester: SemesterEntity,
@@ -215,7 +219,7 @@ class TimetableRepository(private val db: AppDatabase) {
             db.periodDao().deleteSemester(semester.acadYearSemester)
             if (periods.isNotEmpty()) db.periodDao().upsertAll(periods)
             db.courseDao().deleteSemester(semester.acadYearSemester)
-            courses.forEach { db.courseDao().insert(it.copy(id = 0)) }
+            if (courses.isNotEmpty()) db.courseDao().insertAll(courses.map { it.copy(id = 0) })
             db.examDao().deleteSemester(semester.acadYearSemester)
             if (exams.isNotEmpty()) db.examDao().upsertAll(exams)
             db.examWeekDao().deleteSemester(semester.acadYearSemester)

@@ -7,8 +7,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -68,18 +68,27 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.sysu.kcb.KcbApp
+import cn.sysu.kcb.data.TimetableBackground
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.PeriodEntity
 import cn.sysu.kcb.data.local.SemesterEntity
@@ -94,8 +103,12 @@ import cn.sysu.kcb.domain.WeekMask
 import cn.sysu.kcb.notify.ClassAlarmScheduler
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.course.CourseDetailSheet
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
+import kotlin.math.max
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -110,7 +123,11 @@ fun TimetableScreen(
     onAdd: (Int, Int, String) -> Unit,
     onLogin: () -> Unit,
 ) {
-    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val settings by remember {
+        viewModel.settings
+            .map { it.copy(webdavLastSyncAt = 0L, webdavLastMessage = "") }
+            .distinctUntilChanged()
+    }.collectAsStateWithLifecycle(viewModel.settings.value)
     val repo = KcbApp.instance.container.timetable
     val loadedSnapshot by viewModel.timetableSnapshot.collectAsStateWithLifecycle()
     val snapshot = loadedSnapshot ?: TimetableSnapshot(null, emptyList(), emptyList(), emptyList())
@@ -405,6 +422,9 @@ fun TimetableScreen(
                             periodHighlightColor = settings.periodHighlightColor,
                             periodHighlightAlpha = settings.periodHighlightAlpha,
                             periodHighlightBarDp = settings.periodHighlightBarDp,
+                            timetableBgColor = settings.timetableBgColor,
+                            timetableBgImageRev = settings.timetableBgImageRev,
+                            timetableBgDim = settings.timetableBgDim,
                         )
                     } else {
                         HorizontalPager(
@@ -441,6 +461,9 @@ fun TimetableScreen(
                                 periodHighlightColor = settings.periodHighlightColor,
                                 periodHighlightAlpha = settings.periodHighlightAlpha,
                                 periodHighlightBarDp = settings.periodHighlightBarDp,
+                            timetableBgColor = settings.timetableBgColor,
+                            timetableBgImageRev = settings.timetableBgImageRev,
+                            timetableBgDim = settings.timetableBgDim,
                             )
                         }
                     }
@@ -778,6 +801,9 @@ internal fun TimetableGrid(
     periodHighlightColor: Long = 0L,
     periodHighlightAlpha: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA,
     periodHighlightBarDp: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP,
+    timetableBgColor: Long = 0L,
+    timetableBgImageRev: Long = 0L,
+    timetableBgDim: Int = SettingsRepository.DEFAULT_TIMETABLE_BG_DIM,
 ) {
     val periodH = periodHeightDp.coerceIn(
         SettingsRepository.MIN_PERIOD_HEIGHT_DP,
@@ -786,14 +812,6 @@ internal fun TimetableGrid(
     val headerH = 40.dp
     val timeW = 40.dp
     val today = LocalDate.now()
-    var now by remember { mutableStateOf(LocalTime.now()) }
-    LaunchedEffect(periodHighlightEnabled) {
-        if (!periodHighlightEnabled) return@LaunchedEffect
-        while (true) {
-            now = LocalTime.now()
-            delay(15_000)
-        }
-    }
     val rows = periods.ifEmpty {
         (1..11).map {
             PeriodEntity(
@@ -807,6 +825,14 @@ internal fun TimetableGrid(
             )
         }
     }
+    var now by remember { mutableStateOf(LocalTime.now()) }
+    LaunchedEffect(periodHighlightEnabled, rows.size) {
+        if (!periodHighlightEnabled) return@LaunchedEffect
+        while (true) {
+            now = LocalTime.now()
+            delay(nextHighlightDelayMs(rows, now))
+        }
+    }
     val groups = remember(courses) { overlapGroups(courses) }
     val vScroll = rememberScrollState()
     BoxWithConstraints(Modifier.fillMaxSize().verticalScroll(vScroll)) {
@@ -816,7 +842,79 @@ internal fun TimetableGrid(
         val dayDates = (0..6).map { weekStart?.plusDays(it.toLong()) }
         val todayCol = dayDates.indexOfFirst { it == today }
         val currentPeriodIndex = if (periodHighlightEnabled) findCurrentPeriodIndex(rows, now) else -1
-        Box(Modifier.height(gridH).fillMaxWidth()) {
+        val context = LocalContext.current
+        val density = LocalDensity.current
+        val maxPx = with(density) { max(maxWidth.toPx(), gridH.toPx()).toInt().coerceIn(240, 1440) }
+        var bgImage by remember(timetableBgImageRev, maxPx) { mutableStateOf<ImageBitmap?>(null) }
+        LaunchedEffect(timetableBgImageRev, maxPx) {
+            bgImage = if (timetableBgImageRev == 0L) {
+                null
+            } else {
+                withContext(Dispatchers.IO) {
+                    TimetableBackground.decode(context, maxPx)?.asImageBitmap()
+                }
+            }
+        }
+        val gridLine = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+        val surfaceFallback = MaterialTheme.colorScheme.surface
+        Box(
+            Modifier
+                .height(gridH)
+                .fillMaxWidth()
+                .drawBehind {
+                    val custom = if (timetableBgColor != 0L) Color(timetableBgColor) else null
+                    val image = bgImage
+                    if (image != null) {
+                        val bw = image.width.toFloat().coerceAtLeast(1f)
+                        val bh = image.height.toFloat().coerceAtLeast(1f)
+                        val scale = max(size.width / bw, size.height / bh)
+                        val dw = bw * scale
+                        val dh = bh * scale
+                        val left = (size.width - dw) / 2f
+                        val top = (size.height - dh) / 2f
+                        drawImage(
+                            image = image,
+                            dstOffset = IntOffset(left.toInt(), top.toInt()),
+                            dstSize = IntSize(dw.toInt().coerceAtLeast(1), dh.toInt().coerceAtLeast(1)),
+                        )
+                        val dim = timetableBgDim.coerceIn(0, 60) / 100f
+                        if (dim > 0f) drawRect(Color.Black.copy(alpha = dim))
+                    } else {
+                        drawRect(custom ?: surfaceFallback)
+                    }
+                    val stroke = 0.4.dp.toPx()
+                    val timePx = timeW.toPx()
+                    val headerPx = headerH.toPx()
+                    val periodPx = periodH.toPx()
+                    val colPx = colW.toPx()
+                    for (i in 0..rows.size) {
+                        val y = headerPx + periodPx * i
+                        drawLine(gridLine, Offset(timePx, y), Offset(size.width, y), stroke)
+                    }
+                    drawLine(gridLine, Offset(timePx, 0f), Offset(size.width, 0f), stroke)
+                    for (d in 0..7) {
+                        val x = timePx + colPx * d
+                        drawLine(gridLine, Offset(x, 0f), Offset(x, size.height), stroke)
+                    }
+                }
+                .pointerInput(onEmpty != null, rows.size, colW, periodH) {
+                    if (onEmpty == null) return@pointerInput
+                    val timePx = with(density) { timeW.toPx() }
+                    val headerPx = with(density) { headerH.toPx() }
+                    val periodPx = with(density) { periodH.toPx() }
+                    val colPx = with(density) { colW.toPx() }
+                    detectTapGestures { offset ->
+                        val x = offset.x - timePx
+                        val y = offset.y - headerPx
+                        if (x < 0f || y < 0f) return@detectTapGestures
+                        val day = (x / colPx).toInt() + 1
+                        val row = (y / periodPx).toInt()
+                        if (day in 1..7 && row in rows.indices) {
+                            onEmpty(day, rows[row].sectionNumber)
+                        }
+                    }
+                },
+        ) {
             if (todayCol >= 0 && todayHighlightEnabled) {
                 val fill = highlightFill(todayHighlightColor)
                 Box(
@@ -951,18 +1049,6 @@ internal fun TimetableGrid(
                                 },
                             )
                         }
-                    }
-                    for (day in 1..7) {
-                        Box(
-                            Modifier
-                                .width(colW)
-                                .height(periodH)
-                                .border(0.4.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
-                                .then(
-                                    if (onEmpty != null) Modifier.clickable { onEmpty(day, period.sectionNumber) }
-                                    else Modifier,
-                                ),
-                        )
                     }
                 }
             }
@@ -1101,4 +1187,17 @@ private fun findCurrentPeriodIndex(periods: List<PeriodEntity>, now: LocalTime):
         val end = parsePeriodClock(period.endTime) ?: return@indexOfFirst false
         !now.isBefore(start) && now.isBefore(end)
     }
+}
+
+private fun nextHighlightDelayMs(periods: List<PeriodEntity>, now: LocalTime): Long {
+    val millis = periods.asSequence()
+        .flatMap { sequenceOf(it.startTime, it.endTime) }
+        .mapNotNull { parsePeriodClock(it) }
+        .map { target ->
+            var gap = java.time.Duration.between(now, target).toMillis()
+            if (gap <= 0L) gap += 24L * 60L * 60L * 1000L
+            gap
+        }
+        .minOrNull() ?: 30_000L
+    return millis.coerceIn(5_000L, 60_000L)
 }

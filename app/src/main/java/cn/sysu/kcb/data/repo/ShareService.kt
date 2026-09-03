@@ -56,19 +56,21 @@ class ShareService(
     }
 
     suspend fun exportAllJson(nickname: String = ""): String {
-        return encode(
-            SharePack(
-                version = 2,
-                nickname = nickname,
-                semesters = repo.listSemesters(),
-                weeks = repo.listAllWeeks().map { it.copy(id = 0) },
-                periods = repo.listAllPeriods().map { it.copy(id = 0) },
-                courses = repo.listAllCourses().map { it.copy(id = 0) },
-                exams = repo.listAllExams().map { it.copy(id = 0) },
-                examWeeks = repo.listAllExamWeeks().map { it.copy(id = 0) },
-                notes = repo.listAllNotes().map { it.copy(id = 0) },
-            ),
-        )
+        return repo.withTransaction {
+            encode(
+                SharePack(
+                    version = 2,
+                    nickname = nickname,
+                    semesters = repo.listSemesters(),
+                    weeks = repo.listAllWeeks().map { it.copy(id = 0) },
+                    periods = repo.listAllPeriods().map { it.copy(id = 0) },
+                    courses = repo.listAllCourses().map { it.copy(id = 0) },
+                    exams = repo.listAllExams().map { it.copy(id = 0) },
+                    examWeeks = repo.listAllExamWeeks().map { it.copy(id = 0) },
+                    notes = repo.listAllNotes().map { it.copy(id = 0) },
+                ),
+            )
+        }
     }
 
     fun decodePack(text: String): SharePack {

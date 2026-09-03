@@ -11,12 +11,15 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.KcbRoot
 import cn.sysu.kcb.ui.theme.KcbTheme
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 class MainActivity : ComponentActivity() {
     private val viewModel: AppViewModel by viewModels()
@@ -27,8 +30,12 @@ class MainActivity : ComponentActivity() {
         handleImportIntent(intent)
         KcbApp.instance.container.alarms.ensureChannels()
         setContent {
-            val settings by viewModel.settings.collectAsStateWithLifecycle()
-            KcbTheme(themeColor = settings.themeColor, themeMode = settings.themeMode) {
+            val theme by remember {
+                viewModel.settings
+                    .map { it.themeColor to it.themeMode }
+                    .distinctUntilChanged()
+            }.collectAsStateWithLifecycle(viewModel.settings.value.themeColor to viewModel.settings.value.themeMode)
+            KcbTheme(themeColor = theme.first, themeMode = theme.second) {
                 KcbRoot(viewModel)
             }
         }
