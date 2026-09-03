@@ -131,7 +131,15 @@ fun WebDavScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             )
             ListItem(
                 headlineContent = { Text("自动同步") },
-                supportingContent = { Text("连网后约每小时上传自己的课表，并拉取其他昵称") },
+                supportingContent = {
+                    Text(
+                        if (settings.webdavWifiOnly) {
+                            "连上 Wi‑Fi 后约每小时上传自己的课表，并拉取其他昵称"
+                        } else {
+                            "连网后约每小时上传自己的课表，并拉取其他昵称"
+                        },
+                    )
+                },
                 trailingContent = {
                     Switch(
                         checked = davAuto,
@@ -139,6 +147,16 @@ fun WebDavScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                             davAuto = checked
                             viewModel.saveWebDav(davUrl, davUser, davPassword, davNick, checked)
                         },
+                    )
+                },
+            )
+            ListItem(
+                headlineContent = { Text("仅 Wi‑Fi 同步") },
+                supportingContent = { Text("用流量时不上传、不下载、不同步好友") },
+                trailingContent = {
+                    Switch(
+                        checked = settings.webdavWifiOnly,
+                        onCheckedChange = { viewModel.setWebDavWifiOnly(it) },
                     )
                 },
             )

@@ -27,22 +27,30 @@ class WebDavSyncWorker(
 
     companion object {
         const val UNIQUE_NAME = "webdav-auto-sync"
+        private const val UNIQUE_WIFI = "webdav-auto-sync-wifi"
+        private const val UNIQUE_ANY = "webdav-auto-sync-any"
 
-        fun schedule(context: Context, enabled: Boolean) {
+        fun schedule(context: Context, enabled: Boolean, wifiOnly: Boolean) {
             val manager = WorkManager.getInstance(context.applicationContext)
+            manager.cancelUniqueWork(UNIQUE_NAME)
             if (!enabled) {
-                manager.cancelUniqueWork(UNIQUE_NAME)
+                manager.cancelUniqueWork(UNIQUE_WIFI)
+                manager.cancelUniqueWork(UNIQUE_ANY)
                 return
             }
+            val keepName = if (wifiOnly) UNIQUE_WIFI else UNIQUE_ANY
+            val cancelName = if (wifiOnly) UNIQUE_ANY else UNIQUE_WIFI
+            manager.cancelUniqueWork(cancelName)
+            val networkType = if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED
             val request = PeriodicWorkRequestBuilder<WebDavSyncWorker>(1, TimeUnit.HOURS)
                 .setConstraints(
                     Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .setRequiredNetworkType(networkType)
                         .build(),
                 )
                 .build()
             manager.enqueueUniquePeriodicWork(
-                UNIQUE_NAME,
+                keepName,
                 ExistingPeriodicWorkPolicy.KEEP,
                 request,
             )

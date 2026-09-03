@@ -27,11 +27,13 @@ data class UserSettings(
     val webdavUser: String = "",
     val webdavNickname: String = "",
     val webdavAutoSync: Boolean = true,
+    val webdavWifiOnly: Boolean = true,
     val webdavLastSyncAt: Long = 0L,
     val webdavLastMessage: String = "",
     val updateUseMirror: Boolean = false,
     val selectedFriendId: String = "",
     val periodHeightDp: Int = SettingsRepository.DEFAULT_PERIOD_HEIGHT_DP,
+    val friendPeriodHeightDp: Int = SettingsRepository.DEFAULT_PERIOD_HEIGHT_DP,
     val todayHighlightEnabled: Boolean = true,
     val todayHighlightColor: Long = 0L,
     val todayHighlightAlpha: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA,
@@ -46,6 +48,16 @@ class SettingsRepository(private val context: Context) {
     val settings: Flow<UserSettings> = context.dataStore.data.map { it.toSettings() }
 
     suspend fun snapshot(): UserSettings = context.dataStore.data.map { it.toSettings() }.first()
+
+    suspend fun ensureFriendPeriodHeight() {
+        context.dataStore.edit { prefs ->
+            if (prefs[Keys.friendPeriodHeightDp] == null) {
+                prefs[Keys.friendPeriodHeightDp] = (
+                    prefs[Keys.periodHeightDp] ?: DEFAULT_PERIOD_HEIGHT_DP
+                    ).coerceIn(MIN_PERIOD_HEIGHT_DP, MAX_PERIOD_HEIGHT_DP)
+            }
+        }
+    }
 
     suspend fun setThemeColor(color: Long) {
         context.dataStore.edit { it[Keys.themeColor] = color }
@@ -96,6 +108,10 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.webdavAutoSync] = enabled }
     }
 
+    suspend fun setWebDavWifiOnly(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.webdavWifiOnly] = enabled }
+    }
+
     suspend fun setUpdateUseMirror(enabled: Boolean) {
         context.dataStore.edit { it[Keys.updateUseMirror] = enabled }
     }
@@ -106,6 +122,12 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setPeriodHeightDp(dp: Int) {
         context.dataStore.edit { it[Keys.periodHeightDp] = dp.coerceIn(MIN_PERIOD_HEIGHT_DP, MAX_PERIOD_HEIGHT_DP) }
+    }
+
+    suspend fun setFriendPeriodHeightDp(dp: Int) {
+        context.dataStore.edit {
+            it[Keys.friendPeriodHeightDp] = dp.coerceIn(MIN_PERIOD_HEIGHT_DP, MAX_PERIOD_HEIGHT_DP)
+        }
     }
 
     suspend fun setTodayHighlightEnabled(enabled: Boolean) {
@@ -168,11 +190,14 @@ class SettingsRepository(private val context: Context) {
         webdavUser = this[Keys.webdavUser].orEmpty(),
         webdavNickname = this[Keys.webdavNickname].orEmpty(),
         webdavAutoSync = this[Keys.webdavAutoSync] ?: true,
+        webdavWifiOnly = this[Keys.webdavWifiOnly] ?: true,
         webdavLastSyncAt = this[Keys.webdavLastSyncAt] ?: 0L,
         webdavLastMessage = this[Keys.webdavLastMessage].orEmpty(),
         updateUseMirror = this[Keys.updateUseMirror] ?: false,
         selectedFriendId = this[Keys.selectedFriendId].orEmpty(),
         periodHeightDp = (this[Keys.periodHeightDp] ?: SettingsRepository.DEFAULT_PERIOD_HEIGHT_DP)
+            .coerceIn(SettingsRepository.MIN_PERIOD_HEIGHT_DP, SettingsRepository.MAX_PERIOD_HEIGHT_DP),
+        friendPeriodHeightDp = (this[Keys.friendPeriodHeightDp] ?: SettingsRepository.DEFAULT_PERIOD_HEIGHT_DP)
             .coerceIn(SettingsRepository.MIN_PERIOD_HEIGHT_DP, SettingsRepository.MAX_PERIOD_HEIGHT_DP),
         todayHighlightEnabled = this[Keys.todayHighlightEnabled] ?: true,
         todayHighlightColor = this[Keys.todayHighlightColor] ?: 0L,
@@ -201,11 +226,13 @@ class SettingsRepository(private val context: Context) {
         val webdavUser = stringPreferencesKey("webdav_user")
         val webdavNickname = stringPreferencesKey("webdav_nickname")
         val webdavAutoSync = booleanPreferencesKey("webdav_auto_sync")
+        val webdavWifiOnly = booleanPreferencesKey("webdav_wifi_only")
         val webdavLastSyncAt = longPreferencesKey("webdav_last_sync_at")
         val webdavLastMessage = stringPreferencesKey("webdav_last_message")
         val updateUseMirror = booleanPreferencesKey("update_use_mirror")
         val selectedFriendId = stringPreferencesKey("selected_friend_id")
         val periodHeightDp = intPreferencesKey("period_height_dp")
+        val friendPeriodHeightDp = intPreferencesKey("friend_period_height_dp")
         val todayHighlightEnabled = booleanPreferencesKey("today_highlight_enabled")
         val todayHighlightColor = longPreferencesKey("today_highlight_color")
         val todayHighlightAlpha = intPreferencesKey("today_highlight_alpha")

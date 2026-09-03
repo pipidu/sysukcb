@@ -24,8 +24,11 @@ class KcbApp : Application() {
         appScope.launch {
             runCatching { container.timetable.listSemesters() }
             runCatching { AppStorage.trimCaches(this@KcbApp) }
-            val enabled = runCatching { container.settings.snapshot().webdavAutoSync }.getOrDefault(true)
-            WebDavSyncWorker.schedule(this@KcbApp, enabled)
+            runCatching { container.settings.ensureFriendPeriodHeight() }
+            val snap = runCatching { container.settings.snapshot() }.getOrNull()
+            val enabled = snap?.webdavAutoSync ?: true
+            val wifiOnly = snap?.webdavWifiOnly ?: true
+            WebDavSyncWorker.schedule(this@KcbApp, enabled, wifiOnly)
             delay(2_500)
             runCatching { container.timetable.compactStorage() }
             if (enabled) {

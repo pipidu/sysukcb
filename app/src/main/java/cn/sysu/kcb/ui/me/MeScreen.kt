@@ -295,6 +295,13 @@ fun MeScreen(
                     valueRange = SettingsRepository.MIN_PERIOD_HEIGHT_DP.toFloat()..SettingsRepository.MAX_PERIOD_HEIGHT_DP.toFloat(),
                     steps = SettingsRepository.MAX_PERIOD_HEIGHT_DP - SettingsRepository.MIN_PERIOD_HEIGHT_DP - 1,
                 )
+                Text("好友课表格子高度 ${settings.friendPeriodHeightDp} dp", style = MaterialTheme.typography.labelLarge)
+                Slider(
+                    value = settings.friendPeriodHeightDp.toFloat(),
+                    onValueChange = { viewModel.setFriendPeriodHeightDp(it.toInt()) },
+                    valueRange = SettingsRepository.MIN_PERIOD_HEIGHT_DP.toFloat()..SettingsRepository.MAX_PERIOD_HEIGHT_DP.toFloat(),
+                    steps = SettingsRepository.MAX_PERIOD_HEIGHT_DP - SettingsRepository.MIN_PERIOD_HEIGHT_DP - 1,
+                )
                 ListItem(
                     headlineContent = { Text("今天列高亮") },
                     supportingContent = { Text("当前周里把今天那一列标出来") },
@@ -808,5 +815,5 @@ private fun appearanceSummary(settings: UserSettings): String {
         SettingsRepository.THEME_MODE_DARK -> "深色"
         else -> "跟随系统"
     }
-    return "${themeColorName(settings.themeColor)} · $mode · 格子${settings.periodHeightDp}"
+    return "${themeColorName(settings.themeColor)} · $mode · 格子${settings.periodHeightDp} · 好友${settings.friendPeriodHeightDp}"
 }

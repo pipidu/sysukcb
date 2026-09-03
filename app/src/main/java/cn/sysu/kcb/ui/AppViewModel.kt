@@ -21,6 +21,7 @@ import cn.sysu.kcb.data.remote.isNewerThan
 import cn.sysu.kcb.data.remote.WebDavClient
 import cn.sysu.kcb.data.remote.WebDavShareCode
 import cn.sysu.kcb.data.remote.WebDavSyncWorker
+import cn.sysu.kcb.data.remote.WebDavWifiRequiredException
 import cn.sysu.kcb.data.repo.TimetableSnapshot
 import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.ui.timetable.defaultStickyNote
@@ -93,6 +94,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
+            runCatching { container.settings.ensureFriendPeriodHeight() }
             val hasSession = container.cookies.hasAnySession()
             loggedIn.value = hasSession
             sessionStatus.value = if (hasSession) SessionStatus.Valid else SessionStatus.LoggedOut
@@ -224,6 +226,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setPeriodHeightDp(dp: Int) = viewModelScope.launch {
         container.settings.setPeriodHeightDp(dp)
+    }
+
+    fun setFriendPeriodHeightDp(dp: Int) = viewModelScope.launch {
+        container.settings.setFriendPeriodHeightDp(dp)
     }
 
     fun setTodayHighlightEnabled(enabled: Boolean) = viewModelScope.launch {
@@ -418,8 +424,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             container.webdav.syncFriends()
         }
             .onSuccess { message.value = it }
-            .onFailure { message.value = it.message ?: "加入失败" }
-            .isSuccess
+            .onFailure { e ->
+                message.value = when (e) {
+                    is WebDavWifiRequiredException -> "已加入，当前不是 Wi‑Fi，连上后再同步好友"
+                    else -> e.message ?: "加入失败"
+                }
+            }
+            .let { it.isSuccess || it.exceptionOrNull() is WebDavWifiRequiredException }
         webdavBusy.value = false
         onDone?.invoke(ok)
     }
@@ -523,7 +534,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         container.settings.setWebDav(canonical, user.trim(), nick, autoSync)
         if (password.isNotBlank()) container.webdavSecrets.save(password)
         webdavHasPassword.value = container.webdavSecrets.hasPassword()
-        WebDavSyncWorker.schedule(getApplication(), autoSync)
+        val snap = container.settings.snapshot()
+        WebDavSyncWorker.schedule(getApplication(), snap.webdavAutoSync, snap.webdavWifiOnly)
+    }
+
+    fun setWebDavWifiOnly(enabled: Boolean) = viewModelScope.launch {
+        container.settings.setWebDavWifiOnly(enabled)
+        val snap = container.settings.snapshot()
+        WebDavSyncWorker.schedule(getApplication(), snap.webdavAutoSync, enabled)
     }
 
     fun prepareFreshLogin() {

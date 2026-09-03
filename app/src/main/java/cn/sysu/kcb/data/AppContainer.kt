@@ -35,6 +35,6 @@ class AppContainer(context: Context) {
     val webdavSecrets = WebDavSecrets(context)
     val friends = FriendRepository(db, share)
     val wakeup = WakeUpImportService(timetable, json)
-    val webdav = WebDavSyncService(WebDavClient(), share, settings, webdavSecrets, friends)
+    val webdav = WebDavSyncService(context.applicationContext, WebDavClient(), share, settings, webdavSecrets, friends)
     val alarms = ClassAlarmScheduler(context)
 }

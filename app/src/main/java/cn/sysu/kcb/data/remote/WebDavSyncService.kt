@@ -1,5 +1,8 @@
 package cn.sysu.kcb.data.remote
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import cn.sysu.kcb.data.local.FriendPackEntity
 import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.prefs.WebDavSecrets
@@ -7,7 +10,10 @@ import cn.sysu.kcb.data.repo.FriendRepository
 import cn.sysu.kcb.data.repo.ShareService
 import kotlinx.coroutines.CancellationException
 
+class WebDavWifiRequiredException : Exception("当前不是 Wi‑Fi，已跳过同步")
+
 class WebDavSyncService(
+    private val context: Context,
     private val client: WebDavClient,
     private val share: ShareService,
     private val settings: SettingsRepository,
@@ -15,6 +21,7 @@ class WebDavSyncService(
     private val friends: FriendRepository,
 ) {
     suspend fun upload() {
+        requireWifiIfNeeded()
         val creds = requireCreds()
         val body = share.exportAllJson(creds.nickname)
         client.upload(creds.url, creds.user, creds.password, body)
@@ -25,6 +32,7 @@ class WebDavSyncService(
     }
 
     suspend fun download(): String {
+        requireWifiIfNeeded()
         val creds = requireCreds()
         val json = client.download(creds.url, creds.user, creds.password)
         val semester = share.importJson(json)
@@ -33,6 +41,7 @@ class WebDavSyncService(
     }
 
     suspend fun syncFriends(): String {
+        requireWifiIfNeeded()
         val creds = requireCreds(needNickname = true)
         return pullFriends(creds, share.exportAllJson(creds.nickname))
     }
@@ -41,6 +50,7 @@ class WebDavSyncService(
         val snap = settings.snapshot()
         if (!snap.webdavAutoSync) return null
         if (snap.webdavUrl.isBlank() || snap.webdavUser.isBlank() || secrets.password().isBlank()) return null
+        if (snap.webdavWifiOnly && !isOnWifi(context)) return null
         val now = System.currentTimeMillis()
         if (!force && snap.webdavLastSyncAt > 0L && now - snap.webdavLastSyncAt < MIN_AUTO_INTERVAL_MS) {
             return snap.webdavLastMessage
@@ -62,6 +72,13 @@ class WebDavSyncService(
                 settings.setWebDavLastSync(now, e.message ?: "自动同步失败")
             }
             throw e
+        }
+    }
+
+    private suspend fun requireWifiIfNeeded() {
+        val snap = settings.snapshot()
+        if (snap.webdavWifiOnly && !isOnWifi(context)) {
+            throw WebDavWifiRequiredException()
         }
     }
 
@@ -143,5 +160,12 @@ class WebDavSyncService(
 
     companion object {
         private const val MIN_AUTO_INTERVAL_MS = 10 * 60 * 1000L
+
+        fun isOnWifi(context: Context): Boolean {
+            val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false
+            val network = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(network) ?: return false
+            return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+        }
     }
 }
