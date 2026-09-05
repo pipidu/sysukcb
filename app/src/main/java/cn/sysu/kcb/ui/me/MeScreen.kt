@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -111,8 +110,10 @@ fun MeScreen(
     var confirmClear by remember { mutableStateOf(false) }
     var confirmAllImport by remember { mutableStateOf(false) }
     var accountOpen by rememberSaveable { mutableStateOf(false) }
-    var importOpen by rememberSaveable { mutableStateOf(false) }
+    var dataOpen by rememberSaveable { mutableStateOf(false) }
     var appearanceOpen by rememberSaveable { mutableStateOf(false) }
+    var timetableOpen by rememberSaveable { mutableStateOf(false) }
+    var reminderOpen by rememberSaveable { mutableStateOf(false) }
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val canImport = !importing && !checkingSession && sessionStatus == SessionStatus.Valid
     LaunchedEffect(Unit) {
@@ -196,11 +197,12 @@ fun MeScreen(
                 }
             }
             ExpandableCard(
-                title = "导入导出",
-                summary = "教务导入、文件、WakeUp",
-                expanded = importOpen,
-                onToggle = { importOpen = !importOpen },
+                title = "数据",
+                summary = "教务导入、文件、同步",
+                expanded = dataOpen,
+                onToggle = { dataOpen = !dataOpen },
             ) {
+                SectionLabel("教务")
                 Text(
                     "选中学期只导入课表页当前学年；全部导入会覆盖前后各 8 个学期。",
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
@@ -221,6 +223,7 @@ fun MeScreen(
                         Text("全部导入", textAlign = TextAlign.Center)
                     }
                 }
+                SectionLabel("文件")
                 ListItem(
                     headlineContent = { Text("导出课表") },
                     supportingContent = { Text("生成 JSON，分享给同学用本 App 导入") },
@@ -233,7 +236,7 @@ fun MeScreen(
                 )
                 ListItem(
                     headlineContent = { Text("从文件导入") },
-                    supportingContent = { Text("本 App 的 JSON，或 WakeUp 备份 / CSV") },
+                    supportingContent = { Text("本 App 的 JSON") },
                     trailingContent = {
                         OutlinedButton(onClick = { filePicker.launch(arrayOf("application/json", "text/plain", "*/*")) }) {
                             Text("选择")
@@ -242,7 +245,7 @@ fun MeScreen(
                 )
                 ListItem(
                     headlineContent = { Text("从 WakeUp 导入") },
-                    supportingContent = { Text("选择备份或 CSV，导入到当前学期，考试保留") },
+                    supportingContent = { Text("备份或 CSV，导入到当前学期，考试保留") },
                     trailingContent = {
                         OutlinedButton(
                             onClick = { wakeupPicker.launch(arrayOf("application/json", "text/plain", "*/*")) },
@@ -250,9 +253,26 @@ fun MeScreen(
                         ) { Text("文件") }
                     },
                 )
+                SectionLabel("同步")
+                ListItem(
+                    headlineContent = { Text("WebDAV") },
+                    supportingContent = {
+                        Text(
+                            if (settings.webdavUrl.isBlank()) "用坚果云和好友互看课表"
+                            else webdavSyncHint(settings.webdavLastSyncAt, settings.webdavLastMessage),
+                        )
+                    },
+                    trailingContent = {
+                        Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+                    },
+                    modifier = Modifier.clickable(onClick = onWebDav),
+                )
+                TextButton(onClick = { confirmClear = true }) {
+                    Text("清空本地数据", color = MaterialTheme.colorScheme.error)
+                }
             }
             ExpandableCard(
-                title = "外观与提醒",
+                title = "外观",
                 summary = appearanceSummary(settings),
                 expanded = appearanceOpen,
                 onToggle = { appearanceOpen = !appearanceOpen },
@@ -285,6 +305,20 @@ fun MeScreen(
                         )
                     },
                     modifier = Modifier.clickable { showColor = true },
+                )
+                HeightSlider(
+                    label = "顶栏高度",
+                    value = settings.topBarHeightDp,
+                    min = SettingsRepository.MIN_TOP_BAR_HEIGHT_DP,
+                    max = SettingsRepository.MAX_TOP_BAR_HEIGHT_DP,
+                    onChange = { viewModel.setTopBarHeightDp(it) },
+                )
+                HeightSlider(
+                    label = "底栏高度",
+                    value = settings.bottomBarHeightDp,
+                    min = SettingsRepository.MIN_BOTTOM_BAR_HEIGHT_DP,
+                    max = SettingsRepository.MAX_BOTTOM_BAR_HEIGHT_DP,
+                    onChange = { viewModel.setBottomBarHeightDp(it) },
                 )
                 val bgMode = when {
                     settings.timetableBgImageRev > 0L -> "图片"
@@ -337,37 +371,24 @@ fun MeScreen(
                         steps = SettingsRepository.MAX_TIMETABLE_BG_DIM - SettingsRepository.MIN_TIMETABLE_BG_DIM - 1,
                     )
                 }
-                Text("课表格子高度 ${settings.periodHeightDp} dp", style = MaterialTheme.typography.labelLarge)
-                Slider(
-                    value = settings.periodHeightDp.toFloat(),
-                    onValueChange = { viewModel.setPeriodHeightDp(it.toInt()) },
-                    valueRange = SettingsRepository.MIN_PERIOD_HEIGHT_DP.toFloat()..SettingsRepository.MAX_PERIOD_HEIGHT_DP.toFloat(),
-                    steps = SettingsRepository.MAX_PERIOD_HEIGHT_DP - SettingsRepository.MIN_PERIOD_HEIGHT_DP - 1,
-                )
-                Text("好友课表格子高度 ${settings.friendPeriodHeightDp} dp", style = MaterialTheme.typography.labelLarge)
-                Slider(
-                    value = settings.friendPeriodHeightDp.toFloat(),
-                    onValueChange = { viewModel.setFriendPeriodHeightDp(it.toInt()) },
-                    valueRange = SettingsRepository.MIN_PERIOD_HEIGHT_DP.toFloat()..SettingsRepository.MAX_PERIOD_HEIGHT_DP.toFloat(),
-                    steps = SettingsRepository.MAX_PERIOD_HEIGHT_DP - SettingsRepository.MIN_PERIOD_HEIGHT_DP - 1,
-                )
-                Text("顶栏高度 ${settings.topBarHeightDp} dp", style = MaterialTheme.typography.labelLarge)
-                Slider(
-                    value = settings.topBarHeightDp.toFloat(),
-                    onValueChange = { viewModel.setTopBarHeightDp(it.toInt()) },
-                    valueRange = SettingsRepository.MIN_TOP_BAR_HEIGHT_DP.toFloat()..SettingsRepository.MAX_TOP_BAR_HEIGHT_DP.toFloat(),
-                    steps = SettingsRepository.MAX_TOP_BAR_HEIGHT_DP - SettingsRepository.MIN_TOP_BAR_HEIGHT_DP - 1,
-                )
-                Text("底栏高度 ${settings.bottomBarHeightDp} dp", style = MaterialTheme.typography.labelLarge)
-                Slider(
-                    value = settings.bottomBarHeightDp.toFloat(),
-                    onValueChange = { viewModel.setBottomBarHeightDp(it.toInt()) },
-                    valueRange = SettingsRepository.MIN_BOTTOM_BAR_HEIGHT_DP.toFloat()..SettingsRepository.MAX_BOTTOM_BAR_HEIGHT_DP.toFloat(),
-                    steps = SettingsRepository.MAX_BOTTOM_BAR_HEIGHT_DP - SettingsRepository.MIN_BOTTOM_BAR_HEIGHT_DP - 1,
+            }
+            ExpandableCard(
+                title = "课表显示",
+                summary = timetableLookSummary(settings),
+                expanded = timetableOpen,
+                onToggle = { timetableOpen = !timetableOpen },
+            ) {
+                SectionLabel("自己的课表")
+                HeightSlider(
+                    label = "格子高度",
+                    value = settings.periodHeightDp,
+                    min = SettingsRepository.MIN_PERIOD_HEIGHT_DP,
+                    max = SettingsRepository.MAX_PERIOD_HEIGHT_DP,
+                    onChange = { viewModel.setPeriodHeightDp(it) },
                 )
                 HighlightSwitchBlock(
                     title = "今天列高亮",
-                    subtitle = "自己的课表里，当前周标出今天那一列",
+                    subtitle = "当前周标出今天那一列",
                     enabled = settings.todayHighlightEnabled,
                     onEnabled = { viewModel.setTodayHighlightEnabled(it) },
                     color = settings.todayHighlightColor,
@@ -379,8 +400,30 @@ fun MeScreen(
                     onAlpha = { viewModel.setTodayHighlightAlpha(it) },
                     onBar = { viewModel.setTodayHighlightBarDp(it) },
                 )
+                if (settings.todayHighlightEnabled) HighlightSwitchBlock(
+                    title = "当前节次行高亮",
+                    subtitle = "标出正在上课的那一行；课间画在两节中间",
+                    enabled = settings.periodHighlightEnabled,
+                    onEnabled = { viewModel.setPeriodHighlightEnabled(it) },
+                    color = settings.periodHighlightColor,
+                    themeColor = settings.themeColor,
+                    alpha = settings.periodHighlightAlpha,
+                    barDp = settings.periodHighlightBarDp,
+                    barLabel = "左边条",
+                    onColorClick = { showPeriodHighlightColor = true },
+                    onAlpha = { viewModel.setPeriodHighlightAlpha(it) },
+                    onBar = { viewModel.setPeriodHighlightBarDp(it) },
+                )
+                SectionLabel("好友课表")
+                HeightSlider(
+                    label = "格子高度",
+                    value = settings.friendPeriodHeightDp,
+                    min = SettingsRepository.MIN_PERIOD_HEIGHT_DP,
+                    max = SettingsRepository.MAX_PERIOD_HEIGHT_DP,
+                    onChange = { viewModel.setFriendPeriodHeightDp(it) },
+                )
                 HighlightSwitchBlock(
-                    title = "好友今天列高亮",
+                    title = "今天列高亮",
                     subtitle = "好友课表里标出今天那一列",
                     enabled = settings.friendTodayHighlightEnabled,
                     onEnabled = { viewModel.setFriendTodayHighlightEnabled(it) },
@@ -393,22 +436,8 @@ fun MeScreen(
                     onAlpha = { viewModel.setFriendTodayHighlightAlpha(it) },
                     onBar = { viewModel.setFriendTodayHighlightBarDp(it) },
                 )
-                if (settings.todayHighlightEnabled) HighlightSwitchBlock(
-                    title = "当前节次行高亮",
-                    subtitle = "自己的课表里标出正在上课的那一行",
-                    enabled = settings.periodHighlightEnabled,
-                    onEnabled = { viewModel.setPeriodHighlightEnabled(it) },
-                    color = settings.periodHighlightColor,
-                    themeColor = settings.themeColor,
-                    alpha = settings.periodHighlightAlpha,
-                    barDp = settings.periodHighlightBarDp,
-                    barLabel = "左边条",
-                    onColorClick = { showPeriodHighlightColor = true },
-                    onAlpha = { viewModel.setPeriodHighlightAlpha(it) },
-                    onBar = { viewModel.setPeriodHighlightBarDp(it) },
-                )
                 if (settings.friendTodayHighlightEnabled) HighlightSwitchBlock(
-                    title = "好友当前节次行高亮",
+                    title = "当前节次行高亮",
                     subtitle = "好友课表里标出正在上课的那一行",
                     enabled = settings.friendPeriodHighlightEnabled,
                     onEnabled = { viewModel.setFriendPeriodHighlightEnabled(it) },
@@ -421,6 +450,13 @@ fun MeScreen(
                     onAlpha = { viewModel.setFriendPeriodHighlightAlpha(it) },
                     onBar = { viewModel.setFriendPeriodHighlightBarDp(it) },
                 )
+            }
+            ExpandableCard(
+                title = "提醒",
+                summary = reminderSummary(settings),
+                expanded = reminderOpen,
+                onToggle = { reminderOpen = !reminderOpen },
+            ) {
                 ListItem(
                     headlineContent = { Text("上课提醒") },
                     trailingContent = {
@@ -487,28 +523,6 @@ fun MeScreen(
                         )
                     }
                 }
-            }
-            Card(
-                Modifier
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .clickable(onClick = onWebDav),
-            ) {
-                ListItem(
-                    headlineContent = { Text("同步", fontWeight = FontWeight.SemiBold) },
-                    supportingContent = {
-                        Text(
-                            if (settings.webdavUrl.isBlank()) "用坚果云和好友互看课表"
-                            else webdavSyncHint(settings.webdavLastSyncAt, settings.webdavLastMessage),
-                        )
-                    },
-                    trailingContent = {
-                        Icon(Icons.Outlined.ChevronRight, contentDescription = null)
-                    },
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            TextButton(onClick = { confirmClear = true }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                Text("清空本地数据", color = MaterialTheme.colorScheme.error)
             }
             Text(
                 "数据默认只保存在本机。WebDAV 同步走你自己的网盘，密码存在本机加密存储。HAR 抓包文件不会被应用读取或上传。",
@@ -705,6 +719,33 @@ private fun ExpandableCard(
             }
         }
     }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.primary,
+    )
+}
+
+@Composable
+private fun HeightSlider(
+    label: String,
+    value: Int,
+    min: Int,
+    max: Int,
+    onChange: (Int) -> Unit,
+) {
+    Text("$label $value dp", style = MaterialTheme.typography.labelLarge)
+    Slider(
+        value = value.toFloat(),
+        onValueChange = { onChange(it.toInt()) },
+        valueRange = min.toFloat()..max.toFloat(),
+        steps = (max - min - 1).coerceAtLeast(0),
+    )
 }
 
 @Composable
@@ -917,10 +958,19 @@ private fun appearanceSummary(settings: UserSettings): String {
         SettingsRepository.THEME_MODE_DARK -> "深色"
         else -> "跟随系统"
     }
-    return "${themeColorName(settings.themeColor)} · $mode · 格子${settings.periodHeightDp}" +
-        when {
-            settings.timetableBgImageRev > 0L -> " · 背景图"
-            settings.timetableBgColor != 0L -> " · 背景色"
-            else -> ""
-        }
+    val bg = when {
+        settings.timetableBgImageRev > 0L -> " · 背景图"
+        settings.timetableBgColor != 0L -> " · 背景色"
+        else -> ""
+    }
+    return "${themeColorName(settings.themeColor)} · $mode$bg"
+}
+
+private fun timetableLookSummary(settings: UserSettings): String =
+    "格子${settings.periodHeightDp} · 好友${settings.friendPeriodHeightDp}"
+
+private fun reminderSummary(settings: UserSettings): String {
+    val classPart = if (settings.reminderEnabled) "上课提前${settings.reminderMinutes}分钟" else "上课关"
+    val examPart = if (settings.examReminderEnabled) "考试提前${settings.examReminderMinutes}分钟" else "考试关"
+    return "$classPart · $examPart"
 }
