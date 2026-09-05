@@ -82,6 +82,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -842,10 +843,10 @@ internal fun TimetableGrid(
         val gridH = headerH + periodH * rows.size
         val dayDates = (0..6).map { weekStart?.plusDays(it.toLong()) }
         val todayCol = dayDates.indexOfFirst { it == today }
-        val currentPeriodIndex = if (showPeriodHighlight && todayCol >= 0) {
-            findCurrentPeriodIndex(rows, now)
+        val periodHighlightTarget = if (showPeriodHighlight && todayCol >= 0) {
+            resolvePeriodHighlight(rows, now)
         } else {
-            -1
+            null
         }
         val context = LocalContext.current
         val density = LocalDensity.current
@@ -939,9 +940,9 @@ internal fun TimetableGrid(
                     )
                 }
             }
-            if (currentPeriodIndex >= 0) {
+            if (periodHighlightTarget != null) {
                 val fill = highlightFill(periodHighlightColor)
-                val y = headerH + periodH * currentPeriodIndex
+                val y = periodHighlightTop(periodHighlightTarget, headerH, periodH)
                 Box(
                     Modifier
                         .padding(top = y)
@@ -1013,7 +1014,7 @@ internal fun TimetableGrid(
             }
             rows.forEachIndexed { index, period ->
                 val y = headerH + periodH * index
-                val isCurrentPeriod = index == currentPeriodIndex
+                val isCurrentPeriod = (periodHighlightTarget as? PeriodHighlightTarget.Row)?.index == index
                 Row(
                     Modifier
                         .padding(top = y)
@@ -1186,12 +1187,39 @@ private fun parsePeriodClock(raw: String): LocalTime? {
         ?: runCatching { LocalTime.parse(value, periodClockFormat) }.getOrNull()
 }
 
-private fun findCurrentPeriodIndex(periods: List<PeriodEntity>, now: LocalTime): Int {
-    return periods.indexOfFirst { period ->
-        val start = parsePeriodClock(period.startTime) ?: return@indexOfFirst false
-        val end = parsePeriodClock(period.endTime) ?: return@indexOfFirst false
-        !now.isBefore(start) && now.isBefore(end)
-    }
+private sealed class PeriodHighlightTarget {
+    data class Row(val index: Int) : PeriodHighlightTarget()
+    data class Gap(val afterIndex: Int, val beforeIndex: Int) : PeriodHighlightTarget()
+}
+
+private fun periodHighlightTop(
+    target: PeriodHighlightTarget,
+    headerH: Dp,
+    periodH: Dp,
+): Dp = when (target) {
+    is PeriodHighlightTarget.Row -> headerH + periodH * target.index
+    is PeriodHighlightTarget.Gap -> headerH + periodH * (target.afterIndex + target.beforeIndex) / 2f
+}
+
+private fun resolvePeriodHighlight(periods: List<PeriodEntity>, now: LocalTime): PeriodHighlightTarget? {
+    val timed = periods.mapIndexedNotNull { index, period ->
+        val start = parsePeriodClock(period.startTime) ?: return@mapIndexedNotNull null
+        val end = parsePeriodClock(period.endTime) ?: return@mapIndexedNotNull null
+        if (!end.isAfter(start)) return@mapIndexedNotNull null
+        Triple(index, start, end)
+    }.sortedBy { it.second }
+    if (timed.isEmpty()) return null
+    val firstStart = timed.minOf { it.second }
+    val lastEnd = timed.maxOf { it.third }
+    if (now.isBefore(firstStart) || !now.isBefore(lastEnd)) return null
+    timed.firstOrNull { (_, start, end) -> !now.isBefore(start) && now.isBefore(end) }
+        ?.let { return PeriodHighlightTarget.Row(it.first) }
+    val prev = timed.lastOrNull { (_, _, end) -> !now.isBefore(end) } ?: return null
+    val next = timed.firstOrNull { (_, start, _) -> now.isBefore(start) } ?: return null
+    val lo = minOf(prev.first, next.first)
+    val hi = maxOf(prev.first, next.first)
+    if (lo == hi) return null
+    return PeriodHighlightTarget.Gap(afterIndex = lo, beforeIndex = hi)
 }
 
 private fun nextHighlightDelayMs(periods: List<PeriodEntity>, now: LocalTime): Long {
