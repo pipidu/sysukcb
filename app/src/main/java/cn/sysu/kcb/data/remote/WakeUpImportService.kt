@@ -19,28 +19,20 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import java.time.LocalDate
 import java.time.ZoneId
-import java.util.concurrent.TimeUnit
 
 class WakeUpImportService(
     private val repo: TimetableRepository,
     private val json: Json,
 ) {
-    private val http = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .build()
-
     suspend fun import(raw: String, semesterHint: String, themeColor: Long): WakeUpImportResult = withContext(Dispatchers.IO) {
         val text = raw.trim().removePrefix("\uFEFF")
-        if (text.isBlank()) throw ImportFailedException("请粘贴 WakeUp 分享口令，或选择备份 / CSV 文件")
-        val payload = if (looksLikeShareCode(text)) fetchShare(text) else text
-        val parsed = parse(payload)
+        if (text.isBlank()) throw ImportFailedException("请选择 WakeUp 备份或 CSV 文件")
+        if (looksLikeShareCode(text)) {
+            throw ImportFailedException("不支持分享口令，请在 WakeUp 里导出备份后再导入文件")
+        }
+        val parsed = parse(text)
         if (parsed.courses.isEmpty()) throw ImportFailedException("没有解析到课程")
         val semester = semesterHint.ifBlank { SemesterRange.guessCurrent() }
         val existing = repo.listSemesters().firstOrNull { it.acadYearSemester == semester }
@@ -82,72 +74,12 @@ class WakeUpImportService(
             compact.matches(Regex("^[A-Za-z0-9_-]{6,64}$"))
     }
 
-    private fun fetchShare(raw: String): String {
-        val key = extractShareKey(raw) ?: throw ImportFailedException("无法识别分享口令，请改用 WakeUp 导出的备份文件")
-        val urls = listOf(
-            "https://i.wakeup.fun/share_schedule/get?id=$key",
-            "https://i.wakeup.fun/share_schedule/get?key=$key",
-        )
-        var lastHint = ""
-        for (url in urls) {
-            val response = runCatching {
-                http.newCall(
-                    Request.Builder()
-                        .url(url)
-                        .header("User-Agent", "sysukcb/android")
-                        .header("Accept", "application/json,text/plain,*/*")
-                        .get()
-                        .build(),
-                ).execute().use { it.code to it.body?.string().orEmpty() }
-            }.getOrNull() ?: continue
-            lastHint = response.second.take(80)
-            if (response.first !in 200..299) continue
-            val body = response.second
-            if (body.isBlank()) continue
-            extractSharePayload(body)?.let { return it }
-            if (looksLikeBackup(body) || looksLikeCsv(body)) return body
-        }
-        throw ImportFailedException(
-            if (lastHint.contains("sign", ignoreCase = true) || lastHint.contains("403")) {
-                "新版分享口令无法直接拉取，请在 WakeUp 里「导出为备份」后再导入文件"
-            } else {
-                "分享口令无效或已过期，请改用 WakeUp 备份文件"
-            },
-        )
-    }
-
-    private fun extractShareKey(raw: String): String? {
-        val text = raw.trim()
-        Regex("(?:key|id|code)=([A-Za-z0-9_-]+)", RegexOption.IGNORE_CASE).find(text)?.groupValues?.get(1)?.let { return it }
-        Regex("share_schedule/([A-Za-z0-9_-]+)").find(text)?.groupValues?.get(1)?.let { return it }
-        Regex("wakeup://[^\\s]*[?&](?:id|key)=([A-Za-z0-9_-]+)", RegexOption.IGNORE_CASE).find(text)?.groupValues?.get(1)?.let { return it }
-        if (text.matches(Regex("^[A-Za-z0-9_-]{6,64}$"))) return text
-        return null
-    }
-
-    private fun extractSharePayload(body: String): String? {
-        val root = runCatching { json.parseToJsonElement(body) }.getOrNull() ?: return null
-        val obj = root as? JsonObject ?: return if (looksLikeBackup(body)) body else null
-        val data = obj["data"]
-        when (data) {
-            is JsonPrimitive -> data.contentOrNull?.takeIf { it.isNotBlank() }?.let { return it }
-            is JsonObject -> {
-                data.str("data", "content", "file", "schedule").takeIf { it.isNotBlank() }?.let { return it }
-                if (data.containsKey("courseName") || data.containsKey("startNode")) return data.toString()
-            }
-            is JsonArray -> return data.toString()
-            else -> {}
-        }
-        obj.str("data", "content", "file").takeIf { it.isNotBlank() }?.let { return it }
-        return null
-    }
-
     private fun parse(text: String): Parsed {
         val trimmed = text.trim().removePrefix("\uFEFF")
         if (looksLikeCsv(trimmed)) return parseCsv(trimmed)
         parseBackup(trimmed)?.let { return it }
         parseCourseArray(trimmed)?.let { return it }
-        throw ImportFailedException("不是 WakeUp 备份、CSV 或分享数据")
+        throw ImportFailedException("不是 WakeUp 备份或 CSV")
     }
 
     private fun looksLikeBackup(text: String): Boolean {
