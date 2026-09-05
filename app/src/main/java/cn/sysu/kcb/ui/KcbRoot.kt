@@ -33,6 +33,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,7 +62,8 @@ import cn.sysu.kcb.ui.login.LoginScreen
 import cn.sysu.kcb.ui.me.AboutScreen
 import cn.sysu.kcb.ui.me.MeScreen
 import cn.sysu.kcb.ui.me.WebDavScreen
-import cn.sysu.kcb.ui.theme.KcbBottomBarHeight
+import cn.sysu.kcb.ui.theme.LocalKcbBottomBarHeight
+import cn.sysu.kcb.ui.theme.LocalKcbTopBarHeight
 import cn.sysu.kcb.ui.theme.KcbMotion
 import cn.sysu.kcb.ui.timetable.TimetableScreen
 
@@ -73,6 +75,12 @@ fun KcbRoot(viewModel: AppViewModel) {
     val selectedSemester by remember {
         viewModel.settings.map { it.selectedSemester }.distinctUntilChanged()
     }.collectAsStateWithLifecycle(viewModel.settings.value.selectedSemester)
+    val topBarHeightDp by remember {
+        viewModel.settings.map { it.topBarHeightDp }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(viewModel.settings.value.topBarHeightDp)
+    val bottomBarHeightDp by remember {
+        viewModel.settings.map { it.bottomBarHeightDp }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(viewModel.settings.value.bottomBarHeightDp)
     val nav = rememberNavController()
     val snackbar = remember { SnackbarHostState() }
     val message by viewModel.message.collectAsStateWithLifecycle()
@@ -90,6 +98,10 @@ fun KcbRoot(viewModel: AppViewModel) {
             nav.navigate("home") { launchSingleTop = true }
         }
     }
+    CompositionLocalProvider(
+        LocalKcbTopBarHeight provides topBarHeightDp.dp,
+        LocalKcbBottomBarHeight provides bottomBarHeightDp.dp,
+    ) {
     Box(Modifier.fillMaxSize()) {
         NavHost(
             navController = nav,
@@ -173,10 +185,11 @@ fun KcbRoot(viewModel: AppViewModel) {
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .then(
-                    if (onHome) Modifier.padding(bottom = KcbBottomBarHeight)
+                    if (onHome) Modifier.padding(bottom = LocalKcbBottomBarHeight.current)
                     else Modifier.navigationBarsPadding(),
                 ),
         )
+    }
     }
 }
 
@@ -252,7 +265,7 @@ private fun HomeTabs(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             NavigationBar(
-                modifier = Modifier.height(KcbBottomBarHeight),
+                modifier = Modifier.height(LocalKcbBottomBarHeight.current),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 tonalElevation = 0.dp,
             ) {

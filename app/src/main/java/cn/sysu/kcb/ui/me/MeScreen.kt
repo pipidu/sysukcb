@@ -351,6 +351,20 @@ fun MeScreen(
                     valueRange = SettingsRepository.MIN_PERIOD_HEIGHT_DP.toFloat()..SettingsRepository.MAX_PERIOD_HEIGHT_DP.toFloat(),
                     steps = SettingsRepository.MAX_PERIOD_HEIGHT_DP - SettingsRepository.MIN_PERIOD_HEIGHT_DP - 1,
                 )
+                Text("顶栏高度 ${settings.topBarHeightDp} dp", style = MaterialTheme.typography.labelLarge)
+                Slider(
+                    value = settings.topBarHeightDp.toFloat(),
+                    onValueChange = { viewModel.setTopBarHeightDp(it.toInt()) },
+                    valueRange = SettingsRepository.MIN_TOP_BAR_HEIGHT_DP.toFloat()..SettingsRepository.MAX_TOP_BAR_HEIGHT_DP.toFloat(),
+                    steps = SettingsRepository.MAX_TOP_BAR_HEIGHT_DP - SettingsRepository.MIN_TOP_BAR_HEIGHT_DP - 1,
+                )
+                Text("底栏高度 ${settings.bottomBarHeightDp} dp", style = MaterialTheme.typography.labelLarge)
+                Slider(
+                    value = settings.bottomBarHeightDp.toFloat(),
+                    onValueChange = { viewModel.setBottomBarHeightDp(it.toInt()) },
+                    valueRange = SettingsRepository.MIN_BOTTOM_BAR_HEIGHT_DP.toFloat()..SettingsRepository.MAX_BOTTOM_BAR_HEIGHT_DP.toFloat(),
+                    steps = SettingsRepository.MAX_BOTTOM_BAR_HEIGHT_DP - SettingsRepository.MIN_BOTTOM_BAR_HEIGHT_DP - 1,
+                )
                 HighlightSwitchBlock(
                     title = "今天列高亮",
                     subtitle = "自己的课表里，当前周标出今天那一列",

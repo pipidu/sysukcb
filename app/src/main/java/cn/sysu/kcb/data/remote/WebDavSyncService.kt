@@ -10,8 +10,6 @@ import cn.sysu.kcb.data.repo.FriendRepository
 import cn.sysu.kcb.data.repo.ShareService
 import kotlinx.coroutines.CancellationException
 
-class WebDavWifiRequiredException : Exception("当前不是 Wi‑Fi，已跳过同步")
-
 class WebDavSyncService(
     private val context: Context,
     private val client: WebDavClient,
@@ -21,7 +19,6 @@ class WebDavSyncService(
     private val friends: FriendRepository,
 ) {
     suspend fun upload() {
-        requireWifiIfNeeded()
         val creds = requireCreds()
         val body = share.exportAllJson(creds.nickname)
         client.upload(creds.url, creds.user, creds.password, body)
@@ -32,7 +29,6 @@ class WebDavSyncService(
     }
 
     suspend fun download(): String {
-        requireWifiIfNeeded()
         val creds = requireCreds()
         val json = client.download(creds.url, creds.user, creds.password)
         val semester = share.importJson(json)
@@ -41,7 +37,6 @@ class WebDavSyncService(
     }
 
     suspend fun syncFriends(): String {
-        requireWifiIfNeeded()
         val creds = requireCreds(needNickname = true)
         return pullFriends(creds, share.exportAllJson(creds.nickname))
     }
@@ -72,13 +67,6 @@ class WebDavSyncService(
                 settings.setWebDavLastSync(now, e.message ?: "自动同步失败")
             }
             throw e
-        }
-    }
-
-    private suspend fun requireWifiIfNeeded() {
-        val snap = settings.snapshot()
-        if (snap.webdavWifiOnly && !isOnWifi(context)) {
-            throw WebDavWifiRequiredException()
         }
     }
 

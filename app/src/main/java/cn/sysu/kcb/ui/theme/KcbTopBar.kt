@@ -12,6 +12,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,12 +22,15 @@ import androidx.compose.ui.unit.dp
 val KcbTopBarHeight = 48.dp
 val KcbBottomBarHeight = 56.dp
 
+val LocalKcbTopBarHeight = compositionLocalOf { KcbTopBarHeight }
+val LocalKcbBottomBarHeight = compositionLocalOf { KcbBottomBarHeight }
+
 @Composable
 fun KcbTopBar(
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.surface,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
-    height: Dp = KcbTopBarHeight,
+    height: Dp = LocalKcbTopBarHeight.current,
     content: @Composable RowScope.() -> Unit,
 ) {
     Surface(color = containerColor, contentColor = contentColor, modifier = modifier) {

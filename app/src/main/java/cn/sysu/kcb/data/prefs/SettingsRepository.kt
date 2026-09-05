@@ -34,6 +34,8 @@ data class UserSettings(
     val selectedFriendId: String = "",
     val periodHeightDp: Int = SettingsRepository.DEFAULT_PERIOD_HEIGHT_DP,
     val friendPeriodHeightDp: Int = SettingsRepository.DEFAULT_PERIOD_HEIGHT_DP,
+    val topBarHeightDp: Int = SettingsRepository.DEFAULT_TOP_BAR_HEIGHT_DP,
+    val bottomBarHeightDp: Int = SettingsRepository.DEFAULT_BOTTOM_BAR_HEIGHT_DP,
     val todayHighlightEnabled: Boolean = true,
     val todayHighlightColor: Long = 0L,
     val todayHighlightAlpha: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA,
@@ -156,6 +158,18 @@ class SettingsRepository(private val context: Context) {
     suspend fun setFriendPeriodHeightDp(dp: Int) {
         context.dataStore.edit {
             it[Keys.friendPeriodHeightDp] = dp.coerceIn(MIN_PERIOD_HEIGHT_DP, MAX_PERIOD_HEIGHT_DP)
+        }
+    }
+
+    suspend fun setTopBarHeightDp(dp: Int) {
+        context.dataStore.edit {
+            it[Keys.topBarHeightDp] = dp.coerceIn(MIN_TOP_BAR_HEIGHT_DP, MAX_TOP_BAR_HEIGHT_DP)
+        }
+    }
+
+    suspend fun setBottomBarHeightDp(dp: Int) {
+        context.dataStore.edit {
+            it[Keys.bottomBarHeightDp] = dp.coerceIn(MIN_BOTTOM_BAR_HEIGHT_DP, MAX_BOTTOM_BAR_HEIGHT_DP)
         }
     }
 
@@ -282,6 +296,10 @@ class SettingsRepository(private val context: Context) {
             .coerceIn(SettingsRepository.MIN_PERIOD_HEIGHT_DP, SettingsRepository.MAX_PERIOD_HEIGHT_DP),
         friendPeriodHeightDp = (this[Keys.friendPeriodHeightDp] ?: SettingsRepository.DEFAULT_PERIOD_HEIGHT_DP)
             .coerceIn(SettingsRepository.MIN_PERIOD_HEIGHT_DP, SettingsRepository.MAX_PERIOD_HEIGHT_DP),
+        topBarHeightDp = (this[Keys.topBarHeightDp] ?: SettingsRepository.DEFAULT_TOP_BAR_HEIGHT_DP)
+            .coerceIn(SettingsRepository.MIN_TOP_BAR_HEIGHT_DP, SettingsRepository.MAX_TOP_BAR_HEIGHT_DP),
+        bottomBarHeightDp = (this[Keys.bottomBarHeightDp] ?: SettingsRepository.DEFAULT_BOTTOM_BAR_HEIGHT_DP)
+            .coerceIn(SettingsRepository.MIN_BOTTOM_BAR_HEIGHT_DP, SettingsRepository.MAX_BOTTOM_BAR_HEIGHT_DP),
         todayHighlightEnabled = this[Keys.todayHighlightEnabled] ?: true,
         todayHighlightColor = this[Keys.todayHighlightColor] ?: 0L,
         todayHighlightAlpha = (this[Keys.todayHighlightAlpha] ?: SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA)
@@ -348,6 +366,8 @@ class SettingsRepository(private val context: Context) {
         val selectedFriendId = stringPreferencesKey("selected_friend_id")
         val periodHeightDp = intPreferencesKey("period_height_dp")
         val friendPeriodHeightDp = intPreferencesKey("friend_period_height_dp")
+        val topBarHeightDp = intPreferencesKey("top_bar_height_dp")
+        val bottomBarHeightDp = intPreferencesKey("bottom_bar_height_dp")
         val todayHighlightEnabled = booleanPreferencesKey("today_highlight_enabled")
         val todayHighlightColor = longPreferencesKey("today_highlight_color")
         val todayHighlightAlpha = intPreferencesKey("today_highlight_alpha")
@@ -378,6 +398,12 @@ class SettingsRepository(private val context: Context) {
         const val DEFAULT_PERIOD_HEIGHT_DP = 58
         const val MIN_PERIOD_HEIGHT_DP = 40
         const val MAX_PERIOD_HEIGHT_DP = 88
+        const val DEFAULT_TOP_BAR_HEIGHT_DP = 48
+        const val MIN_TOP_BAR_HEIGHT_DP = 40
+        const val MAX_TOP_BAR_HEIGHT_DP = 64
+        const val DEFAULT_BOTTOM_BAR_HEIGHT_DP = 56
+        const val MIN_BOTTOM_BAR_HEIGHT_DP = 48
+        const val MAX_BOTTOM_BAR_HEIGHT_DP = 80
         const val DEFAULT_TODAY_HIGHLIGHT_ALPHA = 22
         const val MIN_TODAY_HIGHLIGHT_ALPHA = 8
         const val MAX_TODAY_HIGHLIGHT_ALPHA = 50

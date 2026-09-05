@@ -23,8 +23,8 @@ import cn.sysu.kcb.data.remote.isNewerThan
 import cn.sysu.kcb.data.remote.mirroredGithubUrl
 import cn.sysu.kcb.data.remote.WebDavClient
 import cn.sysu.kcb.data.remote.WebDavShareCode
+import cn.sysu.kcb.data.remote.WebDavSyncService
 import cn.sysu.kcb.data.remote.WebDavSyncWorker
-import cn.sysu.kcb.data.remote.WebDavWifiRequiredException
 import cn.sysu.kcb.data.repo.TimetableSnapshot
 import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.ui.timetable.defaultStickyNote
@@ -243,6 +243,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setFriendPeriodHeightDp(dp: Int) = viewModelScope.launch {
         container.settings.setFriendPeriodHeightDp(dp)
+    }
+
+    fun setTopBarHeightDp(dp: Int) = viewModelScope.launch {
+        container.settings.setTopBarHeightDp(dp)
+    }
+
+    fun setBottomBarHeightDp(dp: Int) = viewModelScope.launch {
+        container.settings.setBottomBarHeightDp(dp)
     }
 
     fun setTodayHighlightEnabled(enabled: Boolean) = viewModelScope.launch {
@@ -496,13 +504,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             container.webdav.syncFriends()
         }
             .onSuccess { message.value = it }
-            .onFailure { e ->
-                message.value = when (e) {
-                    is WebDavWifiRequiredException -> "已加入，当前不是 Wi‑Fi，连上后再同步好友"
-                    else -> e.message ?: "加入失败"
-                }
-            }
-            .let { it.isSuccess || it.exceptionOrNull() is WebDavWifiRequiredException }
+            .onFailure { message.value = it.message ?: "加入失败" }
+            .isSuccess
         webdavBusy.value = false
         onDone?.invoke(ok)
     }
@@ -580,6 +583,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshFriends(silent: Boolean = false) = viewModelScope.launch {
         if (webdavBusy.value) return@launch
+        if (silent) {
+            val snap = container.settings.snapshot()
+            if (snap.webdavWifiOnly && !WebDavSyncService.isOnWifi(getApplication())) return@launch
+        }
         webdavBusy.value = true
         runCatching { container.webdav.syncFriends() }
             .onSuccess { if (!silent) message.value = it }

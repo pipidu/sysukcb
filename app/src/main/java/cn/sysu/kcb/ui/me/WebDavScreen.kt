@@ -151,8 +151,8 @@ fun WebDavScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 },
             )
             ListItem(
-                headlineContent = { Text("仅 Wi‑Fi 同步") },
-                supportingContent = { Text("用流量时不上传、不下载、不同步好友") },
+                headlineContent = { Text("仅 Wi‑Fi 自动同步") },
+                supportingContent = { Text("用流量时不自动同步；手动上传、下载和刷新好友仍可用") },
                 trailingContent = {
                     Switch(
                         checked = settings.webdavWifiOnly,
