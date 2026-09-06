@@ -52,6 +52,8 @@ data class UserSettings(
     val friendPeriodHighlightColor: Long = 0L,
     val friendPeriodHighlightAlpha: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA,
     val friendPeriodHighlightBarDp: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP,
+    val gapDividerEnabled: Boolean = false,
+    val gapDividerMinutes: Int = SettingsRepository.DEFAULT_GAP_DIVIDER_MINUTES,
     val timetableBgColor: Long = 0L,
     val timetableBgImageRev: Long = 0L,
     val timetableBgDim: Int = SettingsRepository.DEFAULT_TIMETABLE_BG_DIM,
@@ -253,6 +255,16 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun setGapDividerEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.gapDividerEnabled] = enabled }
+    }
+
+    suspend fun setGapDividerMinutes(minutes: Int) {
+        context.dataStore.edit {
+            it[Keys.gapDividerMinutes] = snapGapDividerMinutes(minutes)
+        }
+    }
+
     suspend fun setTimetableBgColor(color: Long) {
         context.dataStore.edit { it[Keys.timetableBgColor] = color }
     }
@@ -340,6 +352,10 @@ class SettingsRepository(private val context: Context) {
                 ?: this[Keys.periodHighlightBarDp]
                 ?: SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP
             ).coerceIn(SettingsRepository.MIN_TODAY_HIGHLIGHT_BAR_DP, SettingsRepository.MAX_TODAY_HIGHLIGHT_BAR_DP),
+        gapDividerEnabled = this[Keys.gapDividerEnabled] ?: false,
+        gapDividerMinutes = snapGapDividerMinutes(
+            this[Keys.gapDividerMinutes] ?: SettingsRepository.DEFAULT_GAP_DIVIDER_MINUTES,
+        ),
         timetableBgColor = this[Keys.timetableBgColor] ?: 0L,
         timetableBgImageRev = this[Keys.timetableBgImageRev] ?: 0L,
         timetableBgDim = (this[Keys.timetableBgDim] ?: SettingsRepository.DEFAULT_TIMETABLE_BG_DIM)
@@ -384,6 +400,8 @@ class SettingsRepository(private val context: Context) {
         val friendPeriodHighlightColor = longPreferencesKey("friend_period_highlight_color")
         val friendPeriodHighlightAlpha = intPreferencesKey("friend_period_highlight_alpha")
         val friendPeriodHighlightBarDp = intPreferencesKey("friend_period_highlight_bar_dp")
+        val gapDividerEnabled = booleanPreferencesKey("gap_divider_enabled")
+        val gapDividerMinutes = intPreferencesKey("gap_divider_minutes")
         val timetableBgColor = longPreferencesKey("timetable_bg_color")
         val timetableBgImageRev = longPreferencesKey("timetable_bg_image_rev")
         val timetableBgDim = intPreferencesKey("timetable_bg_dim")
@@ -413,5 +431,18 @@ class SettingsRepository(private val context: Context) {
         const val DEFAULT_TIMETABLE_BG_DIM = 24
         const val MIN_TIMETABLE_BG_DIM = 0
         const val MAX_TIMETABLE_BG_DIM = 60
+        const val DEFAULT_GAP_DIVIDER_MINUTES = 20
+        const val MIN_GAP_DIVIDER_MINUTES = 10
+        const val MAX_GAP_DIVIDER_MINUTES = 120
+        const val GAP_DIVIDER_STEP_MINUTES = 5
     }
+}
+
+private fun snapGapDividerMinutes(minutes: Int): Int {
+    val step = SettingsRepository.GAP_DIVIDER_STEP_MINUTES
+    val snapped = ((minutes + step / 2) / step) * step
+    return snapped.coerceIn(
+        SettingsRepository.MIN_GAP_DIVIDER_MINUTES,
+        SettingsRepository.MAX_GAP_DIVIDER_MINUTES,
+    )
 }

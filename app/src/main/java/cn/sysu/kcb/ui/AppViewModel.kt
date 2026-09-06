@@ -317,6 +317,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         container.settings.setFriendPeriodHighlightBarDp(dp)
     }
 
+    fun setGapDividerEnabled(enabled: Boolean) = viewModelScope.launch {
+        container.settings.setGapDividerEnabled(enabled)
+    }
+
+    fun setGapDividerMinutes(minutes: Int) = viewModelScope.launch {
+        container.settings.setGapDividerMinutes(minutes)
+    }
+
     fun setTimetableBgColor(color: Long) = viewModelScope.launch {
         container.settings.setTimetableBgColor(color)
         if (color != 0L) {

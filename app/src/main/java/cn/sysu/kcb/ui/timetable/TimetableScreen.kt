@@ -423,6 +423,8 @@ fun TimetableScreen(
                             periodHighlightColor = settings.periodHighlightColor,
                             periodHighlightAlpha = settings.periodHighlightAlpha,
                             periodHighlightBarDp = settings.periodHighlightBarDp,
+                            gapDividerEnabled = settings.gapDividerEnabled,
+                            gapDividerMinutes = settings.gapDividerMinutes,
                             timetableBgColor = settings.timetableBgColor,
                             timetableBgImageRev = settings.timetableBgImageRev,
                             timetableBgDim = settings.timetableBgDim,
@@ -462,9 +464,11 @@ fun TimetableScreen(
                                 periodHighlightColor = settings.periodHighlightColor,
                                 periodHighlightAlpha = settings.periodHighlightAlpha,
                                 periodHighlightBarDp = settings.periodHighlightBarDp,
-                            timetableBgColor = settings.timetableBgColor,
-                            timetableBgImageRev = settings.timetableBgImageRev,
-                            timetableBgDim = settings.timetableBgDim,
+                                gapDividerEnabled = settings.gapDividerEnabled,
+                                gapDividerMinutes = settings.gapDividerMinutes,
+                                timetableBgColor = settings.timetableBgColor,
+                                timetableBgImageRev = settings.timetableBgImageRev,
+                                timetableBgDim = settings.timetableBgDim,
                             )
                         }
                     }
@@ -802,6 +806,8 @@ internal fun TimetableGrid(
     periodHighlightColor: Long = 0L,
     periodHighlightAlpha: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_ALPHA,
     periodHighlightBarDp: Int = SettingsRepository.DEFAULT_TODAY_HIGHLIGHT_BAR_DP,
+    gapDividerEnabled: Boolean = false,
+    gapDividerMinutes: Int = SettingsRepository.DEFAULT_GAP_DIVIDER_MINUTES,
     timetableBgColor: Long = 0L,
     timetableBgImageRev: Long = 0L,
     timetableBgDim: Int = SettingsRepository.DEFAULT_TIMETABLE_BG_DIM,
@@ -862,7 +868,11 @@ internal fun TimetableGrid(
             }
         }
         val gridLine = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+        val gapLine = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
         val surfaceFallback = MaterialTheme.colorScheme.surface
+        val gapLines = remember(rows, gapDividerEnabled, gapDividerMinutes) {
+            if (gapDividerEnabled) gapDividerLineIndices(rows, gapDividerMinutes) else emptySet()
+        }
         Box(
             Modifier
                 .height(gridH)
@@ -889,13 +899,20 @@ internal fun TimetableGrid(
                         drawRect(custom ?: surfaceFallback)
                     }
                     val stroke = 0.4.dp.toPx()
+                    val thickStroke = 2.dp.toPx()
                     val timePx = timeW.toPx()
                     val headerPx = headerH.toPx()
                     val periodPx = periodH.toPx()
                     val colPx = colW.toPx()
                     for (i in 0..rows.size) {
                         val y = headerPx + periodPx * i
-                        drawLine(gridLine, Offset(timePx, y), Offset(size.width, y), stroke)
+                        val bold = i in gapLines
+                        drawLine(
+                            color = if (bold) gapLine else gridLine,
+                            start = Offset(if (bold) 0f else timePx, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = if (bold) thickStroke else stroke,
+                        )
                     }
                     drawLine(gridLine, Offset(timePx, 0f), Offset(size.width, 0f), stroke)
                     for (d in 0..7) {
@@ -1185,6 +1202,20 @@ private fun parsePeriodClock(raw: String): LocalTime? {
     if (value.isBlank()) return null
     return runCatching { LocalTime.parse(value) }.getOrNull()
         ?: runCatching { LocalTime.parse(value, periodClockFormat) }.getOrNull()
+}
+
+private fun gapDividerLineIndices(periods: List<PeriodEntity>, thresholdMinutes: Int): Set<Int> {
+    if (thresholdMinutes <= 0 || periods.size < 4) return emptySet()
+    val result = mutableSetOf<Int>()
+    // 跳过第一节、最后一节：只看中间相邻两行。线画在 index+1（两行交界）。
+    for (index in 1 until periods.size - 2) {
+        val end = parsePeriodClock(periods[index].endTime) ?: continue
+        val start = parsePeriodClock(periods[index + 1].startTime) ?: continue
+        if (!start.isAfter(end)) continue
+        val minutes = java.time.Duration.between(end, start).toMinutes()
+        if (minutes >= thresholdMinutes) result += index + 1
+    }
+    return result
 }
 
 private sealed class PeriodHighlightTarget {

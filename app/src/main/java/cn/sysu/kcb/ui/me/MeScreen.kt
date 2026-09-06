@@ -378,6 +378,38 @@ fun MeScreen(
                 expanded = timetableOpen,
                 onToggle = { timetableOpen = !timetableOpen },
             ) {
+                ListItem(
+                    headlineContent = { Text("课间加粗分隔线") },
+                    supportingContent = { Text("两节课间隔达到设定时间时，中间的线加粗；第一节和最后一节旁边不加粗") },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.gapDividerEnabled,
+                            onCheckedChange = { viewModel.setGapDividerEnabled(it) },
+                        )
+                    },
+                )
+                AnimatedVisibility(
+                    visible = settings.gapDividerEnabled,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    Column {
+                        Text(
+                            "间隔达到 ${settings.gapDividerMinutes} 分钟",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = settings.gapDividerMinutes.toFloat(),
+                            onValueChange = { viewModel.setGapDividerMinutes(it.toInt()) },
+                            valueRange = SettingsRepository.MIN_GAP_DIVIDER_MINUTES.toFloat()..
+                                SettingsRepository.MAX_GAP_DIVIDER_MINUTES.toFloat(),
+                            steps = (
+                                (SettingsRepository.MAX_GAP_DIVIDER_MINUTES - SettingsRepository.MIN_GAP_DIVIDER_MINUTES) /
+                                    SettingsRepository.GAP_DIVIDER_STEP_MINUTES - 1
+                                ).coerceAtLeast(0),
+                        )
+                    }
+                }
                 SectionLabel("自己的课表")
                 HeightSlider(
                     label = "格子高度",
@@ -966,8 +998,10 @@ private fun appearanceSummary(settings: UserSettings): String {
     return "${themeColorName(settings.themeColor)} · $mode$bg"
 }
 
-private fun timetableLookSummary(settings: UserSettings): String =
-    "格子${settings.periodHeightDp} · 好友${settings.friendPeriodHeightDp}"
+private fun timetableLookSummary(settings: UserSettings): String {
+    val gap = if (settings.gapDividerEnabled) " · 课间隔线${settings.gapDividerMinutes}分钟" else ""
+    return "格子${settings.periodHeightDp} · 好友${settings.friendPeriodHeightDp}$gap"
+}
 
 private fun reminderSummary(settings: UserSettings): String {
     val classPart = if (settings.reminderEnabled) "上课提前${settings.reminderMinutes}分钟" else "上课关"
