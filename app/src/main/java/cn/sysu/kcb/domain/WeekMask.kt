@@ -89,31 +89,40 @@ object CourseColors {
     const val DEFAULT_THEME = 0xFF8C1A1AL
 
     private val legacyPalette = listOf(
-        0xFFC62828, 0xFFAD1457, 0xFFC2185B, 0xFF880E4F, 0xFF6A1B9A,
-        0xFF4527A0, 0xFF512DA8, 0xFF283593, 0xFF1A237E, 0xFF1565C0,
-        0xFF0277BD, 0xFF0288D1, 0xFF00838F, 0xFF00695C, 0xFF004D40,
-        0xFF2E7D32, 0xFF33691E, 0xFF558B2F, 0xFFEF6C00, 0xFFE65100,
-        0xFFD84315, 0xFFBF360C, 0xFF4E342E, 0xFF5D4037, 0xFF6D4C41,
-        0xFF455A64, 0xFF37474F, 0xFF263238, 0xFF00897B, 0xFF00796B,
-        0xFF5E35B1, 0xFF3949AB,
+        0xFFC62828L, 0xFFAD1457L, 0xFFC2185BL, 0xFF880E4FL, 0xFF6A1B9AL,
+        0xFF4527A0L, 0xFF512DA8L, 0xFF283593L, 0xFF1A237EL, 0xFF1565C0L,
+        0xFF0277BDL, 0xFF0288D1L, 0xFF00838FL, 0xFF00695CL, 0xFF004D40L,
+        0xFF2E7D32L, 0xFF33691EL, 0xFF558B2FL, 0xFFEF6C00L, 0xFFE65100L,
+        0xFFD84315L, 0xFFBF360CL, 0xFF4E342EL, 0xFF5D4037L, 0xFF6D4C41L,
+        0xFF455A64L, 0xFF37474FL, 0xFF263238L, 0xFF00897BL, 0xFF00796BL,
+        0xFF5E35B1L, 0xFF3949ABL,
+        // 旧版 12 色，保留以兼容历史数据
+        0xFFC62F2FL, 0xFFCE4E27L, 0xFFB87528L, 0xFF36A160L, 0xFF31A592L,
+        0xFF2FA0BCL, 0xFF3168B9L, 0xFF4C3BBAL, 0xFFC23D9EL, 0xFFC4316CL,
+        0xFF739442L, 0xFF477C90L,
     )
 
-    // 色相拉开的中饱和色：随主题旋转，白字可读（不要浅马卡龙，也不要发暗同色系）。
+    // 精心调配的 16 色高辨识度课程色板：
+    // 色相均匀拉开，中高饱和，亮度感知校准，白字强对比（WCAG AA 可读，无暗浊/发灰/浅淡卡顿）。
     private data class Swatch(val hue: Float, val s: Float, val l: Float)
 
-    private val macaron = listOf(
-        Swatch(4f, 0.62f, 0.48f),
-        Swatch(18f, 0.68f, 0.48f),
-        Swatch(36f, 0.64f, 0.44f),
-        Swatch(148f, 0.50f, 0.42f),
-        Swatch(174f, 0.54f, 0.42f),
-        Swatch(196f, 0.60f, 0.46f),
-        Swatch(220f, 0.58f, 0.46f),
-        Swatch(252f, 0.52f, 0.48f),
-        Swatch(320f, 0.52f, 0.50f),
-        Swatch(340f, 0.60f, 0.48f),
-        Swatch(88f, 0.38f, 0.42f),
-        Swatch(200f, 0.34f, 0.42f),
+    private val swatches = listOf(
+        Swatch(0f, 0.65f, 0.48f),   // 宝石红 (Ruby Red)
+        Swatch(15f, 0.68f, 0.46f),  // 暖珊瑚 (Warm Coral)
+        Swatch(28f, 0.74f, 0.40f),  // 蜜柑橙 (Tangerine)
+        Swatch(42f, 0.74f, 0.35f),  // 琥珀金 (Golden Amber)
+        Swatch(122f, 0.64f, 0.33f), // 草木绿 (Leaf Green)
+        Swatch(145f, 0.64f, 0.33f), // 翡翠绿 (Emerald)
+        Swatch(165f, 0.62f, 0.33f), // 碧玉绿 (Forest Jade)
+        Swatch(182f, 0.64f, 0.33f), // 孔雀青 (Teal Peacock)
+        Swatch(198f, 0.66f, 0.40f), // 蔚天蓝 (Cerulean)
+        Swatch(212f, 0.64f, 0.47f), // 海洋蓝 (Ocean Blue)
+        Swatch(228f, 0.62f, 0.49f), // 钴青蓝 (Cobalt Sapphire)
+        Swatch(252f, 0.58f, 0.49f), // 鸢尾紫 (Deep Iris)
+        Swatch(272f, 0.56f, 0.47f), // 紫晶紫 (Royal Purple)
+        Swatch(294f, 0.58f, 0.46f), // 丁香兰 (Plum Violet)
+        Swatch(316f, 0.62f, 0.47f), // 洋红莓 (Vivid Magenta)
+        Swatch(338f, 0.66f, 0.48f), // 覆盆子 (Berry Rose)
     )
 
     val palette: List<Long> get() = paletteFor(DEFAULT_THEME)
@@ -121,17 +130,62 @@ object CourseColors {
     fun paletteFor(theme: Long): List<Long> {
         val hsv = FloatArray(3)
         android.graphics.Color.colorToHSV((theme and 0xFFFFFFFFL).toInt(), hsv)
-        val shift = hsv[0] - macaron.first().hue
-        return macaron.map { swatch ->
-            val h = (swatch.hue + shift + 360f) % 360f
-            hsl(h, swatch.s, swatch.l)
+        // 若主题近无色彩（纯白或黑灰），保持中大红基准方位
+        val shift = if (hsv[1] >= 0.12f) {
+            (hsv[0] - swatches.first().hue + 360f) % 360f
+        } else {
+            0f
         }
+        return if (kotlin.math.abs(shift) < 0.5f) {
+            swatches.map { hsl(it.hue, it.s, it.l) }
+        } else {
+            swatches.map { swatch ->
+                val h = (swatch.hue + shift + 360f) % 360f
+                val (s, l) = calibratedSl(h)
+                hsl(h, s, l)
+            }
+        }
+    }
+
+    private fun calibratedSl(h: Float): Pair<Float, Float> {
+        val hue = (h % 360f + 360f) % 360f
+        val s = when {
+            hue in 25f..50f -> 0.74f
+            hue in 115f..190f -> 0.64f
+            hue in 210f..280f -> 0.60f
+            else -> 0.65f
+        }
+        val l = when {
+            hue >= 25f && hue < 45f -> {
+                val t = (hue - 25f) / 20f
+                0.45f * (1f - t) + 0.35f * t
+            }
+            hue >= 45f && hue < 70f -> 0.33f
+            hue >= 70f && hue < 190f -> 0.33f
+            hue >= 190f && hue < 215f -> {
+                val t = (hue - 190f) / 25f
+                0.33f * (1f - t) + 0.48f * t
+            }
+            hue >= 215f && hue < 260f -> 0.49f
+            hue >= 260f && hue < 340f -> 0.47f
+            else -> 0.48f
+        }
+        return Pair(s, l)
+    }
+
+    private fun hashSlot(name: String, destSize: Int): Int {
+        var h = name.hashCode()
+        h = h xor (h ushr 16)
+        h = (h * 0x45d9f3b).toInt()
+        h = h xor (h ushr 16)
+        h = (h * 0x45d9f3b).toInt()
+        h = h xor (h ushr 16)
+        return (h.toUInt() % destSize.toUInt()).toInt()
     }
 
     fun of(name: String, theme: Long = DEFAULT_THEME): Long {
         val pal = paletteFor(theme)
-        val index = (name.hashCode().toUInt() % pal.size.toUInt()).toInt()
-        return pal[index]
+        return pal[hashSlot(name, pal.size)]
     }
 
     fun display(stored: Long, name: String, theme: Long): Long {
@@ -150,7 +204,7 @@ object CourseColors {
         val themed = paletteFor(fromTheme)
         themed.indexOf(stored).takeIf { it >= 0 }?.let { return it % destSize }
         legacyPalette.indexOf(stored).takeIf { it >= 0 }?.let { return it % destSize }
-        return (name.hashCode().toUInt() % destSize.toUInt()).toInt()
+        return hashSlot(name, destSize)
     }
 
     private fun hsl(h: Float, s: Float, l: Float): Long {
