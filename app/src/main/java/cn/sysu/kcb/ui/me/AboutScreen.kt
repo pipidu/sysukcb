@@ -125,7 +125,7 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                         when (val state = updateState) {
                             UpdateCheckState.Idle -> "应用内下载安装"
                             UpdateCheckState.Checking -> "正在检查…"
-                            UpdateCheckState.UpToDate -> "已是最新版本"
+                            is UpdateCheckState.UpToDate -> "已是最新版本"
                             is UpdateCheckState.Available -> when {
                                 download is ApkDownloadState.Progress -> "正在下载 ${state.update.versionName}"
                                 download !is ApkDownloadState.Installing &&
@@ -147,20 +147,28 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 },
                 modifier = Modifier.clickable { viewModel.checkForUpdate(manual = true) },
             )
-            ListItem(
-                headlineContent = { Text("对象存储下载") },
-                supportingContent = { Text("默认经多吉云下载安装包，链接带鉴权；关了则走 GitHub") },
-                trailingContent = {
-                    Switch(
-                        checked = settings.updateUseCos,
-                        onCheckedChange = { viewModel.setUpdateUseCos(it) },
-                    )
-                },
-            )
-            if (!settings.updateUseCos) {
+            val latestUpdate = when (val state = updateState) {
+                is UpdateCheckState.Available -> state.update
+                is UpdateCheckState.UpToDate -> state.update
+                else -> null
+            }
+            val hasCosUrl = !latestUpdate?.cosUrl.isNullOrBlank()
+            if (hasCosUrl) {
+                ListItem(
+                    headlineContent = { Text("对象存储下载") },
+                    supportingContent = { Text("有多吉云地址时经对象存储下载，关了则走 GitHub") },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.updateUseCos,
+                            onCheckedChange = { viewModel.setUpdateUseCos(it) },
+                        )
+                    },
+                )
+            }
+            if (!hasCosUrl || !settings.updateUseCos) {
                 ListItem(
                     headlineContent = { Text("GitHub 镜像") },
-                    supportingContent = { Text("国内访问 GitHub 较慢时，经镜像拉取安装包") },
+                    supportingContent = { Text("默认经镜像拉取 GitHub 安装包，国内更稳") },
                     trailingContent = {
                         Switch(
                             checked = settings.updateUseMirror,
@@ -203,36 +211,36 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                         Text(update.notes.ifBlank { "下载安装包后按系统提示安装。" })
                     }
                     if (!apkReady) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f).padding(end = 12.dp)) {
-                                Text("对象存储下载", fontWeight = FontWeight.Medium)
-                                Text(
-                                    if (update.cosUrl.isNullOrBlank())
-                                        "这个版本还没有多吉云地址，将使用 GitHub"
-                                    else
+                        val hasCosUrl = !update.cosUrl.isNullOrBlank()
+                        if (hasCosUrl) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                                    Text("对象存储下载", fontWeight = FontWeight.Medium)
+                                    Text(
                                         "经多吉云下载，可关弹层继续后台下载",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                    )
+                                }
+                                Switch(
+                                    checked = settings.updateUseCos,
+                                    onCheckedChange = { viewModel.setUpdateUseCos(it) },
+                                    enabled = !downloading,
                                 )
                             }
-                            Switch(
-                                checked = settings.updateUseCos,
-                                onCheckedChange = { viewModel.setUpdateUseCos(it) },
-                                enabled = !downloading,
-                            )
                         }
-                        if (!settings.updateUseCos || update.cosUrl.isNullOrBlank()) {
+                        if (!hasCosUrl || !settings.updateUseCos) {
                             Row(
-                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                modifier = Modifier.fillMaxWidth().padding(top = if (hasCosUrl) 8.dp else 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Column(Modifier.weight(1f).padding(end = 12.dp)) {
                                     Text("使用 GitHub 镜像", fontWeight = FontWeight.Medium)
                                     Text(
-                                        "国内访问 GitHub 较慢时可开",
+                                        "默认经镜像下载，国内更稳",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                                     )

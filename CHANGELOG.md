@@ -2,6 +2,10 @@
 
 每次发版把对应 `versionName` 的一节写进 GitHub Release；应用检查更新时显示同一段（会去掉 `versionCode=` / `versionName=` 行）。
 
+## 1.2.2
+
+- 没有对象存储地址时不显示该下载开关，默认用 GitHub 镜像下载
+
 ## 1.2.1
 
 - 关于页开启对象存储下载时，不再显示 GitHub 镜像开关

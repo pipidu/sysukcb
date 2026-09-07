@@ -140,7 +140,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 updateState.value = if (latest != null && latest.isNewerThan(BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME)) {
                     UpdateCheckState.Available(latest)
                 } else {
-                    UpdateCheckState.UpToDate
+                    UpdateCheckState.UpToDate(latest)
                 }
             }
             .onFailure {
@@ -791,7 +791,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 sealed class UpdateCheckState {
     data object Idle : UpdateCheckState()
     data object Checking : UpdateCheckState()
-    data object UpToDate : UpdateCheckState()
+    data class UpToDate(val update: AppUpdate?) : UpdateCheckState()
     data class Available(val update: AppUpdate) : UpdateCheckState()
     data class Failed(val message: String) : UpdateCheckState()
 }

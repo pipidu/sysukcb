@@ -31,7 +31,7 @@ data class UserSettings(
     val webdavWifiOnly: Boolean = true,
     val webdavLastSyncAt: Long = 0L,
     val webdavLastMessage: String = "",
-    val updateUseMirror: Boolean = false,
+    val updateUseMirror: Boolean = true,
     val updateUseCos: Boolean = true,
     val selectedFriendId: String = "",
     val periodHeightDp: Int = SettingsRepository.DEFAULT_PERIOD_HEIGHT_DP,
@@ -313,7 +313,7 @@ class SettingsRepository(private val context: Context) {
         webdavWifiOnly = this[Keys.webdavWifiOnly] ?: true,
         webdavLastSyncAt = this[Keys.webdavLastSyncAt] ?: 0L,
         webdavLastMessage = this[Keys.webdavLastMessage].orEmpty(),
-        updateUseMirror = this[Keys.updateUseMirror] ?: false,
+        updateUseMirror = this[Keys.updateUseMirror] ?: true,
         updateUseCos = this[Keys.updateUseCos] ?: true,
         selectedFriendId = this[Keys.selectedFriendId].orEmpty(),
         periodHeightDp = (this[Keys.periodHeightDp] ?: SettingsRepository.DEFAULT_PERIOD_HEIGHT_DP)
