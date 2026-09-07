@@ -44,6 +44,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         requestNotificationPermissionIfNeeded()
+        viewModel.rescheduleReminders()
     }
 
     private fun requestNotificationPermissionIfNeeded() {

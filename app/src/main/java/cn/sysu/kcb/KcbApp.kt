@@ -23,6 +23,7 @@ class KcbApp : Application() {
         container = AppContainer(this)
         appScope.launch {
             runCatching { container.timetable.listSemesters() }
+            runCatching { cn.sysu.kcb.notify.rescheduleFromStore(this@KcbApp) }
             runCatching { AppStorage.trimCaches(this@KcbApp) }
             runCatching { container.settings.ensureFriendPeriodHeight() }
             val snap = runCatching { container.settings.snapshot() }.getOrNull()

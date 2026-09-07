@@ -2,6 +2,7 @@ package cn.sysu.kcb.ui.me
 
 import android.Manifest
 import android.app.AlarmManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -59,9 +60,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -76,11 +79,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cn.sysu.kcb.KcbApp
 import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.prefs.UserSettings
 import cn.sysu.kcb.data.remote.SessionStatus
 import cn.sysu.kcb.data.school.School
+import cn.sysu.kcb.notify.ReminderDiagnostics
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.UpdateCheckState
 import cn.sysu.kcb.ui.theme.KcbTopBar
@@ -138,6 +146,18 @@ fun MeScreen(
         if (uri != null) viewModel.setTimetableBackgroundImage(uri)
     }
     val notifyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    var reminderDiagTick by remember { mutableIntStateOf(0) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) reminderDiagTick++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val reminderDiag = remember(reminderDiagTick) {
+        KcbApp.instance.container.alarms.diagnostics()
+    }
     LaunchedEffect(settings.reminderEnabled, settings.examReminderEnabled) {
         if (Build.VERSION.SDK_INT < 33) return@LaunchedEffect
         if (!settings.reminderEnabled && !settings.examReminderEnabled) return@LaunchedEffect
@@ -498,14 +518,7 @@ fun MeScreen(
                                 if (it && Build.VERSION.SDK_INT >= 33) {
                                     notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 }
-                                if (it && Build.VERSION.SDK_INT >= 31) {
-                                    val am = context.getSystemService(AlarmManager::class.java)
-                                    if (!am.canScheduleExactAlarms()) {
-                                        context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                                            data = Uri.parse("package:${context.packageName}")
-                                        })
-                                    }
-                                }
+                                if (it) ensureExactAlarmPermission(context)
                                 viewModel.setReminderEnabled(it)
                             },
                         )
@@ -535,6 +548,7 @@ fun MeScreen(
                                 if (it && Build.VERSION.SDK_INT >= 33) {
                                     notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 }
+                                if (it) ensureExactAlarmPermission(context)
                                 viewModel.setExamReminderEnabled(it)
                             },
                         )
@@ -555,6 +569,23 @@ fun MeScreen(
                         )
                     }
                 }
+                ReminderStatusBlock(
+                    diag = reminderDiag,
+                    onTest = {
+                        if (Build.VERSION.SDK_INT >= 33) {
+                            val granted = ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.POST_NOTIFICATIONS,
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (!granted) notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        ensureExactAlarmPermission(context)
+                        viewModel.testReminder()
+                    },
+                    onOpenNotify = { openNotificationSettings(context) },
+                    onOpenExact = { ensureExactAlarmPermission(context) },
+                    onOpenBattery = { openBatteryOptimizationSettings(context) },
+                )
             }
             Text(
                 "数据默认只保存在本机。WebDAV 同步走你自己的网盘，密码存在本机加密存储。HAR 抓包文件不会被应用读取或上传。",
@@ -1007,4 +1038,83 @@ private fun reminderSummary(settings: UserSettings): String {
     val classPart = if (settings.reminderEnabled) "上课提前${settings.reminderMinutes}分钟" else "上课关"
     val examPart = if (settings.examReminderEnabled) "考试提前${settings.examReminderMinutes}分钟" else "考试关"
     return "$classPart · $examPart"
+}
+
+@Composable
+private fun ReminderStatusBlock(
+    diag: ReminderDiagnostics,
+    onTest: () -> Unit,
+    onOpenNotify: () -> Unit,
+    onOpenExact: () -> Unit,
+    onOpenBattery: () -> Unit,
+) {
+    val warn = !diag.notificationsEnabled || !diag.exactAlarmsAllowed
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(
+            buildList {
+                add(if (diag.notificationsEnabled) "通知已允许" else "通知未允许")
+                add(if (diag.exactAlarmsAllowed) "准时闹钟已允许" else "准时闹钟未允许")
+                add(if (diag.ignoringBatteryOpt) "电池未限制" else "电池优化可能杀提醒")
+            }.joinToString(" · "),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (warn) MaterialTheme.colorScheme.error
+            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+        )
+        Button(
+            onClick = onTest,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        ) { Text("测试提醒") }
+        Text(
+            "会立刻弹出一条，约 10 秒后再提醒一次。可先回到桌面或锁屏查看。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        if (!diag.notificationsEnabled) {
+            TextButton(onClick = onOpenNotify) { Text("去开启通知") }
+        }
+        if (!diag.exactAlarmsAllowed) {
+            TextButton(onClick = onOpenExact) { Text("去允许准时闹钟") }
+        }
+        if (!diag.ignoringBatteryOpt) {
+            TextButton(onClick = onOpenBattery) { Text("关闭电池优化") }
+        }
+    }
+}
+
+private fun ensureExactAlarmPermission(context: Context) {
+    if (Build.VERSION.SDK_INT < 31) return
+    val am = context.getSystemService(AlarmManager::class.java)
+    if (am.canScheduleExactAlarms()) return
+    runCatching {
+        context.startActivity(
+            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                data = Uri.parse("package:${context.packageName}")
+            },
+        )
+    }
+}
+
+private fun openNotificationSettings(context: Context) {
+    runCatching {
+        context.startActivity(
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            },
+        )
+    }
+}
+
+private fun openBatteryOptimizationSettings(context: Context) {
+    runCatching {
+        context.startActivity(
+            Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:${context.packageName}")
+            },
+        )
+    }.onFailure {
+        runCatching {
+            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        }
+    }
 }

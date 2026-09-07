@@ -7,8 +7,12 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.os.Build
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import cn.sysu.kcb.KcbApp
 import cn.sysu.kcb.MainActivity
 import cn.sysu.kcb.R
@@ -30,15 +34,93 @@ import java.time.temporal.ChronoUnit
 
 class ClassAlarmScheduler(private val context: Context) {
     private val alarmManager = context.getSystemService(AlarmManager::class.java)
+    private val prefs = context.applicationContext.getSharedPreferences("kcb_alarms", Context.MODE_PRIVATE)
 
     fun ensureChannels() {
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_CLASS, context.getString(R.string.channel_class), NotificationManager.IMPORTANCE_HIGH),
+        val sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        val audio = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        listOf(
+            CHANNEL_CLASS to context.getString(R.string.channel_class),
+            CHANNEL_EXAM to context.getString(R.string.channel_exam),
+        ).forEach { (id, name) ->
+            val channel = NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH).apply {
+                description = name
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 280, 180, 280)
+                enableLights(true)
+                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                setSound(sound, audio)
+                setShowBadge(true)
+            }
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    fun diagnostics(): ReminderDiagnostics {
+        val notify = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        val exact = Build.VERSION.SDK_INT < 31 || alarmManager.canScheduleExactAlarms()
+        val battery = if (Build.VERSION.SDK_INT < 23) {
+            true
+        } else {
+            val pm = context.getSystemService(PowerManager::class.java)
+            pm.isIgnoringBatteryOptimizations(context.packageName)
+        }
+        return ReminderDiagnostics(notify, exact, battery)
+    }
+
+    fun showReminder(title: String, body: String, channel: String) {
+        ensureChannels()
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+        val launch = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_EXAM, context.getString(R.string.channel_exam), NotificationManager.IMPORTANCE_HIGH),
+        val notification = NotificationCompat.Builder(context, channel)
+            .setSmallIcon(R.drawable.ic_launcher_fg)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setAutoCancel(true)
+            .setContentIntent(launch)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .build()
+        val id = ((System.currentTimeMillis() % 1_000_000L).toInt() + 1000) and 0x7fffffff
+        runCatching {
+            NotificationManagerCompat.from(context).notify(id, notification)
+        }
+    }
+
+    fun scheduleTest(delaySeconds: Int = 10): String {
+        ensureChannels()
+        val diag = diagnostics()
+        if (!diag.notificationsEnabled) {
+            return "还不能弹出提醒：请先允许通知权限"
+        }
+        showReminder("测试通知", "如果看到这一条，通知权限正常。", CHANNEL_CLASS)
+        val trigger = LocalDateTime.now().plusSeconds(delaySeconds.toLong())
+        val ok = schedule(
+            requestCode = TEST_REQUEST_CODE,
+            at = trigger,
+            title = "测试提醒",
+            body = "如果看到这一条，定时提醒正常。",
+            channel = CHANNEL_CLASS,
+            persist = false,
         )
+        return when {
+            !ok -> "立刻测试通知已发出，但定时提醒预约失败"
+            !diag.exactAlarmsAllowed ->
+                "立刻测试通知已发出。准时闹钟未允许，${delaySeconds} 秒后的定时提醒可能不准或不会响"
+            else -> "立刻测试通知已发出，约 ${delaySeconds} 秒后还有一次定时提醒"
+        }
     }
 
     suspend fun reschedule(
@@ -47,58 +129,64 @@ class ClassAlarmScheduler(private val context: Context) {
         periods: List<PeriodEntity>,
         weeks: List<WeekEntity>,
         settings: UserSettings,
+        semesterStartMillis: Long = 0L,
     ) {
         ensureChannels()
         cancelUpcoming()
         val now = LocalDateTime.now()
+        val codes = linkedSetOf<String>()
         if (settings.reminderEnabled) {
             val periodMap = periods.associateBy { it.sectionNumber }
             val today = LocalDate.now()
             for (offset in 0..13) {
                 val date = today.plusDays(offset.toLong())
-                val weekNo = resolveWeek(date, weeks) ?: continue
+                val weekNo = resolveWeek(date, weeks, semesterStartMillis)
                 for (course in courses) {
                     if (course.dayOfWeek != date.dayOfWeek.value) continue
-                    if (!WeekMask.has(course.weeksMask, weekNo)) continue
+                    if (weekNo != null && !WeekMask.has(course.weeksMask, weekNo)) continue
                     val start = periodMap[course.startPeriod]?.startTime ?: continue
-                    val startTime = runCatching { LocalTime.parse(start) }.getOrNull() ?: continue
-                    val trigger = LocalDateTime.of(date, startTime).minusMinutes(settings.reminderMinutes.toLong())
-                    if (trigger.isAfter(now)) {
-                        schedule(
-                            requestCode = requestCode("c", course.id, date.toString()),
-                            at = trigger,
-                            title = "即将上课",
-                            body = "${course.courseName} ${start} ${course.place}".trim(),
-                            channel = CHANNEL_CLASS,
-                        )
+                    val startTime = parseTime(start) ?: continue
+                    val trigger = LocalDateTime.of(date, startTime)
+                        .minusMinutes(settings.reminderMinutes.toLong())
+                    if (!trigger.isAfter(now)) continue
+                    val code = requestCode("c", course.id, date.toString())
+                    if (schedule(code, trigger, "即将上课", "${course.courseName} $start ${course.place}".trim(), CHANNEL_CLASS, persist = false)) {
+                        codes += code.toString()
                     }
                 }
             }
         }
         if (settings.examReminderEnabled) {
             for (exam in exams) {
-                val date = runCatching { LocalDate.parse(exam.examDate) }.getOrNull() ?: continue
-                val start = runCatching { LocalTime.parse(exam.startTime.ifBlank { "08:00" }) }.getOrNull() ?: continue
-                val trigger = LocalDateTime.of(date, start).minusMinutes(settings.examReminderMinutes.toLong())
-                if (trigger.isAfter(now)) {
-                    schedule(
-                        requestCode = requestCode("e", exam.id, exam.examDate),
-                        at = trigger,
-                        title = "考试提醒",
-                        body = "${exam.subjectName} ${exam.startTime} ${exam.classroom}".trim(),
-                        channel = CHANNEL_EXAM,
-                    )
+                val date = parseDate(exam.examDate) ?: continue
+                val start = parseTime(exam.startTime.ifBlank { "08:00" }) ?: continue
+                val trigger = LocalDateTime.of(date, start)
+                    .minusMinutes(settings.examReminderMinutes.toLong())
+                if (!trigger.isAfter(now)) continue
+                val code = requestCode("e", exam.id, exam.examDate)
+                val body = "${exam.subjectName} ${exam.startTime} ${exam.classroom}".trim()
+                if (schedule(code, trigger, "考试提醒", body, CHANNEL_EXAM, persist = false)) {
+                    codes += code.toString()
                 }
             }
         }
+        prefs.edit().putStringSet(KEY_CODES, codes).apply()
     }
 
-    private fun schedule(requestCode: Int, at: LocalDateTime, title: String, body: String, channel: String) {
-        if (Build.VERSION.SDK_INT >= 31 && !alarmManager.canScheduleExactAlarms()) return
+    private fun schedule(
+        requestCode: Int,
+        at: LocalDateTime,
+        title: String,
+        body: String,
+        channel: String,
+        persist: Boolean = true,
+    ): Boolean {
         val intent = Intent(context, ClassAlarmReceiver::class.java).apply {
+            action = "$ACTION_REMIND.$requestCode"
             putExtra(EXTRA_TITLE, title)
             putExtra(EXTRA_BODY, body)
             putExtra(EXTRA_CHANNEL, channel)
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
         }
         val pending = PendingIntent.getBroadcast(
             context,
@@ -107,36 +195,78 @@ class ClassAlarmScheduler(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val millis = at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        runCatching {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
+        if (millis <= System.currentTimeMillis()) return false
+        val show = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val exact = Build.VERSION.SDK_INT < 31 || alarmManager.canScheduleExactAlarms()
+        val ok = runCatching {
+            if (exact) {
+                alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(millis, show), pending)
+            } else {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
+            }
+            true
+        }.getOrElse {
+            runCatching {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
+                true
+            }.getOrDefault(false)
         }
+        if (ok && persist) {
+            val codes = prefs.getStringSet(KEY_CODES, emptySet()).orEmpty().toMutableSet()
+            codes += requestCode.toString()
+            prefs.edit().putStringSet(KEY_CODES, codes).apply()
+        }
+        return ok
     }
 
     private fun cancelUpcoming() {
-        for (i in 0 until 400) {
-            val pending = PendingIntent.getBroadcast(
+        val stored = prefs.getStringSet(KEY_CODES, emptySet()).orEmpty()
+        val legacy = (0 until 400).map { it.toString() }
+        for (raw in stored + legacy) {
+            val code = raw.toIntOrNull() ?: continue
+            cancelCode(code)
+        }
+        prefs.edit().remove(KEY_CODES).apply()
+    }
+
+    private fun cancelCode(requestCode: Int) {
+        val intent = Intent(context, ClassAlarmReceiver::class.java).apply {
+            action = "$ACTION_REMIND.$requestCode"
+        }
+        val flags = PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        val pending = PendingIntent.getBroadcast(context, requestCode, intent, flags)
+            ?: PendingIntent.getBroadcast(
                 context,
-                i,
+                requestCode,
                 Intent(context, ClassAlarmReceiver::class.java),
-                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+                flags,
             )
-            if (pending != null) {
-                alarmManager.cancel(pending)
-                pending.cancel()
-            }
+        if (pending != null) {
+            alarmManager.cancel(pending)
+            pending.cancel()
         }
     }
 
     private fun requestCode(prefix: String, id: Long, extra: String): Int {
-        return (prefix + id + extra).hashCode() and 0x7fffffff % 400
+        var hash = (prefix + id + extra).hashCode()
+        if (hash == Int.MIN_VALUE) hash = 0
+        return hash and 0x7fffffff
     }
 
     companion object {
-        const val CHANNEL_CLASS = "class_reminders"
-        const val CHANNEL_EXAM = "exam_reminders"
+        const val CHANNEL_CLASS = "class_reminders_v2"
+        const val CHANNEL_EXAM = "exam_reminders_v2"
         const val EXTRA_TITLE = "title"
         const val EXTRA_BODY = "body"
         const val EXTRA_CHANNEL = "channel"
+        const val ACTION_REMIND = "cn.sysu.kcb.action.REMIND"
+        private const val KEY_CODES = "codes"
+        private const val TEST_REQUEST_CODE = 0x6B636254
 
         fun resolveWeek(date: LocalDate, weeks: List<WeekEntity>, semesterStartMillis: Long = 0): Int? {
             for (week in weeks) {
@@ -168,10 +298,31 @@ class ClassAlarmScheduler(private val context: Context) {
             return null
         }
 
+        fun parseTime(raw: String): LocalTime? {
+            val text = raw.trim().replace("：", ":")
+            runCatching { return LocalTime.parse(text) }
+            val parts = text.split(":")
+            val hour = parts.getOrNull(0)?.filter { it.isDigit() }?.toIntOrNull() ?: return null
+            val minute = parts.getOrNull(1)?.filter { it.isDigit() }?.toIntOrNull() ?: 0
+            val second = parts.getOrNull(2)?.filter { it.isDigit() }?.toIntOrNull() ?: 0
+            return runCatching { LocalTime.of(hour, minute, second) }.getOrNull()
+        }
+
+        fun parseDate(raw: String): LocalDate? {
+            val text = raw.trim().take(10)
+            return runCatching { LocalDate.parse(text) }.getOrNull()
+        }
+
         private fun mondayOf(date: LocalDate): LocalDate =
             date.minusDays((date.dayOfWeek.value - 1).toLong())
     }
 }
+
+data class ReminderDiagnostics(
+    val notificationsEnabled: Boolean,
+    val exactAlarmsAllowed: Boolean,
+    val ignoringBatteryOpt: Boolean,
+)
 
 class ClassAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -179,22 +330,9 @@ class ClassAlarmReceiver : BroadcastReceiver() {
         val body = intent.getStringExtra(ClassAlarmScheduler.EXTRA_BODY).orEmpty()
         val channel = intent.getStringExtra(ClassAlarmScheduler.EXTRA_CHANNEL)
             ?: ClassAlarmScheduler.CHANNEL_CLASS
-        val launch = PendingIntent.getActivity(
-            context,
-            0,
-            Intent(context, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        val notification = NotificationCompat.Builder(context, channel)
-            .setSmallIcon(R.drawable.ic_launcher_fg)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setAutoCancel(true)
-            .setContentIntent(launch)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .build()
-        context.getSystemService(NotificationManager::class.java)
-            .notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)
+        val scheduler = (context.applicationContext as? KcbApp)?.container?.alarms
+            ?: ClassAlarmScheduler(context)
+        scheduler.showReminder(title, body, channel)
     }
 }
 
@@ -205,24 +343,29 @@ class BootReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                val app = context.applicationContext as KcbApp
-                val container = app.container
-                val settings = container.settings.snapshot()
-                val semester = settings.selectedSemester.ifBlank {
-                    container.timetable.currentSemester()?.acadYearSemester.orEmpty()
-                }
-                if (semester.isNotBlank()) {
-                    container.alarms.reschedule(
-                        courses = container.timetable.listCourses(semester),
-                        exams = container.timetable.listAllExams(),
-                        periods = container.timetable.listPeriods(semester),
-                        weeks = container.timetable.listWeeks(semester),
-                        settings = settings,
-                    )
-                }
+                rescheduleFromStore(context.applicationContext)
             } finally {
                 pending.finish()
             }
         }
     }
+}
+
+suspend fun rescheduleFromStore(context: Context) {
+    val app = context.applicationContext as? KcbApp ?: return
+    val container = app.container
+    val settings = container.settings.snapshot()
+    val semester = settings.selectedSemester.ifBlank {
+        container.timetable.currentSemester()?.acadYearSemester.orEmpty()
+    }
+    val semesters = container.timetable.listSemesters()
+    val startMillis = semesters.find { it.acadYearSemester == semester }?.startMillis ?: 0L
+    container.alarms.reschedule(
+        courses = if (semester.isBlank()) emptyList() else container.timetable.listCourses(semester),
+        exams = container.timetable.listAllExams(),
+        periods = if (semester.isBlank()) emptyList() else container.timetable.listPeriods(semester),
+        weeks = if (semester.isBlank()) emptyList() else container.timetable.listWeeks(semester),
+        settings = settings,
+        semesterStartMillis = startMillis,
+    )
 }

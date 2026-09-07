@@ -103,6 +103,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             loggedIn.value = hasSession
             sessionStatus.value = if (hasSession) SessionStatus.Valid else SessionStatus.LoggedOut
             webdavHasPassword.value = container.webdavSecrets.hasPassword()
+            runCatching { refreshAlarms() }
         }
         viewModelScope.launch {
             timetableSnapshot.filterNotNull().first()
@@ -350,6 +351,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setTimetableBgDim(percent: Int) = viewModelScope.launch {
         container.settings.setTimetableBgDim(percent)
+    }
+
+    fun testReminder() = viewModelScope.launch {
+        message.value = container.alarms.scheduleTest()
+    }
+
+    fun rescheduleReminders() = viewModelScope.launch {
+        refreshAlarms()
     }
 
     fun setReminderEnabled(enabled: Boolean) = viewModelScope.launch {
@@ -690,12 +699,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val semester = snap.selectedSemester.ifBlank {
             container.timetable.currentSemester()?.acadYearSemester.orEmpty()
         }
+        val startMillis = container.timetable.listSemesters()
+            .find { it.acadYearSemester == semester }?.startMillis ?: 0L
         container.alarms.reschedule(
             courses = if (semester.isBlank()) emptyList() else container.timetable.listCourses(semester),
             exams = container.timetable.listAllExams(),
             periods = if (semester.isBlank()) emptyList() else container.timetable.listPeriods(semester),
             weeks = if (semester.isBlank()) emptyList() else container.timetable.listWeeks(semester),
             settings = snap,
+            semesterStartMillis = startMillis,
         )
     }
 }
