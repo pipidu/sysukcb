@@ -9,4 +9,6 @@
     <string name="widget_next">最近两节课</string>
     <string name="channel_class">上课提醒</string>
     <string name="channel_exam">考试提醒</string>
+    <string name="channel_class_alarm">上课闹钟</string>
+    <string name="channel_exam_alarm">考试闹钟</string>
 </resources>

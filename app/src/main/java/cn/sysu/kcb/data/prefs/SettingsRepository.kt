@@ -21,6 +21,7 @@ data class UserSettings(
     val reminderMinutes: Int = 15,
     val examReminderEnabled: Boolean = true,
     val examReminderMinutes: Int = 60,
+    val reminderStyle: String = SettingsRepository.REMINDER_STYLE_PUSH,
     val selectedSemester: String = "",
     val schoolId: String = SettingsRepository.DEFAULT_SCHOOL_ID,
     val webdavUrl: String = "",
@@ -118,6 +119,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setExamReminderMinutes(minutes: Int) {
         context.dataStore.edit { it[Keys.examReminderMinutes] = minutes }
+    }
+
+    suspend fun setReminderStyle(style: String) {
+        context.dataStore.edit { it[Keys.reminderStyle] = normalizeReminderStyle(style) }
     }
 
     suspend fun setSelectedSemester(semester: String) {
@@ -293,6 +298,7 @@ class SettingsRepository(private val context: Context) {
         reminderMinutes = this[Keys.reminderMinutes] ?: 15,
         examReminderEnabled = this[Keys.examReminderEnabled] ?: true,
         examReminderMinutes = this[Keys.examReminderMinutes] ?: 60,
+        reminderStyle = SettingsRepository.normalizeReminderStyle(this[Keys.reminderStyle]),
         selectedSemester = this[Keys.selectedSemester].orEmpty(),
         schoolId = this[Keys.schoolId] ?: SettingsRepository.DEFAULT_SCHOOL_ID,
         webdavUrl = this[Keys.webdavUrl].orEmpty(),
@@ -369,6 +375,7 @@ class SettingsRepository(private val context: Context) {
         val reminderMinutes = intPreferencesKey("reminder_minutes")
         val examReminderEnabled = booleanPreferencesKey("exam_reminder_enabled")
         val examReminderMinutes = intPreferencesKey("exam_reminder_minutes")
+        val reminderStyle = stringPreferencesKey("reminder_style")
         val selectedSemester = stringPreferencesKey("selected_semester")
         val schoolId = stringPreferencesKey("school_id")
         val webdavUrl = stringPreferencesKey("webdav_url")
@@ -413,6 +420,12 @@ class SettingsRepository(private val context: Context) {
         const val THEME_MODE_SYSTEM = "system"
         const val THEME_MODE_LIGHT = "light"
         const val THEME_MODE_DARK = "dark"
+        const val REMINDER_STYLE_PUSH = "push"
+        const val REMINDER_STYLE_ALARM = "alarm"
+
+        fun normalizeReminderStyle(style: String?): String =
+            if (style == REMINDER_STYLE_ALARM) REMINDER_STYLE_ALARM else REMINDER_STYLE_PUSH
+
         const val DEFAULT_PERIOD_HEIGHT_DP = 58
         const val MIN_PERIOD_HEIGHT_DP = 40
         const val MAX_PERIOD_HEIGHT_DP = 88

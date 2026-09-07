@@ -20,6 +20,7 @@ import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.ExamEntity
 import cn.sysu.kcb.data.local.PeriodEntity
 import cn.sysu.kcb.data.local.WeekEntity
+import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.prefs.UserSettings
 import cn.sysu.kcb.domain.WeekMask
 import kotlinx.coroutines.CoroutineScope
@@ -38,16 +39,20 @@ class ClassAlarmScheduler(private val context: Context) {
 
     fun ensureChannels() {
         val manager = context.getSystemService(NotificationManager::class.java)
-        val sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-        val audio = AudioAttributes.Builder()
+        val notifySound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        val alarmSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        val notifyAudio = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_NOTIFICATION)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
-        listOf(
-            CHANNEL_CLASS to context.getString(R.string.channel_class),
-            CHANNEL_EXAM to context.getString(R.string.channel_exam),
-        ).forEach { (id, name) ->
-            val channel = NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH).apply {
+        val alarmAudio = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        fun makeChannel(id: String, name: String, alarm: Boolean): NotificationChannel {
+            val sound = if (alarm) alarmSound else notifySound
+            val audio = if (alarm) alarmAudio else notifyAudio
+            return NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH).apply {
                 description = name
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 280, 180, 280)
@@ -56,8 +61,11 @@ class ClassAlarmScheduler(private val context: Context) {
                 setSound(sound, audio)
                 setShowBadge(true)
             }
-            manager.createNotificationChannel(channel)
         }
+        manager.createNotificationChannel(makeChannel(CHANNEL_CLASS, context.getString(R.string.channel_class), alarm = false))
+        manager.createNotificationChannel(makeChannel(CHANNEL_EXAM, context.getString(R.string.channel_exam), alarm = false))
+        manager.createNotificationChannel(makeChannel(CHANNEL_CLASS_ALARM, context.getString(R.string.channel_class_alarm), alarm = true))
+        manager.createNotificationChannel(makeChannel(CHANNEL_EXAM_ALARM, context.getString(R.string.channel_exam_alarm), alarm = true))
     }
 
     fun diagnostics(): ReminderDiagnostics {
@@ -72,7 +80,7 @@ class ClassAlarmScheduler(private val context: Context) {
         return ReminderDiagnostics(notify, exact, battery)
     }
 
-    fun showReminder(title: String, body: String, channel: String) {
+    fun showReminder(title: String, body: String, channel: String, alarmStyle: Boolean = false) {
         ensureChannels()
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
         val launch = PendingIntent.getActivity(
@@ -88,10 +96,9 @@ class ClassAlarmScheduler(private val context: Context) {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setAutoCancel(true)
             .setContentIntent(launch)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(if (alarmStyle) NotificationCompat.PRIORITY_MAX else NotificationCompat.PRIORITY_HIGH)
+            .setCategory(if (alarmStyle) NotificationCompat.CATEGORY_ALARM else NotificationCompat.CATEGORY_REMINDER)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .build()
         val id = ((System.currentTimeMillis() % 1_000_000L).toInt() + 1000) and 0x7fffffff
         runCatching {
@@ -99,27 +106,31 @@ class ClassAlarmScheduler(private val context: Context) {
         }
     }
 
-    fun scheduleTest(delaySeconds: Int = 10): String {
+    fun scheduleTest(delaySeconds: Int = 10, alarmStyle: Boolean = false): String {
         ensureChannels()
         val diag = diagnostics()
         if (!diag.notificationsEnabled) {
             return "还不能弹出提醒：请先允许通知权限"
         }
-        showReminder("测试通知", "如果看到这一条，通知权限正常。", CHANNEL_CLASS)
+        val channel = if (alarmStyle) CHANNEL_CLASS_ALARM else CHANNEL_CLASS
+        val kind = if (alarmStyle) "闹钟" else "推送"
+        showReminder("测试通知", "如果看到这一条，${kind}通知权限正常。", channel, alarmStyle)
         val trigger = LocalDateTime.now().plusSeconds(delaySeconds.toLong())
         val ok = schedule(
             requestCode = TEST_REQUEST_CODE,
             at = trigger,
             title = "测试提醒",
-            body = "如果看到这一条，定时提醒正常。",
-            channel = CHANNEL_CLASS,
+            body = "如果看到这一条，定时${kind}提醒正常。",
+            channel = channel,
             persist = false,
+            alarmStyle = alarmStyle,
         )
         return when {
             !ok -> "立刻测试通知已发出，但定时提醒预约失败"
             !diag.exactAlarmsAllowed ->
                 "立刻测试通知已发出。准时闹钟未允许，${delaySeconds} 秒后的定时提醒可能不准或不会响"
-            else -> "立刻测试通知已发出，约 ${delaySeconds} 秒后还有一次定时提醒"
+            alarmStyle -> "立刻测试闹钟通知已发出，约 ${delaySeconds} 秒后还有一次（状态栏可能出现闹钟图标）"
+            else -> "立刻测试推送通知已发出，约 ${delaySeconds} 秒后还有一次定时提醒"
         }
     }
 
@@ -135,6 +146,9 @@ class ClassAlarmScheduler(private val context: Context) {
         cancelUpcoming()
         val now = LocalDateTime.now()
         val codes = linkedSetOf<String>()
+        val alarmStyle = settings.reminderStyle == SettingsRepository.REMINDER_STYLE_ALARM
+        val classChannel = if (alarmStyle) CHANNEL_CLASS_ALARM else CHANNEL_CLASS
+        val examChannel = if (alarmStyle) CHANNEL_EXAM_ALARM else CHANNEL_EXAM
         if (settings.reminderEnabled) {
             val periodMap = periods.associateBy { it.sectionNumber }
             val today = LocalDate.now()
@@ -150,7 +164,7 @@ class ClassAlarmScheduler(private val context: Context) {
                         .minusMinutes(settings.reminderMinutes.toLong())
                     if (!trigger.isAfter(now)) continue
                     val code = requestCode("c", course.id, date.toString())
-                    if (schedule(code, trigger, "即将上课", "${course.courseName} $start ${course.place}".trim(), CHANNEL_CLASS, persist = false)) {
+                    if (schedule(code, trigger, "即将上课", "${course.courseName} $start ${course.place}".trim(), classChannel, persist = false, alarmStyle = alarmStyle)) {
                         codes += code.toString()
                     }
                 }
@@ -165,7 +179,7 @@ class ClassAlarmScheduler(private val context: Context) {
                 if (!trigger.isAfter(now)) continue
                 val code = requestCode("e", exam.id, exam.examDate)
                 val body = "${exam.subjectName} ${exam.startTime} ${exam.classroom}".trim()
-                if (schedule(code, trigger, "考试提醒", body, CHANNEL_EXAM, persist = false)) {
+                if (schedule(code, trigger, "考试提醒", body, examChannel, persist = false, alarmStyle = alarmStyle)) {
                     codes += code.toString()
                 }
             }
@@ -180,12 +194,14 @@ class ClassAlarmScheduler(private val context: Context) {
         body: String,
         channel: String,
         persist: Boolean = true,
+        alarmStyle: Boolean = false,
     ): Boolean {
         val intent = Intent(context, ClassAlarmReceiver::class.java).apply {
             action = "$ACTION_REMIND.$requestCode"
             putExtra(EXTRA_TITLE, title)
             putExtra(EXTRA_BODY, body)
             putExtra(EXTRA_CHANNEL, channel)
+            putExtra(EXTRA_ALARM, alarmStyle)
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
         }
         val pending = PendingIntent.getBroadcast(
@@ -204,10 +220,13 @@ class ClassAlarmScheduler(private val context: Context) {
         )
         val exact = Build.VERSION.SDK_INT < 31 || alarmManager.canScheduleExactAlarms()
         val ok = runCatching {
-            if (exact) {
-                alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(millis, show), pending)
-            } else {
-                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
+            when {
+                alarmStyle && exact ->
+                    alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(millis, show), pending)
+                exact ->
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
+                else ->
+                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
             }
             true
         }.getOrElse {
@@ -261,9 +280,12 @@ class ClassAlarmScheduler(private val context: Context) {
     companion object {
         const val CHANNEL_CLASS = "class_reminders_v2"
         const val CHANNEL_EXAM = "exam_reminders_v2"
+        const val CHANNEL_CLASS_ALARM = "class_alarms_v2"
+        const val CHANNEL_EXAM_ALARM = "exam_alarms_v2"
         const val EXTRA_TITLE = "title"
         const val EXTRA_BODY = "body"
         const val EXTRA_CHANNEL = "channel"
+        const val EXTRA_ALARM = "alarm"
         const val ACTION_REMIND = "cn.sysu.kcb.action.REMIND"
         private const val KEY_CODES = "codes"
         private const val TEST_REQUEST_CODE = 0x6B636254
@@ -330,9 +352,10 @@ class ClassAlarmReceiver : BroadcastReceiver() {
         val body = intent.getStringExtra(ClassAlarmScheduler.EXTRA_BODY).orEmpty()
         val channel = intent.getStringExtra(ClassAlarmScheduler.EXTRA_CHANNEL)
             ?: ClassAlarmScheduler.CHANNEL_CLASS
+        val alarmStyle = intent.getBooleanExtra(ClassAlarmScheduler.EXTRA_ALARM, false)
         val scheduler = (context.applicationContext as? KcbApp)?.container?.alarms
             ?: ClassAlarmScheduler(context)
-        scheduler.showReminder(title, body, channel)
+        scheduler.showReminder(title, body, channel, alarmStyle)
     }
 }
 

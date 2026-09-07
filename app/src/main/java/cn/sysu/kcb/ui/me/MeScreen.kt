@@ -509,6 +509,40 @@ fun MeScreen(
                 expanded = reminderOpen,
                 onToggle = { reminderOpen = !reminderOpen },
             ) {
+                Text(
+                    "提醒方式",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                )
+                val reminderStyles = listOf(
+                    SettingsRepository.REMINDER_STYLE_PUSH to "推送通知",
+                    SettingsRepository.REMINDER_STYLE_ALARM to "闹钟通知",
+                )
+                SingleChoiceSegmentedButtonRow(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                ) {
+                    reminderStyles.forEachIndexed { index, (id, label) ->
+                        SegmentedButton(
+                            selected = settings.reminderStyle == id,
+                            onClick = {
+                                if (id == SettingsRepository.REMINDER_STYLE_ALARM) {
+                                    ensureExactAlarmPermission(context)
+                                }
+                                viewModel.setReminderStyle(id)
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(index, reminderStyles.size),
+                        ) { Text(label) }
+                    }
+                }
+                Text(
+                    if (settings.reminderStyle == SettingsRepository.REMINDER_STYLE_ALARM)
+                        "闹钟通知会占用系统闹钟，锁屏和后台更不容易被关掉。"
+                    else
+                        "推送通知是普通消息提醒，不占用系统闹钟。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                )
                 ListItem(
                     headlineContent = { Text("上课提醒") },
                     trailingContent = {
@@ -1037,7 +1071,8 @@ private fun timetableLookSummary(settings: UserSettings): String {
 private fun reminderSummary(settings: UserSettings): String {
     val classPart = if (settings.reminderEnabled) "上课提前${settings.reminderMinutes}分钟" else "上课关"
     val examPart = if (settings.examReminderEnabled) "考试提前${settings.examReminderMinutes}分钟" else "考试关"
-    return "$classPart · $examPart"
+    val stylePart = if (settings.reminderStyle == SettingsRepository.REMINDER_STYLE_ALARM) "闹钟" else "推送"
+    return "$classPart · $examPart · $stylePart"
 }
 
 @Composable
@@ -1065,7 +1100,7 @@ private fun ReminderStatusBlock(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         ) { Text("测试提醒") }
         Text(
-            "会立刻弹出一条，约 10 秒后再提醒一次。可先回到桌面或锁屏查看。",
+            "按当前提醒方式立刻弹出一条，约 10 秒后再提醒一次。可先回到桌面或锁屏查看。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
             modifier = Modifier.padding(top = 4.dp),

@@ -13,6 +13,7 @@ import cn.sysu.kcb.KcbApp
 import cn.sysu.kcb.data.TimetableBackground
 import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.StickyNoteEntity
+import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.prefs.UserSettings
 import cn.sysu.kcb.data.remote.AppUpdate
 import cn.sysu.kcb.data.remote.SessionCheckResult
@@ -354,7 +355,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun testReminder() = viewModelScope.launch {
-        message.value = container.alarms.scheduleTest()
+        val alarmStyle = container.settings.snapshot().reminderStyle ==
+            SettingsRepository.REMINDER_STYLE_ALARM
+        message.value = container.alarms.scheduleTest(alarmStyle = alarmStyle)
     }
 
     fun rescheduleReminders() = viewModelScope.launch {
@@ -368,6 +371,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setReminderMinutes(minutes: Int) = viewModelScope.launch {
         container.settings.setReminderMinutes(minutes)
+        refreshAlarms()
+    }
+
+    fun setReminderStyle(style: String) = viewModelScope.launch {
+        container.settings.setReminderStyle(style)
         refreshAlarms()
     }
 
