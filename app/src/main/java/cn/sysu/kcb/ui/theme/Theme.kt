@@ -3,9 +3,14 @@ package cn.sysu.kcb.ui.theme
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
@@ -41,8 +46,16 @@ val PresetThemeColors = listOf(
 fun colorSchemeFromSeed(seed: Long, dark: Boolean): ColorScheme {
     val primary = Color(seed)
     val onPrimary = if (primary.luminance() > 0.45f) Color(0xFF1A1A1A) else Color.White
-    val container = if (dark) primary.copy(alpha = 0.24f).compositeOn(Color(0xFF141218)) else primary.copy(alpha = 0.12f).compositeOn(Color.White)
-    val background = if (dark) Color(0xFF141218) else Color(0xFFF7F4F4)
+    val darkBg = Color(0xFF141218)
+    val lightBg = Color.White
+    val container = if (dark) primary.copy(alpha = 0.24f).compositeOn(darkBg) else primary.copy(alpha = 0.12f).compositeOn(lightBg)
+    val secondaryContainer = if (dark) {
+        primary.copy(alpha = 0.42f).compositeOn(darkBg)
+    } else {
+        primary.copy(alpha = 0.32f).compositeOn(lightBg)
+    }
+    val onSecondaryContainer = if (secondaryContainer.luminance() > 0.45f) Color(0xFF1C1B1F) else Color.White
+    val background = if (dark) darkBg else Color(0xFFF7F4F4)
     val surface = if (dark) Color(0xFF1C1B1F) else Color(0xFFFFFBFA)
     val onBg = if (dark) Color(0xFFE6E1E5) else Color(0xFF1C1B1F)
     return if (dark) {
@@ -52,6 +65,9 @@ fun colorSchemeFromSeed(seed: Long, dark: Boolean): ColorScheme {
             primaryContainer = container,
             onPrimaryContainer = onBg,
             secondary = primary,
+            onSecondary = onPrimary,
+            secondaryContainer = secondaryContainer,
+            onSecondaryContainer = onSecondaryContainer,
             background = background,
             surface = surface,
             onBackground = onBg,
@@ -62,14 +78,54 @@ fun colorSchemeFromSeed(seed: Long, dark: Boolean): ColorScheme {
             primary = primary,
             onPrimary = onPrimary,
             primaryContainer = container,
-            onPrimaryContainer = Color(0xFF3B0A0A),
+            onPrimaryContainer = onBg,
             secondary = primary,
+            onSecondary = onPrimary,
+            secondaryContainer = secondaryContainer,
+            onSecondaryContainer = onSecondaryContainer,
             background = background,
             surface = surface,
             onBackground = onBg,
             onSurface = onBg,
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun kcbFilterChipColors() = FilterChipDefaults.filterChipColors(
+    selectedContainerColor = MaterialTheme.colorScheme.primary,
+    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
+    selectedTrailingIconColor = MaterialTheme.colorScheme.onPrimary,
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun kcbSegmentedButtonColors() = SegmentedButtonDefaults.colors(
+    activeContainerColor = MaterialTheme.colorScheme.primary,
+    activeContentColor = MaterialTheme.colorScheme.onPrimary,
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun KcbFilterChip(
+    selected: Boolean,
+    onClick: () -> Unit,
+    label: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    leadingIcon: @Composable (() -> Unit)? = null,
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = label,
+        modifier = modifier,
+        enabled = enabled,
+        leadingIcon = leadingIcon,
+        colors = kcbFilterChipColors(),
+    )
 }
 
 private fun Color.compositeOn(bg: Color): Color {

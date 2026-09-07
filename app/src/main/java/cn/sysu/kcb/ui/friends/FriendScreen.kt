@@ -34,7 +34,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -70,6 +69,7 @@ import cn.sysu.kcb.notify.ClassAlarmScheduler
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.course.CourseDetailSheet
 import cn.sysu.kcb.ui.me.JoinWebDavShareDialog
+import cn.sysu.kcb.ui.theme.KcbFilterChip
 import cn.sysu.kcb.ui.theme.KcbTopBar
 import cn.sysu.kcb.ui.timetable.StickyNoteViewDialog
 import cn.sysu.kcb.ui.timetable.TimetableGrid
@@ -192,7 +192,7 @@ fun FriendScreen(viewModel: AppViewModel, onSetupSync: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     friends.forEach { friend ->
-                        FilterChip(
+                        KcbFilterChip(
                             selected = friend.id == selected?.id,
                             onClick = {
                                 userPickedFriend = true
@@ -568,14 +568,14 @@ private fun FriendExamPane(pack: SharePack) {
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                FilterChip(
+                KcbFilterChip(
                     selected = selectedWeekId == "all",
                     onClick = { selectedWeekId = "all" },
                     label = { Text("全部") },
                 )
                 examWeeks.forEach { week ->
                     val count = exams.count { it.examWeekId == week.examWeekId }
-                    FilterChip(
+                    KcbFilterChip(
                         selected = selectedWeekId == week.examWeekId,
                         onClick = { selectedWeekId = week.examWeekId },
                         label = { Text("${shortWeekName(week.examWeekName)}${if (count > 0) " $count" else ""}") },

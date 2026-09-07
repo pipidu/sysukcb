@@ -22,7 +22,6 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +30,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import cn.sysu.kcb.ui.theme.KcbFilterChip
 import cn.sysu.kcb.ui.theme.KcbTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -107,13 +107,13 @@ fun CourseEditScreen(
             Text("星期")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 days.forEachIndexed { index, label ->
-                    FilterChip(selected = day == index + 1, onClick = { day = index + 1 }, label = { Text(label) })
+                    KcbFilterChip(selected = day == index + 1, onClick = { day = index + 1 }, label = { Text(label) })
                 }
             }
             Text("节次 $start-$end")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 (1..11).forEach { p ->
-                    FilterChip(
+                    KcbFilterChip(
                         selected = p in start..end,
                         onClick = {
                             if (p <= start) {
@@ -129,22 +129,22 @@ fun CourseEditScreen(
             }
             Text("周次（${WeekMask.describe(weeksMask, 20)}）")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
+                KcbFilterChip(
                     selected = weeksMask == WeekMask.fromRange(1, 20),
                     onClick = { weeksMask = WeekMask.fromRange(1, 20) },
                     label = { Text("全选") },
                 )
-                FilterChip(
+                KcbFilterChip(
                     selected = weeksMask == WeekMask.fromRange(1, 20) { it % 2 == 1 },
                     onClick = { weeksMask = WeekMask.fromRange(1, 20) { it % 2 == 1 } },
                     label = { Text("单周") },
                 )
-                FilterChip(
+                KcbFilterChip(
                     selected = weeksMask == WeekMask.fromRange(1, 20) { it % 2 == 0 },
                     onClick = { weeksMask = WeekMask.fromRange(1, 20) { it % 2 == 0 } },
                     label = { Text("双周") },
                 )
-                FilterChip(
+                KcbFilterChip(
                     selected = weeksMask == 0L,
                     onClick = { weeksMask = 0L },
                     label = { Text("清空") },

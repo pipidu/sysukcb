@@ -45,7 +45,6 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -91,8 +90,10 @@ import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.notify.ReminderDiagnostics
 import cn.sysu.kcb.ui.AppViewModel
 import cn.sysu.kcb.ui.UpdateCheckState
+import cn.sysu.kcb.ui.theme.KcbFilterChip
 import cn.sysu.kcb.ui.theme.KcbTopBar
 import cn.sysu.kcb.ui.theme.PresetThemeColors
+import cn.sysu.kcb.ui.theme.kcbSegmentedButtonColors
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -195,7 +196,7 @@ fun MeScreen(
             ) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     School.All.forEach { school ->
-                        FilterChip(
+                        KcbFilterChip(
                             selected = settings.schoolId == school.id,
                             onClick = { viewModel.setSchool(school.id) },
                             enabled = !importing,
@@ -218,7 +219,7 @@ fun MeScreen(
             }
             ExpandableCard(
                 title = "数据",
-                summary = "教务导入、文件、同步",
+                summary = "教务导入、文件",
                 expanded = dataOpen,
                 onToggle = { dataOpen = !dataOpen },
             ) {
@@ -273,24 +274,16 @@ fun MeScreen(
                         ) { Text("文件") }
                     },
                 )
-                SectionLabel("同步")
-                ListItem(
-                    headlineContent = { Text("WebDAV") },
-                    supportingContent = {
-                        Text(
-                            if (settings.webdavUrl.isBlank()) "用坚果云和好友互看课表"
-                            else webdavSyncHint(settings.webdavLastSyncAt, settings.webdavLastMessage),
-                        )
-                    },
-                    trailingContent = {
-                        Icon(Icons.Outlined.ChevronRight, contentDescription = null)
-                    },
-                    modifier = Modifier.clickable(onClick = onWebDav),
-                )
                 TextButton(onClick = { confirmClear = true }) {
                     Text("清空本地数据", color = MaterialTheme.colorScheme.error)
                 }
             }
+            NavCard(
+                title = "WebDAV",
+                summary = if (settings.webdavUrl.isBlank()) "用坚果云和好友互看课表"
+                else webdavSyncHint(settings.webdavLastSyncAt, settings.webdavLastMessage),
+                onClick = onWebDav,
+            )
             ExpandableCard(
                 title = "外观",
                 summary = appearanceSummary(settings),
@@ -309,6 +302,7 @@ fun MeScreen(
                             selected = settings.themeMode == id,
                             onClick = { viewModel.setThemeMode(id) },
                             shape = SegmentedButtonDefaults.itemShape(index, modes.size),
+                            colors = kcbSegmentedButtonColors(),
                         ) { Text(label) }
                     }
                 }
@@ -347,17 +341,17 @@ fun MeScreen(
                 }
                 Text("课表背景", style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
+                    KcbFilterChip(
                         selected = bgMode == "跟随界面",
                         onClick = { viewModel.clearTimetableBackground() },
                         label = { Text("跟随界面") },
                     )
-                    FilterChip(
+                    KcbFilterChip(
                         selected = bgMode == "纯色",
                         onClick = { showBgColor = true },
                         label = { Text("纯色") },
                     )
-                    FilterChip(
+                    KcbFilterChip(
                         selected = bgMode == "图片",
                         onClick = {
                             bgPicker.launch(
@@ -531,6 +525,7 @@ fun MeScreen(
                                 viewModel.setReminderStyle(id)
                             },
                             shape = SegmentedButtonDefaults.itemShape(index, reminderStyles.size),
+                            colors = kcbSegmentedButtonColors(),
                         ) { Text(label) }
                     }
                 }
@@ -768,6 +763,38 @@ fun MeScreen(
             },
             dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } },
         )
+    }
+}
+
+@Composable
+private fun NavCard(
+    title: String,
+    summary: String,
+    onClick: () -> Unit,
+) {
+    Card(
+        Modifier
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                if (summary.isNotBlank()) {
+                    Text(
+                        summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                    )
+                }
+            }
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+        }
     }
 }
 

@@ -48,13 +48,13 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import cn.sysu.kcb.ui.theme.KcbFilterChip
 import cn.sysu.kcb.ui.theme.KcbTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -654,7 +654,7 @@ private fun AddSemesterDialog(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     candidates.forEach { option ->
-                        FilterChip(
+                        KcbFilterChip(
                             selected = false,
                             onClick = { onPick(option) },
                             label = { Text(option, fontSize = 13.sp, lineHeight = 16.sp) },
@@ -693,7 +693,7 @@ internal fun WeekPickerDialog(
                     .verticalScroll(rememberScrollState()),
             ) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
+                    KcbFilterChip(
                         selected = termOverview,
                         onClick = onPickAll,
                         label = {
@@ -702,7 +702,7 @@ internal fun WeekPickerDialog(
                     )
                     for (weekNo in 1..last) {
                         val isCurrent = weekNo == currentWeek
-                        FilterChip(
+                        KcbFilterChip(
                             selected = !termOverview && weekNo == selectedWeek,
                             onClick = { onPick(weekNo) },
                             label = {

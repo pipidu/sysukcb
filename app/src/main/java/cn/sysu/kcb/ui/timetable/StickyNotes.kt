@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -64,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import cn.sysu.kcb.data.local.StickyNoteEntity
 import cn.sysu.kcb.domain.CourseColors
 import cn.sysu.kcb.domain.WeekMask
+import cn.sysu.kcb.ui.theme.KcbFilterChip
 import cn.sysu.kcb.ui.theme.NamedStickyNoteColors
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -360,27 +360,27 @@ internal fun StickyNoteEditorDialog(
                 )
                 Text("显示周次（${WeekMask.describe(weeksMask, weekCount).ifBlank { "未选" }}）", fontWeight = FontWeight.Medium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    FilterChip(
+                    KcbFilterChip(
                         selected = weeksMask == WeekMask.bit(currentWeek.coerceIn(1, weekCount)),
                         onClick = { weeksMask = WeekMask.bit(currentWeek.coerceIn(1, weekCount)) },
                         label = { Text("本周") },
                     )
-                    FilterChip(
+                    KcbFilterChip(
                         selected = weeksMask == WeekMask.fromRange(1, weekCount),
                         onClick = { weeksMask = WeekMask.fromRange(1, weekCount) },
                         label = { Text("全选") },
                     )
-                    FilterChip(
+                    KcbFilterChip(
                         selected = weeksMask == WeekMask.fromRange(1, weekCount) { it % 2 == 1 },
                         onClick = { weeksMask = WeekMask.fromRange(1, weekCount) { it % 2 == 1 } },
                         label = { Text("单周") },
                     )
-                    FilterChip(
+                    KcbFilterChip(
                         selected = weeksMask == WeekMask.fromRange(1, weekCount) { it % 2 == 0 },
                         onClick = { weeksMask = WeekMask.fromRange(1, weekCount) { it % 2 == 0 } },
                         label = { Text("双周") },
                     )
-                    FilterChip(
+                    KcbFilterChip(
                         selected = weeksMask == 0L,
                         onClick = { weeksMask = 0L },
                         label = { Text("清空") },

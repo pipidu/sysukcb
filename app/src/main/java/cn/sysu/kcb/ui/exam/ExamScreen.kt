@@ -22,11 +22,11 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import cn.sysu.kcb.ui.theme.KcbFilterChip
 import cn.sysu.kcb.ui.theme.KcbTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -138,14 +138,14 @@ fun ExamScreen(viewModel: AppViewModel) {
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    FilterChip(
+                    KcbFilterChip(
                         selected = selectedWeekId == "all",
                         onClick = { selectedWeekId = "all" },
                         label = { Text("全部") },
                     )
                     examWeeks.forEach { week ->
                         val count = exams.count { it.examWeekId == week.examWeekId }
-                        FilterChip(
+                        KcbFilterChip(
                             selected = selectedWeekId == week.examWeekId,
                             onClick = { selectedWeekId = week.examWeekId },
                             label = { Text("${shortWeekName(week.examWeekName)}${if (count > 0) " $count" else ""}") },
