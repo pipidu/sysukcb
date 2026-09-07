@@ -271,20 +271,6 @@ private fun FriendTimetablePane(pack: SharePack, settings: UserSettings) {
     val themeColor = settings.themeColor
     val semesterOptions = remember(pack) { packSemesterOptions(pack) }
     var semester by rememberSaveable(pack.exportedAt) { mutableStateOf(pickPackSemester(pack, semesterOptions)) }
-    var semesterMenu by remember { mutableStateOf(false) }
-    var selectedWeek by rememberSaveable(semester, pack.exportedAt) { mutableIntStateOf(0) }
-    var userPickedWeek by rememberSaveable(semester, pack.exportedAt) { mutableStateOf(false) }
-    var termOverview by rememberSaveable(semester, pack.exportedAt) { mutableStateOf(false) }
-    var weekPicker by remember { mutableStateOf(false) }
-    var viewingCourses by remember { mutableStateOf<List<CourseEntity>?>(null) }
-    var viewingNote by remember { mutableStateOf<StickyNoteEntity?>(null) }
-
-    LaunchedEffect(semesterOptions) {
-        if (semesterOptions.isNotEmpty() && semester !in semesterOptions) {
-            semester = pickPackSemester(pack, semesterOptions)
-        }
-    }
-
     val courses = pack.courses.filter { it.acadYearSemester == semester }
     val weeks = pack.weeks.filter { it.acadYearSemester == semester }
     val periods = pack.periods.filter { it.acadYearSemester == semester }
@@ -296,11 +282,24 @@ private fun FriendTimetablePane(pack: SharePack, settings: UserSettings) {
         weeks = weeks,
         semesterStartMillis = semesterEntity?.startMillis ?: 0L,
     )
+    val resolvedWeek = academicWeek ?: weeks.firstOrNull { it.weekly > 0 }?.weekly ?: 1
 
-    LaunchedEffect(semester, weeks, semesterEntity?.startMillis, userPickedWeek) {
-        if (!userPickedWeek) {
-            selectedWeek = academicWeek ?: weeks.firstOrNull { it.weekly > 0 }?.weekly ?: 1
+    var selectedWeek by rememberSaveable(semester, pack.exportedAt) { mutableIntStateOf(resolvedWeek) }
+    var userPickedWeek by rememberSaveable(semester, pack.exportedAt) { mutableStateOf(false) }
+    var termOverview by rememberSaveable(semester, pack.exportedAt) { mutableStateOf(false) }
+    var semesterMenu by remember { mutableStateOf(false) }
+    var weekPicker by remember { mutableStateOf(false) }
+    var viewingCourses by remember { mutableStateOf<List<CourseEntity>?>(null) }
+    var viewingNote by remember { mutableStateOf<StickyNoteEntity?>(null) }
+
+    LaunchedEffect(semesterOptions) {
+        if (semesterOptions.isNotEmpty() && semester !in semesterOptions) {
+            semester = pickPackSemester(pack, semesterOptions)
         }
+    }
+
+    LaunchedEffect(semester, academicWeek, resolvedWeek, userPickedWeek) {
+        if (!userPickedWeek) selectedWeek = academicWeek ?: resolvedWeek
     }
 
     val pageCount = maxWeek.coerceAtLeast(1)
@@ -309,10 +308,13 @@ private fun FriendTimetablePane(pack: SharePack, settings: UserSettings) {
         pageCount = { pageCount },
     )
     var syncingPager by remember { mutableStateOf(false) }
+    var pagerSynced by remember(semester, pack.exportedAt) { mutableStateOf(false) }
     LaunchedEffect(selectedWeek, pageCount) {
+        if (selectedWeek <= 0) return@LaunchedEffect
         val target = (selectedWeek - 1).coerceIn(0, pageCount - 1)
         if (pagerState.currentPage == target) {
             syncingPager = false
+            pagerSynced = true
             return@LaunchedEffect
         }
         syncingPager = true
@@ -320,13 +322,14 @@ private fun FriendTimetablePane(pack: SharePack, settings: UserSettings) {
             if (userPickedWeek) pagerState.animateScrollToPage(target) else pagerState.scrollToPage(target)
         } finally {
             syncingPager = false
+            pagerSynced = true
         }
     }
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }
             .distinctUntilChanged()
             .collectLatest { page ->
-                if (syncingPager || selectedWeek <= 0) return@collectLatest
+                if (!pagerSynced || syncingPager || selectedWeek <= 0) return@collectLatest
                 val week = page + 1
                 if (week != selectedWeek) {
                     userPickedWeek = true

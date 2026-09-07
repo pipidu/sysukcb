@@ -192,10 +192,13 @@ fun TimetableScreen(
         pageCount = { pageCount },
     )
     var syncingPager by remember { mutableStateOf(false) }
+    var pagerSynced by remember(semester) { mutableStateOf(false) }
     LaunchedEffect(selectedWeek, pageCount) {
+        if (selectedWeek <= 0) return@LaunchedEffect
         val target = (selectedWeek - 1).coerceIn(0, pageCount - 1)
         if (pagerState.currentPage == target) {
             syncingPager = false
+            pagerSynced = true
             return@LaunchedEffect
         }
         syncingPager = true
@@ -203,13 +206,14 @@ fun TimetableScreen(
             if (userPickedWeek) pagerState.animateScrollToPage(target) else pagerState.scrollToPage(target)
         } finally {
             syncingPager = false
+            pagerSynced = true
         }
     }
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }
             .distinctUntilChanged()
             .collect { page ->
-                if (syncingPager || selectedWeek <= 0) return@collect
+                if (!pagerSynced || syncingPager || selectedWeek <= 0) return@collect
                 val week = page + 1
                 if (week != selectedWeek) {
                     userPickedWeek = true
@@ -739,9 +743,9 @@ internal fun resolveWeekStart(
             .toLocalDate()
         return mondayOf(start).plusWeeks((selectedWeek - 1).coerceAtLeast(0).toLong())
     }
-    val todayMonday = mondayOf(LocalDate.now())
-    val currentNo = ClassAlarmScheduler.resolveWeek(LocalDate.now(), weeks, semesterStartMillis) ?: 1
-    return todayMonday.plusWeeks((selectedWeek - currentNo).toLong())
+    val currentNo = ClassAlarmScheduler.resolveWeek(LocalDate.now(), weeks, semesterStartMillis)
+        ?: return null
+    return mondayOf(LocalDate.now()).plusWeeks((selectedWeek - currentNo).toLong())
 }
 
 private fun mondayOf(date: LocalDate): LocalDate = date.minusDays((date.dayOfWeek.value - 1).toLong())
