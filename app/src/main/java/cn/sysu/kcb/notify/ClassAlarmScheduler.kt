@@ -22,6 +22,7 @@ import cn.sysu.kcb.data.local.PeriodEntity
 import cn.sysu.kcb.data.local.WeekEntity
 import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.prefs.UserSettings
+import cn.sysu.kcb.domain.TeachingWeek
 import cn.sysu.kcb.domain.WeekMask
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +32,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
-import java.time.temporal.ChronoUnit
 
 class ClassAlarmScheduler(private val context: Context) {
     private val alarmManager = context.getSystemService(AlarmManager::class.java)
@@ -290,35 +290,8 @@ class ClassAlarmScheduler(private val context: Context) {
         private const val KEY_CODES = "codes"
         private const val TEST_REQUEST_CODE = 0x6B636254
 
-        fun resolveWeek(date: LocalDate, weeks: List<WeekEntity>, semesterStartMillis: Long = 0): Int? {
-            for (week in weeks) {
-                val start = week.startDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: continue
-                val end = week.endDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: continue
-                if (!date.isBefore(start) && !date.isAfter(end)) return week.weekly
-            }
-            val max = weeks.maxOfOrNull { it.weekly } ?: WeekMask.MAX_WEEK
-            val dated = weeks.filter { !it.startDate.isNullOrBlank() }
-            val known = dated.minByOrNull { it.weekly }
-            if (known != null) {
-                val start = runCatching { LocalDate.parse(known.startDate) }.getOrNull()
-                if (start != null) {
-                    val origin = mondayOf(start)
-                    if (date.isBefore(origin)) return null
-                    val week = known.weekly + (ChronoUnit.DAYS.between(origin, date) / 7).toInt()
-                    if (week in 1..max) return week
-                    return null
-                }
-            }
-            if (semesterStartMillis > 0) {
-                val start = java.time.Instant.ofEpochMilli(semesterStartMillis)
-                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-                val origin = mondayOf(start)
-                if (date.isBefore(origin)) return null
-                val week = (ChronoUnit.DAYS.between(origin, date) / 7).toInt() + 1
-                if (week in 1..max) return week
-            }
-            return null
-        }
+        fun resolveWeek(date: LocalDate, weeks: List<WeekEntity>, semesterStartMillis: Long = 0): Int? =
+            TeachingWeek.resolveWeek(date, weeks, semesterStartMillis)
 
         fun parseTime(raw: String): LocalTime? {
             val text = raw.trim().replace("：", ":")
@@ -330,13 +303,7 @@ class ClassAlarmScheduler(private val context: Context) {
             return runCatching { LocalTime.of(hour, minute, second) }.getOrNull()
         }
 
-        fun parseDate(raw: String): LocalDate? {
-            val text = raw.trim().take(10)
-            return runCatching { LocalDate.parse(text) }.getOrNull()
-        }
-
-        private fun mondayOf(date: LocalDate): LocalDate =
-            date.minusDays((date.dayOfWeek.value - 1).toLong())
+        fun parseDate(raw: String): LocalDate? = TeachingWeek.parseLocalDate(raw)
     }
 }
 

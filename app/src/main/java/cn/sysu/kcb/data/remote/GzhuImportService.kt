@@ -12,6 +12,7 @@ import cn.sysu.kcb.data.repo.TimetableRepository
 import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.domain.CourseColors
 import cn.sysu.kcb.domain.SemesterRange
+import cn.sysu.kcb.domain.TeachingWeek
 import cn.sysu.kcb.domain.WeekMask
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,6 +22,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import java.time.LocalDate
 
 class GzhuImportService(
     private val client: GzhuClient,
@@ -101,7 +103,7 @@ class GzhuImportService(
         for ((index, sem) in targets.withIndex()) {
             onProgress("正在导入 $sem（${index + 1}/${targets.size}）")
             val ok = runCatching {
-                importSemester(sem, csrf, isCurrent = sem == jwxtCurrent)
+                importSemester(sem, csrf, isCurrent = sem == jwxtCurrent, indexHtml = indexHtml)
             }.isSuccess
             if (ok) importedCount++
         }
@@ -112,7 +114,7 @@ class GzhuImportService(
         jwxtCurrent
     }
 
-    private suspend fun importSemester(semester: String, csrf: String, isCurrent: Boolean) {
+    private suspend fun importSemester(semester: String, csrf: String, isCurrent: Boolean, indexHtml: String) {
         val (xnm, xqm) = toXnmXqm(semester)
         repo.upsertSemester(
             SemesterEntity(
@@ -149,7 +151,23 @@ class GzhuImportService(
         if (periods.isNotEmpty()) repo.replacePeriods(semester, periods)
         else repo.replacePeriods(semester, GzhuDefaultPeriods.of(semester))
 
-        repo.replaceWeeks(semester, weeksFromCourses(semester, courses))
+        val origin = originOf(semester, data, indexHtml.takeIf { isCurrent })
+        val weeks = weeksFromCourses(semester, courses, origin)
+        repo.replaceWeeks(semester, weeks)
+        val startMillis = origin?.let { TeachingWeek.toEpochMillis(TeachingWeek.mondayOf(it)) } ?: 0L
+        val endMillis = TeachingWeek.weekStartOf(weeks.maxByOrNull { it.weekly })
+            ?.plusDays(6)
+            ?.let { TeachingWeek.toEpochMillis(it) } ?: 0L
+        repo.upsertSemester(
+            SemesterEntity(
+                acadYearSemester = semester,
+                acadYear = "$xnm-${xnm.toIntOrNull()?.plus(1) ?: xnm}",
+                acadSemester = if (xqm == "12") 2 else 1,
+                startMillis = startMillis,
+                endMillis = endMillis,
+                isCurrent = isCurrent,
+            ),
+        )
         runCatching { importExams(semester, xnm, xqm, csrf) }
         if (isCurrent) {
             previousSemester(semester)?.let { prev ->
@@ -362,7 +380,7 @@ class GzhuImportService(
         return result.distinctBy { listOf(it.classesId, it.dayOfWeek, it.startPeriod, it.endPeriod, it.weeksMask) }
     }
 
-    private fun weeksFromCourses(semester: String, courses: List<CourseEntity>): List<WeekEntity> {
+    private fun weeksFromCourses(semester: String, courses: List<CourseEntity>, origin: LocalDate?): List<WeekEntity> {
         var maxWeek = 18
         for (course in courses) {
             for (week in 30 downTo 1) {
@@ -372,15 +390,30 @@ class GzhuImportService(
                 }
             }
         }
-        return (1..maxWeek).map { week ->
-            WeekEntity(
-                acadYearSemester = semester,
-                weekly = week,
-                weeklyName = "第${week}周",
-                startDate = null,
-                endDate = null,
-            )
+        return TeachingWeek.buildWeeks(semester, maxWeek, origin)
+    }
+
+    private fun originOf(semester: String, data: JsonObject, indexHtml: String?): LocalDate? {
+        originFromJson(data)?.let { return it }
+        indexHtml?.let { html ->
+            TeachingWeek.originFromCurrentWeek(TeachingWeek.parseCurrentWeekLabel(html))?.let { return it }
         }
+        return TeachingWeek.guessTermStart(semester)
+    }
+
+    private fun originFromJson(data: JsonObject): LocalDate? {
+        val xs = data["xsxx"] as? JsonObject ?: return null
+        val keys = listOf("XQKSRQ", "KXKSRQ", "KSRQ", "QSRQ", "XXQSRQ", "jxkssj", "xqqsrq", "ksrq")
+        for (key in keys) {
+            TeachingWeek.parseLocalDate(xs.str(key))?.let { return TeachingWeek.mondayOf(it) }
+        }
+        for ((key, value) in xs) {
+            if (value !is JsonPrimitive) continue
+            val lower = key.lowercase()
+            if ("rq" !in lower && "date" !in lower) continue
+            TeachingWeek.parseLocalDate(value.contentOrNull)?.let { return TeachingWeek.mondayOf(it) }
+        }
+        return null
     }
 
     private fun campusIdOf(data: JsonObject): String {

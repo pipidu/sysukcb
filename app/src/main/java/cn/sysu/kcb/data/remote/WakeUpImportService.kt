@@ -7,6 +7,7 @@ import cn.sysu.kcb.data.local.WeekEntity
 import cn.sysu.kcb.data.repo.TimetableRepository
 import cn.sysu.kcb.domain.CourseColors
 import cn.sysu.kcb.domain.SemesterRange
+import cn.sysu.kcb.domain.TeachingWeek
 import cn.sysu.kcb.domain.WeekMask
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -261,28 +262,10 @@ class WakeUpImportService(
         )
     }
 
-    private fun buildWeeks(semester: String, start: LocalDate?, maxWeek: Int): List<WeekEntity> {
-        val count = maxWeek.coerceIn(1, WeekMask.MAX_WEEK)
-        val origin = start?.let { mondayOf(it) }
-        return (1..count).map { week ->
-            val from = origin?.plusWeeks((week - 1).toLong())
-            WeekEntity(
-                acadYearSemester = semester,
-                weekly = week,
-                weeklyName = "第${week}周",
-                startDate = from?.toString(),
-                endDate = from?.plusDays(6)?.toString(),
-            )
-        }
-    }
+    private fun buildWeeks(semester: String, start: LocalDate?, maxWeek: Int): List<WeekEntity> =
+        TeachingWeek.buildWeeks(semester, maxWeek, start)
 
-    private fun mondayOf(date: LocalDate): LocalDate = date.minusDays((date.dayOfWeek.value - 1).toLong())
-
-    private fun parseDate(raw: String): LocalDate? {
-        val value = raw.trim().take(10)
-        if (value.isBlank()) return null
-        return runCatching { LocalDate.parse(value) }.getOrNull()
-    }
+    private fun parseDate(raw: String): LocalDate? = TeachingWeek.parseLocalDate(raw)
 
     private fun highestWeek(mask: Long): Int {
         var max = 0

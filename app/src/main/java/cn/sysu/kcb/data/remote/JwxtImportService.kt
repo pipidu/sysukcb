@@ -13,6 +13,7 @@ import cn.sysu.kcb.data.repo.TimetableRepository
 import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.domain.CourseColors
 import cn.sysu.kcb.domain.SemesterRange
+import cn.sysu.kcb.domain.TeachingWeek
 import cn.sysu.kcb.domain.WeekMask
 import cn.sysu.kcb.domain.cleanJwxt
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +32,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import java.time.LocalDate
 
 class JwxtImportService(
     private val api: JwxtApi,
@@ -130,14 +132,16 @@ class JwxtImportService(
         currentMeta: JsonObject?,
         isCurrent: Boolean,
     ) {
+        val metaStart = currentMeta.epochMillis("acadStartdate", "acadStartDate", "startTime")
+        val metaEnd = currentMeta.epochMillis("acadEnddate", "acadEndDate", "endTime")
         repo.upsertSemester(
             SemesterEntity(
                 acadYearSemester = semester,
                 acadYear = currentMeta?.str("acadYear").orEmpty().ifBlank { semester },
                 acadSemester = currentMeta?.int("acadSemester")
                     ?: semester.substringAfter("-").toIntOrNull() ?: 0,
-                startMillis = currentMeta?.long("acadStartdate") ?: 0L,
-                endMillis = currentMeta?.long("acadEnddate") ?: 0L,
+                startMillis = metaStart,
+                endMillis = metaEnd,
                 isCurrent = isCurrent,
             ),
         )
@@ -165,30 +169,29 @@ class JwxtImportService(
         val weeklyResp = api.weeklyList(semester)
         saveRaw("school-calender/weekly", semester, weeklyResp)
         if (runCatching { requireOk(weeklyResp); true }.getOrDefault(false)) {
-            val weeklyData = dataObject(weeklyResp)
-            val weeklyList = weeklyData["weeklyList"]?.jsonArray.orEmpty()
-            val nowWeekly = weeklyData.str("nowWeekly").toIntOrNull()
-                ?: weeklyData.int("nowTimeWeekly").takeIf { it > 0 }
-                ?: 1
-            val anchor = runCatching { api.schoolCalender(semester, nowWeekly) }.getOrNull()
-            if (anchor != null) saveRaw("school-calender/$nowWeekly", semester, anchor)
-            val range = anchor?.let { runCatching { dataObject(it) }.getOrNull() }
-            val anchorStart = range?.str("startTime")?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
-            val anchorEnd = range?.str("endTime")?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
-            val weeks = weeklyList.map { item ->
-                val o = item.jsonObject
-                val weekly = o.int("weekly")
-                val offset = (weekly - nowWeekly).toLong()
-                WeekEntity(
-                    acadYearSemester = semester,
-                    weekly = weekly,
-                    weeklyName = o.str("weeklyName").ifBlank { "第${weekly}周" },
-                    startDate = anchorStart?.plusWeeks(offset)?.toString(),
-                    endDate = anchorEnd?.plusWeeks(offset)?.toString(),
-                )
+            val weeks = parseWeeks(semester, weeklyResp, metaStart)
+            if (weeks.isNotEmpty()) {
+                repo.replaceWeeks(semester, weeks)
+                val origin = TeachingWeek.originMonday(weeks, metaStart)?.second
+                if (origin != null && metaStart <= 0L) {
+                    val last = weeks.maxByOrNull { it.weekly }
+                    val end = TeachingWeek.weekStartOf(last)?.plusDays(6)
+                    repo.upsertSemester(
+                        SemesterEntity(
+                            acadYearSemester = semester,
+                            acadYear = currentMeta?.str("acadYear").orEmpty().ifBlank { semester },
+                            acadSemester = currentMeta?.int("acadSemester")
+                                ?: semester.substringAfter("-").toIntOrNull() ?: 0,
+                            startMillis = TeachingWeek.toEpochMillis(origin),
+                            endMillis = end?.let { TeachingWeek.toEpochMillis(it) } ?: metaEnd,
+                            isCurrent = isCurrent,
+                        ),
+                    )
+                }
             }
-            repo.replaceWeeks(semester, weeks)
-
+            val nowWeekly = currentWeekOf(dataObject(weeklyResp)).takeIf { it > 0 }
+                ?: TeachingWeek.resolveWeek(LocalDate.now(), weeks, metaStart)
+                ?: 1
             if (isCurrent) {
                 runCatching {
                     val weeklyTable = api.selectStudentClassTable(semester, nowWeekly)
@@ -363,6 +366,143 @@ class JwxtImportService(
         val data = body["data"]
         return data as? JsonArray ?: JsonArray(emptyList())
     }
+
+    private suspend fun parseWeeks(
+        semester: String,
+        weeklyResp: JsonObject,
+        fallbackMillis: Long,
+    ): List<WeekEntity> {
+        val weeklyData = weeklyResp["data"] as? JsonObject ?: JsonObject(emptyMap())
+        val items = weeklyItems(weeklyResp)
+        val parsed = items.mapIndexed { index, obj ->
+            val weekly = weekIndex(obj).takeIf { it > 0 } ?: (index + 1)
+            WeekDraft(
+                weekly = weekly,
+                name = obj.str("weeklyName").ifBlank { obj.str("name") }.ifBlank { "第${weekly}周" },
+                start = obj.flexibleDate(
+                    "startDate", "startTime", "beginDate", "beginTime", "kssj", "qsrq", "xlkssj",
+                ),
+            )
+        }.filter { it.weekly > 0 }
+        val dated = parsed.mapNotNull { item ->
+            val start = item.start ?: return@mapNotNull null
+            item.weekly to TeachingWeek.mondayOf(start)
+        }
+        var originWeekly = 1
+        var originMonday: LocalDate? = null
+        dated.minByOrNull { it.first }?.let {
+            originWeekly = it.first
+            originMonday = it.second
+        }
+        if (originMonday == null) {
+            val tryWeeks = listOfNotNull(
+                parsed.minOfOrNull { it.weekly },
+                1,
+                currentWeekOf(weeklyData).takeIf { it > 0 },
+            ).distinct()
+            for (week in tryWeeks) {
+                val anchor = runCatching { api.schoolCalender(semester, week) }.getOrNull() ?: continue
+                saveRaw("school-calender/$week", semester, anchor)
+                val start = calendarStart(anchor) ?: continue
+                originMonday = TeachingWeek.mondayOf(start)
+                originWeekly = week
+                break
+            }
+        }
+        if (originMonday == null) {
+            TeachingWeek.parseMillis(fallbackMillis)?.let {
+                originMonday = TeachingWeek.mondayOf(it)
+                originWeekly = 1
+            }
+        }
+        if (parsed.isEmpty() && originMonday == null) return emptyList()
+        if (originMonday == null) originMonday = TeachingWeek.guessTermStart(semester)
+        val numbers = parsed.map { it.weekly }.distinct().sorted().ifEmpty { (1..18).toList() }
+        val names = parsed.associate { it.weekly to it.name }
+        return numbers.map { weekly ->
+            val start = parsed.firstOrNull { it.weekly == weekly }?.start?.let { TeachingWeek.mondayOf(it) }
+                ?: originMonday?.plusWeeks((weekly - originWeekly).toLong())
+            WeekEntity(
+                acadYearSemester = semester,
+                weekly = weekly,
+                weeklyName = names[weekly].orEmpty().ifBlank { "第${weekly}周" },
+                startDate = start?.toString(),
+                endDate = start?.plusDays(6)?.toString(),
+            )
+        }
+    }
+
+    private fun weeklyItems(body: JsonObject): List<JsonObject> {
+        val data = body["data"]
+        when (data) {
+            is JsonArray -> return data.mapNotNull { it as? JsonObject }
+            is JsonObject -> {
+                val arr = data["weeklyList"] ?: data["list"] ?: data["records"]
+                    ?: data["rows"] ?: data["weekList"]
+                if (arr is JsonArray) return arr.mapNotNull { it as? JsonObject }
+            }
+            else -> Unit
+        }
+        val top = body["weeklyList"]
+        return if (top is JsonArray) top.mapNotNull { it as? JsonObject } else emptyList()
+    }
+
+    private fun currentWeekOf(data: JsonObject): Int {
+        listOf("nowWeekly", "nowTimeWeekly", "currentWeekly", "weekly", "nowWeek", "zc").forEach { key ->
+            val n = data.int(key)
+            if (n > 0) return n
+            data.str(key).toIntOrNull()?.let { if (it > 0) return it }
+        }
+        return 0
+    }
+
+    private fun weekIndex(obj: JsonObject): Int {
+        listOf("weekly", "week", "weekNum", "zc", "nowWeekly").forEach { key ->
+            val n = obj.int(key)
+            if (n > 0) return n
+        }
+        val name = obj.str("weeklyName").ifBlank { obj.str("name") }
+        return Regex("""第?\s*(\d+)\s*周""").find(name)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+    }
+
+    private fun calendarStart(body: JsonObject): LocalDate? {
+        val data = body["data"]
+        when (data) {
+            is JsonObject -> data.flexibleDate("startTime", "startDate", "beginTime", "kssj", "qsrq")
+                ?.let { return it }
+            is JsonArray -> data.mapNotNull { it as? JsonObject }
+                .firstNotNullOfOrNull { it.flexibleDate("startTime", "startDate", "date", "kssj") }
+                ?.let { return it }
+            else -> Unit
+        }
+        return body.flexibleDate("startTime", "startDate")
+    }
+
+    private fun JsonObject?.epochMillis(vararg keys: String): Long {
+        val obj = this ?: return 0L
+        for (key in keys) {
+            val el = obj[key] ?: continue
+            if (el !is JsonPrimitive) continue
+            val n = el.longOrNull ?: el.contentOrNull?.toLongOrNull()
+            if (n != null && n != 0L) {
+                TeachingWeek.parseMillis(n)?.let { return TeachingWeek.toEpochMillis(it) }
+            }
+            TeachingWeek.parseLocalDate(el.contentOrNull)?.let { return TeachingWeek.toEpochMillis(it) }
+        }
+        return 0L
+    }
+
+    private fun JsonObject.flexibleDate(vararg keys: String): LocalDate? {
+        for (key in keys) {
+            val el = this[key] ?: continue
+            if (el !is JsonPrimitive) continue
+            el.longOrNull?.let { TeachingWeek.parseMillis(it) }?.let { return it }
+            TeachingWeek.parseLocalDate(el.contentOrNull)?.let { return it }
+        }
+        return null
+    }
+
+    private data class WeekDraft(val weekly: Int, val name: String, val start: LocalDate?)
 
     private fun previousSemester(sem: String): String? {
         val parts = sem.split("-")

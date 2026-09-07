@@ -13,6 +13,7 @@ import cn.sysu.kcb.data.repo.TimetableRepository
 import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.domain.CourseColors
 import cn.sysu.kcb.domain.SemesterRange
+import cn.sysu.kcb.domain.TeachingWeek
 import cn.sysu.kcb.domain.WeekMask
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,6 +25,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlin.math.max
 import kotlin.math.min
+import java.time.LocalDate
 
 class BnuzhImportService(
     private val client: BnuzhClient,
@@ -90,7 +92,7 @@ class BnuzhImportService(
         for ((index, sem) in targets.withIndex()) {
             onProgress("正在导入 $sem（${index + 1}/${targets.size}）")
             val ok = runCatching {
-                importSemester(sem, token, isCurrent = sem == jwxtCurrent)
+                importSemester(sem, token, isCurrent = sem == jwxtCurrent, currentObj = currentObj)
             }.isSuccess
             if (ok) importedCount++
         }
@@ -143,7 +145,12 @@ class BnuzhImportService(
         }
     }
 
-    private suspend fun importSemester(semester: String, token: String, isCurrent: Boolean) {
+    private suspend fun importSemester(
+        semester: String,
+        token: String,
+        isCurrent: Boolean,
+        currentObj: JsonObject,
+    ) {
         val (xn, xq) = toXnXq(semester)
         repo.upsertSemester(
             SemesterEntity(
@@ -159,7 +166,23 @@ class BnuzhImportService(
         val courses = BnuzhParse.courses(semester, html, settings.snapshot().themeColor)
         repo.replaceImportedCourses(semester, courses)
         repo.replacePeriods(semester, BnuzhDefaultPeriods.of(semester))
-        repo.replaceWeeks(semester, weeksFromCourses(semester, courses))
+        val origin = originOf(semester, html.takeIf { isCurrent }, currentObj.takeIf { isCurrent })
+        val weeks = weeksFromCourses(semester, courses, origin)
+        repo.replaceWeeks(semester, weeks)
+        val startMillis = origin?.let { TeachingWeek.toEpochMillis(TeachingWeek.mondayOf(it)) } ?: 0L
+        val endMillis = TeachingWeek.weekStartOf(weeks.maxByOrNull { it.weekly })
+            ?.plusDays(6)
+            ?.let { TeachingWeek.toEpochMillis(it) } ?: 0L
+        repo.upsertSemester(
+            SemesterEntity(
+                acadYearSemester = semester,
+                acadYear = "$xn-${xn.toIntOrNull()?.plus(1) ?: xn}",
+                acadSemester = if (xq == "1") 2 else 1,
+                startMillis = startMillis,
+                endMillis = endMillis,
+                isCurrent = isCurrent,
+            ),
+        )
         runCatching { importExams(semester, xn, xq) }
         if (isCurrent) {
             previousSemester(semester)?.let { prev ->
@@ -281,7 +304,7 @@ class BnuzhImportService(
         }
     }
 
-    private fun weeksFromCourses(semester: String, courses: List<CourseEntity>): List<WeekEntity> {
+    private fun weeksFromCourses(semester: String, courses: List<CourseEntity>, origin: LocalDate?): List<WeekEntity> {
         var maxWeek = 18
         for (course in courses) {
             for (week in 30 downTo 1) {
@@ -291,15 +314,21 @@ class BnuzhImportService(
                 }
             }
         }
-        return (1..maxWeek).map { week ->
-            WeekEntity(
-                acadYearSemester = semester,
-                weekly = week,
-                weeklyName = "第${week}周",
-                startDate = null,
-                endDate = null,
-            )
+        return TeachingWeek.buildWeeks(semester, maxWeek, origin)
+    }
+
+    private fun originOf(semester: String, html: String?, currentObj: JsonObject?): LocalDate? {
+        currentObj?.let { obj ->
+            listOf("ksrq", "qsrq", "xqksrq", "kkksrq", "startTime", "startDate").forEach { key ->
+                TeachingWeek.parseLocalDate(obj.str(key))?.let { return TeachingWeek.mondayOf(it) }
+            }
         }
+        html?.let {
+            TeachingWeek.originFromCurrentWeek(TeachingWeek.parseCurrentWeekLabel(it))?.let { origin ->
+                return origin
+            }
+        }
+        return TeachingWeek.guessTermStart(semester)
     }
 
     private fun previousSemester(sem: String): String? {

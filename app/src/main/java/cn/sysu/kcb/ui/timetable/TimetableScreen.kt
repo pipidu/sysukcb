@@ -100,6 +100,7 @@ import cn.sysu.kcb.data.prefs.UserSettings
 import cn.sysu.kcb.data.repo.TimetableSnapshot
 import cn.sysu.kcb.domain.CourseColors
 import cn.sysu.kcb.domain.SemesterRange
+import cn.sysu.kcb.domain.TeachingWeek
 import cn.sysu.kcb.domain.WeekMask
 import cn.sysu.kcb.notify.ClassAlarmScheduler
 import cn.sysu.kcb.ui.AppViewModel
@@ -728,27 +729,7 @@ internal fun resolveWeekStart(
     week: WeekEntity?,
     weeks: List<WeekEntity>,
     semesterStartMillis: Long,
-): LocalDate? {
-    week?.startDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { return mondayOf(it) }
-    val dated = weeks.mapNotNull { item ->
-        val start = item.startDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@mapNotNull null
-        item.weekly to mondayOf(start)
-    }
-    dated.minByOrNull { it.first }?.let { (weekly, start) ->
-        return start.plusWeeks((selectedWeek - weekly).toLong())
-    }
-    if (semesterStartMillis > 0) {
-        val start = java.time.Instant.ofEpochMilli(semesterStartMillis)
-            .atZone(java.time.ZoneId.systemDefault())
-            .toLocalDate()
-        return mondayOf(start).plusWeeks((selectedWeek - 1).coerceAtLeast(0).toLong())
-    }
-    val currentNo = ClassAlarmScheduler.resolveWeek(LocalDate.now(), weeks, semesterStartMillis)
-        ?: return null
-    return mondayOf(LocalDate.now()).plusWeeks((selectedWeek - currentNo).toLong())
-}
-
-private fun mondayOf(date: LocalDate): LocalDate = date.minusDays((date.dayOfWeek.value - 1).toLong())
+): LocalDate? = TeachingWeek.resolveWeekStart(selectedWeek, week, weeks, semesterStartMillis)
 
 private val compactName = TextStyle(
     fontSize = 10.sp,
