@@ -59,20 +59,7 @@ gradlew.bat :app:assembleRelease
 
 签名密钥只放在本机：根目录 `keystore.properties` + `keystore/kcb-release.jks`（均已 gitignore）。没有这两份文件时，release 产物会是未签名包。
 
-推送到 `master` 且 `versionName` 还没有对应 tag 时，GitHub Actions 会签名并发布 Release。仓库 Secrets（不要写进 git）：
-
-- `RELEASE_KEYSTORE_BASE64`：本机 `keystore/kcb-release.jks` 的 base64
-- `RELEASE_STORE_PASSWORD` / `RELEASE_KEY_PASSWORD`
-- `RELEASE_KEY_ALIAS`（当前为 `kcb`）
-- 多吉云（可选，发版后同步安装包）：`DOGECLOUD_ACCESS_KEY`、`DOGECLOUD_SECRET_KEY`、`DOGECLOUD_AUTH_KEY`（CDN 鉴权密钥）
-
-仓库 Variables（对象存储位置，可改）：
-
-- `DOGECLOUD_BUCKET`：存储空间名
-- `DOGECLOUD_DIRECTORY`：目录，默认 `sysukcb`；填 `.` 表示空间根目录
-- `DOGECLOUD_DOMAIN`：绑定的 CDN 域名（不要带 `https://`），用来写入 Release 的 `cosUrl=`
-
-应用内「关于 → 检查更新」读取最新 Release 的 `versionCode`，默认经多吉云下载 APK（`cosUrl=`，带鉴权），也可改回 GitHub；下载支持后台进行。
+发版在本机完成：`scripts/release.ps1` 编译签名包、创建 GitHub Release，并把 APK 传到多吉云。对象存储密钥在本机 `dogecloud.properties`（已 gitignore），不要写进仓库。应用内「关于 → 检查更新」读取最新 Release 的 `versionCode`，默认经多吉云下载 APK（`cosUrl=`），也可改回 GitHub；下载支持后台进行。
 
 ## 使用
 

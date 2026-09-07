@@ -10,6 +10,9 @@ captures/
 .cxx/
 *.apk
 *.ap_
+dogecloud.properties
+release-notes.txt
+.cos_url
 *.aab
 *.dex
 *.class
