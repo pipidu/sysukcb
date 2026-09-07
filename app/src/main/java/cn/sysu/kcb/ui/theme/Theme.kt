@@ -28,6 +28,7 @@ val NamedStickyNoteColors = listOf(
 val PresetThemeColors = listOf(
     0xFF8C1A1AL to "中大红",
     0xFF1B7A4EL to "广大绿",
+    0xFFA51C30L to "北师红",
     0xFFC62828L to "朱红",
     0xFF1A237EL to "靛蓝",
     0xFF00695CL to "青绿",

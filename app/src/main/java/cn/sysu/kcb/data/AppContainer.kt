@@ -5,6 +5,8 @@ import cn.sysu.kcb.data.local.AppDatabase
 import cn.sysu.kcb.data.prefs.CookieStore
 import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.prefs.WebDavSecrets
+import cn.sysu.kcb.data.remote.BnuzhClient
+import cn.sysu.kcb.data.remote.BnuzhImportService
 import cn.sysu.kcb.data.remote.GithubUpdateService
 import cn.sysu.kcb.data.remote.GzhuClient
 import cn.sysu.kcb.data.remote.GzhuImportService
@@ -29,7 +31,8 @@ class AppContainer(context: Context) {
     val api = createJwxtApi(cookies, json)
     private val sysuImporter = JwxtImportService(api, json, cookies, timetable, settings)
     private val gzhuImporter = GzhuImportService(GzhuClient(cookies), json, cookies, timetable, settings)
-    val importer = ImportRouter(settings, sysuImporter, gzhuImporter)
+    private val bnuzhImporter = BnuzhImportService(BnuzhClient(cookies), json, cookies, timetable, settings)
+    val importer = ImportRouter(settings, sysuImporter, gzhuImporter, bnuzhImporter)
     val updates = GithubUpdateService(json)
     val share = ShareService(context, timetable, json)
     val webdavSecrets = WebDavSecrets(context)

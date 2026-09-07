@@ -9,5 +9,6 @@
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">sysu.edu.cn</domain>
         <domain includeSubdomains="true">gzhu.edu.cn</domain>
+        <domain includeSubdomains="true">bnuzh.edu.cn</domain>
     </domain-config>
 </network-security-config>

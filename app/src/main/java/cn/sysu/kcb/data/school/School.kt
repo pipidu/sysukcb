@@ -9,11 +9,14 @@ data class School(
     val cookieOrigins: List<String>,
     val sessionTokens: List<String>,
 ) {
+    val usesDesktopUa: Boolean get() = id == ID_GZHU || id == ID_BNUZH
+
     fun isLanding(url: String): Boolean {
         val path = url.substringBefore('#').substringBefore('?').trimEnd('/').lowercase()
         return when (id) {
             ID_SYSU -> isSysuLanding(path)
             ID_GZHU -> isGzhuLanding(path)
+            ID_BNUZH -> isBnuzhLanding(path)
             else -> false
         }
     }
@@ -41,9 +44,19 @@ data class School(
             path.endsWith("/jwglxt")
     }
 
+    private fun isBnuzhLanding(path: String): Boolean {
+        if (path.contains("cas.bnuzh.edu.cn") || path.contains("/cas/login")) return false
+        if (path.contains("caslogin") || path.contains("ticket=")) return false
+        if (!path.contains("jwxt.bnuzh.edu.cn")) return false
+        return path.contains("/frame/homes") ||
+            path.contains("/frame/home/") ||
+            path.endsWith("/frame/home")
+    }
+
     companion object {
         const val ID_SYSU = "sysu"
         const val ID_GZHU = "gzhu"
+        const val ID_BNUZH = "bnuzh"
 
         val Sysu = School(
             id = ID_SYSU,
@@ -71,7 +84,21 @@ data class School(
             sessionTokens = listOf("JSESSIONID"),
         )
 
-        val All = listOf(Sysu, Gzhu)
+        val Bnuzh = School(
+            id = ID_BNUZH,
+            displayName = "北京师范大学珠海校区",
+            shortName = "北师珠",
+            loginUrl = "https://jwxt.bnuzh.edu.cn/caslogin",
+            apiOrigin = "https://jwxt.bnuzh.edu.cn",
+            cookieOrigins = listOf(
+                "https://cas.bnuzh.edu.cn",
+                "https://jwxt.bnuzh.edu.cn",
+                "https://jwxt.bnuzh.edu.cn/",
+            ),
+            sessionTokens = listOf("JSESSIONID"),
+        )
+
+        val All = listOf(Sysu, Gzhu, Bnuzh)
 
         fun of(id: String): School = All.find { it.id == id } ?: Sysu
     }

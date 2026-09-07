@@ -103,7 +103,7 @@ fun LoginScreen(
         }
     }
 
-    val gzhu = school.id == School.ID_GZHU
+    val desktopLogin = school.usesDesktopUa
     Scaffold(
         topBar = {
             KcbTopBar {
@@ -114,7 +114,7 @@ fun LoginScreen(
             }
         },
         bottomBar = {
-            if (!gzhu) {
+            if (!desktopLogin) {
                 Button(
                     onClick = { tryFinish(requireJwxtCheck = false) },
                     enabled = !finished && !checking,
@@ -171,7 +171,7 @@ fun LoginScreen(
                                         ViewGroup.LayoutParams.MATCH_PARENT,
                                         ViewGroup.LayoutParams.MATCH_PARENT,
                                     )
-                                    applyLoginSettings(desktopUa = schoolId == School.ID_GZHU)
+                                    applyLoginSettings(desktopUa = School.of(schoolId).usesDesktopUa)
                                     webViewClient = client
                                 }
                                 extra.webChromeClient = this
@@ -199,7 +199,7 @@ fun LoginScreen(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                             )
-                            applyLoginSettings(desktopUa = schoolId == School.ID_GZHU)
+                            applyLoginSettings(desktopUa = School.of(schoolId).usesDesktopUa)
                             webViewClient = client
                             webChromeClient = chrome
                         }
@@ -240,7 +240,7 @@ fun LoginScreen(
                 },
             )
             }
-            if (gzhu) {
+            if (desktopLogin) {
                 Button(
                     onClick = { tryFinish(requireJwxtCheck = false) },
                     enabled = !finished && !checking,

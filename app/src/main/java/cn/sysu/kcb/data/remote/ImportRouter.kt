@@ -7,6 +7,7 @@ class ImportRouter(
     private val settings: SettingsRepository,
     private val sysu: JwxtImportService,
     private val gzhu: GzhuImportService,
+    private val bnuzh: BnuzhImportService,
 ) : SchoolImporter {
     override suspend fun isLoggedIn(): Boolean = pick().isLoggedIn()
 
@@ -18,6 +19,9 @@ class ImportRouter(
         onProgress: suspend (String) -> Unit,
     ): String = pick().importAllYears(onlyCurrent, semesterOverride, onProgress)
 
-    private suspend fun pick(): SchoolImporter =
-        if (settings.snapshot().schoolId == School.ID_GZHU) gzhu else sysu
+    private suspend fun pick(): SchoolImporter = when (settings.snapshot().schoolId) {
+        School.ID_GZHU -> gzhu
+        School.ID_BNUZH -> bnuzh
+        else -> sysu
+    }
 }
