@@ -90,7 +90,12 @@ python3 -c "import boto3" >/dev/null 2>&1 || python3 -m pip install --quiet boto
 export VERSION_NAME="$NAME"
 export APK_PATH="$(readlink -f "$APK_NAME")"
 export COS_URL_FILE="$COS_FILE"
-python3 "$ROOT/scripts/upload_dogecloud.py"
+# 云端到广州对象存储经常卡住；超时后保留 GitHub Release，不要无限等。
+if ! timeout 180 python3 "$ROOT/scripts/upload_dogecloud.py"; then
+  echo "DogeCloud upload timed out or failed. GitHub Release $TAG is still published; notes have no cosUrl (app falls back to GitHub)."
+  rm -f "$APK_NAME" "$NOTES_FILE" "$COS_FILE"
+  exit 1
+fi
 
 if [[ -f "$COS_FILE" ]]; then
   url="$(tr -d '\r' < "$COS_FILE" | sed -n '1p')"
