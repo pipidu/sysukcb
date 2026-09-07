@@ -27,8 +27,16 @@ data class AppUpdate(
     val versionCode: Int,
     val htmlUrl: String,
     val apkUrl: String?,
+    val cosUrl: String?,
     val notes: String,
 )
+
+fun AppUpdate.downloadUrls(useCos: Boolean, useMirror: Boolean): List<String> {
+    val urls = LinkedHashSet<String>()
+    if (useCos) cosUrl?.trim()?.takeIf { it.isNotBlank() }?.let { urls += it }
+    apkUrl?.trim()?.takeIf { it.isNotBlank() }?.let { urls += mirroredGithubUrl(it, useMirror) }
+    return urls.toList()
+}
 
 class GithubUpdateService(private val json: Json) {
     private val client = OkHttpClient.Builder()
@@ -159,15 +167,30 @@ private fun GithubReleaseDto.toAppUpdate(): AppUpdate {
         ?.toIntOrNull()
         ?: 0
     val apk = assets.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }?.browserDownloadUrl
+    val bodyText = body.orEmpty()
     return AppUpdate(
         versionName = versionName.ifBlank { tagName },
         versionCode = versionCode,
         htmlUrl = htmlUrl,
         apkUrl = apk?.ifBlank { null },
-        notes = body.orEmpty()
+        cosUrl = metaLine(bodyText, "cosUrl"),
+        notes = bodyText
             .lineSequence()
-            .filterNot { it.startsWith("versionCode=") || it.startsWith("versionName=") }
+            .filterNot {
+                it.startsWith("versionCode=") ||
+                    it.startsWith("versionName=") ||
+                    it.startsWith("cosUrl=")
+            }
             .joinToString("\n")
             .trim(),
     )
+}
+
+private fun metaLine(body: String, key: String): String? {
+    val prefix = "$key="
+    return body.lineSequence()
+        .firstOrNull { it.startsWith(prefix) }
+        ?.substringAfter(prefix)
+        ?.trim()
+        ?.ifBlank { null }
 }

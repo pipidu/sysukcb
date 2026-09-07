@@ -28,6 +28,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         handleImportIntent(intent)
+        handleUpdateIntent(intent)
         KcbApp.instance.container.alarms.ensureChannels()
         setContent {
             val theme by remember {
@@ -66,6 +67,20 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleImportIntent(intent)
+        handleUpdateIntent(intent)
+    }
+
+    private fun handleUpdateIntent(intent: Intent?) {
+        if (intent?.action != cn.sysu.kcb.data.remote.ApkUpdateWorker.ACTION_INSTALL) return
+        val version = intent.getStringExtra(cn.sysu.kcb.data.remote.ApkUpdateWorker.EXTRA_VERSION).orEmpty()
+        if (version.isBlank()) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            startActivity(viewModel.unknownSourcesIntent())
+            return
+        }
+        viewModel.installCachedUpdate(version)
     }
 
     private fun handleImportIntent(intent: Intent?) {

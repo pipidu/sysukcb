@@ -106,3 +106,41 @@ jobs:
             --title "课程表D ${{ steps.ver.outputs.name }}" \
             --latest \
             --notes-file release-notes.txt
+
+      - name: Upload APK to DogeCloud OSS
+        if: steps.existing.outputs.exists != 'true'
+        env:
+          DOGECLOUD_ACCESS_KEY: ${{ secrets.DOGECLOUD_ACCESS_KEY }}
+          DOGECLOUD_SECRET_KEY: ${{ secrets.DOGECLOUD_SECRET_KEY }}
+          DOGECLOUD_AUTH_KEY: ${{ secrets.DOGECLOUD_AUTH_KEY }}
+          DOGECLOUD_BUCKET: ${{ vars.DOGECLOUD_BUCKET }}
+          DOGECLOUD_DIRECTORY: ${{ vars.DOGECLOUD_DIRECTORY }}
+          DOGECLOUD_DOMAIN: ${{ vars.DOGECLOUD_DOMAIN }}
+          VERSION_NAME: ${{ steps.ver.outputs.name }}
+          APK_PATH: sysukcb-${{ steps.ver.outputs.name }}.apk
+        run: |
+          python3 -m pip install --quiet boto3
+          python3 .github/scripts/upload_dogecloud.py
+
+      - name: Attach COS download URL to Release
+        if: steps.existing.outputs.exists != 'true' && env.COS_URL != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COS_URL: ${{ env.COS_URL }}
+        run: |
+          python3 << 'PY'
+          import os
+          from pathlib import Path
+          notes = Path("release-notes.txt").read_text(encoding="utf-8")
+          url = os.environ.get("COS_URL", "").strip()
+          if url and "cosUrl=" not in notes:
+              lines = notes.splitlines()
+              insert_at = 0
+              for i, line in enumerate(lines):
+                  if line.startswith("versionName="):
+                      insert_at = i + 1
+                      break
+              lines.insert(insert_at, f"cosUrl={url}")
+              Path("release-notes.txt").write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+          PY
+          gh release edit "${{ steps.ver.outputs.tag }}" --notes-file release-notes.txt

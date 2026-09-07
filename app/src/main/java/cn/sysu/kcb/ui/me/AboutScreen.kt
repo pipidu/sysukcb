@@ -126,13 +126,12 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                             UpdateCheckState.Idle -> "应用内下载安装"
                             UpdateCheckState.Checking -> "正在检查…"
                             UpdateCheckState.UpToDate -> "已是最新版本"
-                            is UpdateCheckState.Available -> if (
-                                download !is ApkDownloadState.Progress &&
-                                viewModel.hasCachedUpdateApk(state.update)
-                            ) {
-                                "已下载 ${state.update.versionName}，可直接安装"
-                            } else {
-                                "发现新版本 ${state.update.versionName}"
+                            is UpdateCheckState.Available -> when {
+                                download is ApkDownloadState.Progress -> "正在下载 ${state.update.versionName}"
+                                download !is ApkDownloadState.Installing &&
+                                    viewModel.hasCachedUpdateApk(state.update) ->
+                                    "已下载 ${state.update.versionName}，可直接安装"
+                                else -> "发现新版本 ${state.update.versionName}"
                             }
                             is UpdateCheckState.Failed -> state.message
                         },
@@ -149,8 +148,18 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 modifier = Modifier.clickable { viewModel.checkForUpdate(manual = true) },
             )
             ListItem(
-                headlineContent = { Text("镜像下载") },
-                supportingContent = { Text("经 GitHub Releases 镜像拉取安装包，国内网络更稳") },
+                headlineContent = { Text("对象存储下载") },
+                supportingContent = { Text("默认经多吉云下载安装包，链接带鉴权；关了则走 GitHub") },
+                trailingContent = {
+                    Switch(
+                        checked = settings.updateUseCos,
+                        onCheckedChange = { viewModel.setUpdateUseCos(it) },
+                    )
+                },
+            )
+            ListItem(
+                headlineContent = { Text("GitHub 镜像") },
+                supportingContent = { Text("对象存储不可用时，经镜像拉取 GitHub 安装包") },
                 trailingContent = {
                     Switch(
                         checked = settings.updateUseMirror,
@@ -177,10 +186,9 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         val downloading = apkDownload is ApkDownloadState.Progress || apkDownload is ApkDownloadState.Installing
         AlertDialog(
             onDismissRequest = {
-                if (!downloading) {
-                    showUpdate = false
-                    viewModel.cancelApkDownload()
-                }
+                if (downloading) viewModel.keepApkDownloadInBackground()
+                else viewModel.cancelApkDownload()
+                showUpdate = false
             },
             title = { Text("发现新版本 ${update.versionName}") },
             text = {
@@ -198,18 +206,41 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f).padding(end = 12.dp)) {
-                                Text("使用镜像下载", fontWeight = FontWeight.Medium)
+                                Text("对象存储下载", fontWeight = FontWeight.Medium)
                                 Text(
-                                    "国内访问 GitHub 较慢时可开",
+                                    if (update.cosUrl.isNullOrBlank())
+                                        "这个版本还没有多吉云地址，将使用 GitHub"
+                                    else
+                                        "经多吉云下载，可关弹层继续后台下载",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                                 )
                             }
                             Switch(
-                                checked = settings.updateUseMirror,
-                                onCheckedChange = { viewModel.setUpdateUseMirror(it) },
+                                checked = settings.updateUseCos,
+                                onCheckedChange = { viewModel.setUpdateUseCos(it) },
                                 enabled = !downloading,
                             )
+                        }
+                        if (!settings.updateUseCos || update.cosUrl.isNullOrBlank()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                                    Text("使用 GitHub 镜像", fontWeight = FontWeight.Medium)
+                                    Text(
+                                        "国内访问 GitHub 较慢时可开",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                    )
+                                }
+                                Switch(
+                                    checked = settings.updateUseMirror,
+                                    onCheckedChange = { viewModel.setUpdateUseMirror(it) },
+                                    enabled = !downloading,
+                                )
+                            }
                         }
                     }
                     when (val dl = apkDownload) {
@@ -249,29 +280,27 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 }
             },
             confirmButton = {
-                TextButton(
-                    onClick = { startDownload() },
-                    enabled = !downloading,
-                ) {
-                    Text(
-                        when {
-                            apkDownload is ApkDownloadState.Failed -> "重试"
-                            apkReady -> "安装"
-                            else -> "下载更新"
-                        },
-                    )
+                if (downloading) {
+                    TextButton(onClick = { viewModel.cancelApkDownload() }) { Text("取消下载") }
+                } else {
+                    TextButton(onClick = { startDownload() }) {
+                        Text(
+                            when {
+                                apkDownload is ApkDownloadState.Failed -> "重试"
+                                apkReady -> "安装"
+                                else -> "下载更新"
+                            },
+                        )
+                    }
                 }
             },
             dismissButton = {
                 TextButton(
                     onClick = {
-                        if (downloading) viewModel.cancelApkDownload()
-                        else {
-                            showUpdate = false
-                            viewModel.cancelApkDownload()
-                        }
+                        if (downloading) viewModel.keepApkDownloadInBackground()
+                        showUpdate = false
                     },
-                ) { Text(if (downloading) "取消下载" else "稍后") }
+                ) { Text(if (downloading) "后台下载" else "稍后") }
             },
         )
     }

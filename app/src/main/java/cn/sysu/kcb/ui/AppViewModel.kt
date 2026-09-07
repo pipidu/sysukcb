@@ -8,6 +8,8 @@ import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import cn.sysu.kcb.BuildConfig
 import cn.sysu.kcb.KcbApp
 import cn.sysu.kcb.data.TimetableBackground
@@ -16,12 +18,13 @@ import cn.sysu.kcb.data.local.StickyNoteEntity
 import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.prefs.UserSettings
 import cn.sysu.kcb.data.remote.AppUpdate
+import cn.sysu.kcb.data.remote.ApkUpdateWorker
 import cn.sysu.kcb.data.remote.SessionCheckResult
 import cn.sysu.kcb.data.remote.SessionExpiredException
 import cn.sysu.kcb.data.remote.SessionStatus
+import cn.sysu.kcb.data.remote.downloadUrls
 import cn.sysu.kcb.data.remote.isApkZip
 import cn.sysu.kcb.data.remote.isNewerThan
-import cn.sysu.kcb.data.remote.mirroredGithubUrl
 import cn.sysu.kcb.data.remote.WebDavClient
 import cn.sysu.kcb.data.remote.WebDavShareCode
 import cn.sysu.kcb.data.remote.WebDavSyncService
@@ -31,10 +34,8 @@ import cn.sysu.kcb.data.school.School
 import cn.sysu.kcb.ui.timetable.defaultStickyNote
 import cn.sysu.kcb.ui.timetable.pickSemester
 import cn.sysu.kcb.widget.WidgetData
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -95,7 +96,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val webdavBusy = MutableStateFlow(false)
     val webdavHasPassword = MutableStateFlow(false)
     private var lastUpdateCheckAt = 0L
-    private var downloadJob: Job? = null
+    private var installWhenDownloadDone = false
+    private var handledApkWorkId: java.util.UUID? = null
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -109,6 +111,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             timetableSnapshot.filterNotNull().first()
             checkForUpdate(manual = false)
+        }
+        viewModelScope.launch {
+            WorkManager.getInstance(getApplication()).getWorkInfosForUniqueWorkFlow(ApkUpdateWorker.UNIQUE_NAME)
+                .collect { infos -> applyApkWork(infos.firstOrNull()) }
         }
     }
 
@@ -153,40 +159,38 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun hasCachedUpdateApk(update: AppUpdate): Boolean = cachedUpdateApk(update).isApkZip()
 
     fun downloadAndInstall(update: AppUpdate) {
-        val url = update.apkUrl
-        if (url.isNullOrBlank()) {
+        val dest = cachedUpdateApk(update)
+        if (dest.isApkZip()) {
+            installCachedApk(dest)
+            return
+        }
+        val snap = settings.value
+        val urls = update.downloadUrls(snap.updateUseCos, snap.updateUseMirror)
+        if (urls.isEmpty()) {
             apkDownload.value = ApkDownloadState.Failed("这个版本没有安装包")
             return
         }
-        downloadJob?.cancel()
-        downloadJob = viewModelScope.launch {
-            val dest = cachedUpdateApk(update)
-            val cached = withContext(Dispatchers.IO) { dest.isApkZip() }
-            if (!cached) {
-                apkDownload.value = ApkDownloadState.Progress(0L, 0L)
-                runCatching {
-                    val downloadUrl = mirroredGithubUrl(url, container.settings.snapshot().updateUseMirror)
-                    container.updates.downloadApk(downloadUrl, dest) { received, total ->
-                        apkDownload.value = ApkDownloadState.Progress(received, total)
-                    }
-                }.onFailure { error ->
-                    if (error is CancellationException) {
-                        apkDownload.value = ApkDownloadState.Idle
-                        throw error
-                    }
-                    apkDownload.value = ApkDownloadState.Failed(error.message ?: "下载失败")
-                    return@launch
-                }
-            }
-            apkDownload.value = ApkDownloadState.Installing
-            runCatching { installDownloadedApk(dest) }
-                .onFailure { apkDownload.value = ApkDownloadState.Failed(it.message ?: "无法打开安装程序") }
+        installWhenDownloadDone = true
+        apkDownload.value = ApkDownloadState.Progress(0L, 0L)
+        ApkUpdateWorker.enqueue(getApplication(), update.versionName, dest, urls)
+    }
+
+    fun keepApkDownloadInBackground() {
+        installWhenDownloadDone = false
+    }
+
+    fun installCachedUpdate(versionName: String) {
+        val dest = File(getApplication<Application>().cacheDir, "updates/kcb-$versionName.apk")
+        if (!dest.isApkZip()) {
+            message.value = "安装包还没下完或已失效"
+            return
         }
+        installCachedApk(dest)
     }
 
     fun cancelApkDownload() {
-        downloadJob?.cancel()
-        downloadJob = null
+        installWhenDownloadDone = false
+        ApkUpdateWorker.cancel(getApplication())
         apkDownload.value = ApkDownloadState.Idle
         runCatching {
             File(getApplication<Application>().cacheDir, "updates").listFiles()?.forEach { file ->
@@ -206,6 +210,66 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             "package:${app.packageName}".toUri(),
         )
     }
+
+    private fun installCachedApk(file: File) {
+        apkDownload.value = ApkDownloadState.Installing
+        runCatching { installDownloadedApk(file) }
+            .onFailure { apkDownload.value = ApkDownloadState.Failed(it.message ?: "无法打开安装程序") }
+    }
+
+    private fun applyApkWork(info: WorkInfo?) {
+        if (info == null) return
+        when (info.state) {
+            WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> {
+                if (apkDownload.value !is ApkDownloadState.Failed) {
+                    apkDownload.value = ApkDownloadState.Progress(0L, 0L)
+                }
+            }
+            WorkInfo.State.RUNNING -> {
+                val received = info.progress.getLong(ApkUpdateWorker.KEY_RECEIVED, 0L)
+                val total = info.progress.getLong(ApkUpdateWorker.KEY_TOTAL, 0L)
+                apkDownload.value = ApkDownloadState.Progress(received, total)
+            }
+            WorkInfo.State.SUCCEEDED -> {
+                if (handledApkWorkId == info.id) return
+                handledApkWorkId = info.id
+                val watching = installWhenDownloadDone || apkDownload.value is ApkDownloadState.Progress
+                if (!watching) return
+                val version = info.outputData.getString(ApkUpdateWorker.KEY_VERSION).orEmpty()
+                val dest = info.outputData.getString(ApkUpdateWorker.KEY_DEST)
+                    ?.let { File(it) }
+                    ?: version.takeIf { it.isNotBlank() }?.let { cachedFileForVersion(it) }
+                if (installWhenDownloadDone && dest != null && dest.isApkZip()) {
+                    installWhenDownloadDone = false
+                    installCachedApk(dest)
+                } else {
+                    installWhenDownloadDone = false
+                    apkDownload.value = ApkDownloadState.Idle
+                    if (dest != null && dest.isApkZip()) {
+                        message.value = "更新已在后台下载完成，可到「关于」安装"
+                    }
+                }
+            }
+            WorkInfo.State.FAILED -> {
+                if (handledApkWorkId == info.id) return
+                handledApkWorkId = info.id
+                val watching = installWhenDownloadDone || apkDownload.value is ApkDownloadState.Progress
+                installWhenDownloadDone = false
+                if (!watching) return
+                apkDownload.value = ApkDownloadState.Failed(
+                    info.outputData.getString(ApkUpdateWorker.KEY_ERROR) ?: "下载失败",
+                )
+            }
+            WorkInfo.State.CANCELLED -> {
+                if (apkDownload.value is ApkDownloadState.Progress) {
+                    apkDownload.value = ApkDownloadState.Idle
+                }
+            }
+        }
+    }
+
+    private fun cachedFileForVersion(versionName: String) =
+        File(getApplication<Application>().cacheDir, "updates/kcb-$versionName.apk")
 
     private fun installDownloadedApk(file: File) {
         val app = getApplication<Application>()
@@ -381,6 +445,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setUpdateUseMirror(enabled: Boolean) = viewModelScope.launch {
         container.settings.setUpdateUseMirror(enabled)
+    }
+
+    fun setUpdateUseCos(enabled: Boolean) = viewModelScope.launch {
+        container.settings.setUpdateUseCos(enabled)
     }
 
     fun setExamReminderEnabled(enabled: Boolean) = viewModelScope.launch {

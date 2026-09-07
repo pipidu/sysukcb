@@ -36,8 +36,10 @@ object AppStorage {
         val now = System.currentTimeMillis()
         dir.listFiles()?.forEach { file ->
             val part = file.name.endsWith(".part", ignoreCase = true)
-            val stale = now - file.lastModified() > 24 * 60 * 60 * 1000L
-            if (part || stale) runCatching { file.deleteRecursively() }
+            val age = now - file.lastModified()
+            val stalePart = part && age > 6 * 60 * 60 * 1000L
+            val staleApk = !part && age > 24 * 60 * 60 * 1000L
+            if (stalePart || staleApk) runCatching { file.deleteRecursively() }
         }
     }
 
