@@ -2,7 +2,7 @@
 
 每次发版把对应 `versionName` 的一节写进 GitHub Release；应用检查更新时显示同一段（会去掉 `versionCode=` / `versionName=` 行）。
 
-## 1.1.28
+## 1.2.0
 
 - 发版改为本机上传 GitHub 和多吉云，避免海外节点传对象存储失败
 
