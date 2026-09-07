@@ -157,16 +157,18 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                     )
                 },
             )
-            ListItem(
-                headlineContent = { Text("GitHub 镜像") },
-                supportingContent = { Text("对象存储不可用时，经镜像拉取 GitHub 安装包") },
-                trailingContent = {
-                    Switch(
-                        checked = settings.updateUseMirror,
-                        onCheckedChange = { viewModel.setUpdateUseMirror(it) },
-                    )
-                },
-            )
+            if (!settings.updateUseCos) {
+                ListItem(
+                    headlineContent = { Text("GitHub 镜像") },
+                    supportingContent = { Text("国内访问 GitHub 较慢时，经镜像拉取安装包") },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.updateUseMirror,
+                            onCheckedChange = { viewModel.setUpdateUseMirror(it) },
+                        )
+                    },
+                )
+            }
             ListItem(
                 headlineContent = { Text("GitHub") },
                 supportingContent = { Text("开源地址") },
