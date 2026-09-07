@@ -41,7 +41,7 @@ from pathlib import Path
 name, code, out = sys.argv[1], sys.argv[2], sys.argv[3]
 text = Path("CHANGELOG.md").read_text(encoding="utf-8") if Path("CHANGELOG.md").is_file() else ""
 notes = "Fixes and improvements."
-m = re.search(rf"(?ms)^##\s+{re.escape(name)}\s*\r?\n(.*?)(?=^##\s|\z)", text)
+m = re.search(rf"(?ms)^##\s+{re.escape(name)}\s*\r?\n(.*?)(?=^##\s|\Z)", text)
 if m:
     body = re.sub(r"(?m)^(versionCode|versionName|cosUrl)\s*=.*\r?\n?", "", m.group(1)).strip()
     if body:
