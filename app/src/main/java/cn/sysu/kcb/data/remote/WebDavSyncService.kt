@@ -21,6 +21,9 @@ class WebDavSyncService(
     suspend fun upload() {
         val creds = requireCreds()
         val body = share.exportAllJson(creds.nickname)
+        if (creds.nickname.isNotBlank()) {
+            ensureNicknameAvailable(creds.url, creds.user, creds.password, creds.nickname)
+        }
         client.upload(creds.url, creds.user, creds.password, body)
         if (creds.nickname.isNotBlank()) {
             uploadNicknameFile(creds, body)
@@ -53,6 +56,9 @@ class WebDavSyncService(
         return try {
             val creds = requireCreds(needNickname = false)
             val body = share.exportAllJson(creds.nickname)
+            if (creds.nickname.isNotBlank()) {
+                ensureNicknameAvailable(creds.url, creds.user, creds.password, creds.nickname)
+            }
             client.upload(creds.url, creds.user, creds.password, body)
             if (creds.nickname.isNotBlank()) {
                 pullFriends(creds, body)
@@ -117,7 +123,25 @@ class WebDavSyncService(
         return message
     }
 
+    suspend fun ensureNicknameAvailable(
+        url: String,
+        user: String,
+        password: String,
+        nickname: String,
+    ) {
+        if (nickname.isBlank()) return
+        val nick = WebDavClient.sanitizeNickname(nickname)
+        val lastUploaded = settings.snapshot().webdavLastUploadedNickname
+        if (lastUploaded.isNotBlank() && lastUploaded.equals(nick, ignoreCase = true)) return
+        val filename = WebDavClient.nicknameFilename(nick)
+        val files = client.listJsonFiles(url, user, password, missingAsEmpty = true)
+        if (files.any { it.equals(filename, ignoreCase = true) }) {
+            throw ImportFailedException(NICKNAME_TAKEN)
+        }
+    }
+
     private suspend fun uploadNicknameFile(creds: Creds, body: String) {
+        ensureNicknameAvailable(creds.url, creds.user, creds.password, creds.nickname)
         removeStaleNicknameFiles(creds)
         val url = WebDavClient.fileInDirectory(
             WebDavClient.normalizeFileUrl(creds.url),
@@ -163,6 +187,7 @@ class WebDavSyncService(
     )
 
     companion object {
+        const val NICKNAME_TAKEN = "昵称已存在，请更换"
         private const val MIN_AUTO_INTERVAL_MS = 10 * 60 * 1000L
 
         fun isOnWifi(context: Context): Boolean {

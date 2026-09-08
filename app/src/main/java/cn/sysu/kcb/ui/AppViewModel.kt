@@ -25,6 +25,7 @@ import cn.sysu.kcb.data.remote.SessionStatus
 import cn.sysu.kcb.data.remote.downloadUrls
 import cn.sysu.kcb.data.remote.isApkZip
 import cn.sysu.kcb.data.remote.isNewerThan
+import cn.sysu.kcb.data.remote.ImportFailedException
 import cn.sysu.kcb.data.remote.WebDavClient
 import cn.sysu.kcb.data.remote.WebDavShareCode
 import cn.sysu.kcb.data.remote.WebDavSyncService
@@ -95,6 +96,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val apkDownload = MutableStateFlow<ApkDownloadState>(ApkDownloadState.Idle)
     val webdavBusy = MutableStateFlow(false)
     val webdavHasPassword = MutableStateFlow(false)
+    val webdavNicknameError = MutableStateFlow<String?>(null)
     private var lastUpdateCheckAt = 0L
     private var installWhenDownloadDone = false
     private var handledApkWorkId: java.util.UUID? = null
@@ -124,6 +126,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun showMessage(text: String) {
         message.value = text
+    }
+
+    fun clearWebDavNicknameError() {
+        webdavNicknameError.value = null
     }
 
     fun checkForUpdate(manual: Boolean = false) = viewModelScope.launch {
@@ -597,7 +603,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             container.webdav.syncFriends()
         }
             .onSuccess { message.value = it }
-            .onFailure { message.value = it.message ?: "加入失败" }
+            .onFailure { applyWebDavFailure(it, "加入失败") }
             .isSuccess
         webdavBusy.value = false
         onDone?.invoke(ok)
@@ -610,9 +616,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         nickname: String,
         autoSync: Boolean,
     ) = viewModelScope.launch {
+        webdavBusy.value = true
         runCatching { persistWebDav(url, user, password, nickname, autoSync) }
             .onSuccess { message.value = "已保存 WebDAV 设置" }
-            .onFailure { message.value = it.message ?: "保存失败" }
+            .onFailure { applyWebDavFailure(it, "保存失败") }
+        webdavBusy.value = false
     }
 
     fun uploadWebDav(
@@ -628,7 +636,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             container.webdav.upload()
         }
             .onSuccess { message.value = "已上传课表到 WebDAV" }
-            .onFailure { message.value = it.message ?: "上传失败" }
+            .onFailure { applyWebDavFailure(it, "上传失败") }
         webdavBusy.value = false
     }
 
@@ -652,7 +660,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 refreshAlarms()
                 WidgetData.refreshAll(getApplication())
             }
-            .onFailure { message.value = it.message ?: "下载失败" }
+            .onFailure { applyWebDavFailure(it, "下载失败") }
         importing.value = false
         webdavBusy.value = false
     }
@@ -670,7 +678,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             container.webdav.syncFriends()
         }
             .onSuccess { message.value = it }
-            .onFailure { message.value = it.message ?: "同步好友失败" }
+            .onFailure { applyWebDavFailure(it, "同步好友失败") }
         webdavBusy.value = false
     }
 
@@ -683,12 +691,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         webdavBusy.value = true
         runCatching { container.webdav.syncFriends() }
             .onSuccess { if (!silent) message.value = it }
-            .onFailure { if (!silent) message.value = it.message ?: "同步好友失败" }
+            .onFailure { if (!silent) applyWebDavFailure(it, "同步好友失败") }
         webdavBusy.value = false
     }
 
     fun setSelectedFriend(id: String) = viewModelScope.launch {
         container.settings.setSelectedFriendId(id)
+    }
+
+    private fun applyWebDavFailure(error: Throwable, fallback: String) {
+        if (error.message == WebDavSyncService.NICKNAME_TAKEN) {
+            webdavNicknameError.value = error.message
+        }
+        message.value = error.message ?: fallback
     }
 
     private suspend fun persistWebDav(
@@ -698,10 +713,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         nickname: String,
         autoSync: Boolean,
     ) {
+        webdavNicknameError.value = null
         val raw = url.trim().ifBlank { WebDavClient.DEFAULT_NUTSTORE_FILE_URL }
         val canonical = runCatching { WebDavClient.normalizeFileUrl(raw).toString() }.getOrDefault(raw)
         val nick = nickname.trim().let { value ->
             if (value.isBlank()) "" else WebDavClient.sanitizeNickname(value)
+        }
+        val snapBefore = container.settings.snapshot()
+        if (nick.isNotBlank() &&
+            !nick.equals(snapBefore.webdavNickname, ignoreCase = true) &&
+            !nick.equals(snapBefore.webdavLastUploadedNickname, ignoreCase = true)
+        ) {
+            val pass = password.trim().ifBlank { container.webdavSecrets.password() }
+            if (user.trim().isNotBlank() && pass.isNotBlank()) {
+                try {
+                    container.webdav.ensureNicknameAvailable(canonical, user.trim(), pass, nick)
+                } catch (e: ImportFailedException) {
+                    if (e.message == WebDavSyncService.NICKNAME_TAKEN) {
+                        webdavNicknameError.value = e.message
+                    }
+                    throw e
+                }
+            }
         }
         container.settings.setWebDav(canonical, user.trim(), nick, autoSync)
         if (password.isNotBlank()) container.webdavSecrets.save(password)

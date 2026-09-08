@@ -51,6 +51,7 @@ fun WebDavScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val importing by viewModel.importing.collectAsStateWithLifecycle()
     val webdavBusy by viewModel.webdavBusy.collectAsStateWithLifecycle()
     val webdavHasPassword by viewModel.webdavHasPassword.collectAsStateWithLifecycle()
+    val nickError by viewModel.webdavNicknameError.collectAsStateWithLifecycle()
     var davUrl by remember { mutableStateOf("") }
     var davUser by remember { mutableStateOf("") }
     var davPassword by remember { mutableStateOf("") }
@@ -123,9 +124,16 @@ fun WebDavScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             )
             OutlinedTextField(
                 value = davNick,
-                onValueChange = { davNick = it },
+                onValueChange = {
+                    davNick = it
+                    viewModel.clearWebDavNicknameError()
+                },
                 label = { Text("昵称") },
                 placeholder = { Text("用来区分课表，不要叫 sysukcb") },
+                supportingText = {
+                    Text(nickError ?: "不要和网盘里已有的昵称重复")
+                },
+                isError = nickError != null,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -215,12 +223,17 @@ fun WebDavScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     if (joinOpen) {
         JoinWebDavShareDialog(
             busy = webdavBusy,
+            nicknameError = nickError,
             onJoin = { code, nick ->
                 viewModel.joinWebDavShareCode(code, nick) { ok ->
                     if (ok) joinOpen = false
                 }
             },
-            onDismiss = { joinOpen = false },
+            onNickChange = { viewModel.clearWebDavNicknameError() },
+            onDismiss = {
+                viewModel.clearWebDavNicknameError()
+                joinOpen = false
+            },
         )
     }
 }
@@ -268,7 +281,9 @@ internal fun ExportWebDavShareDialog(
 @Composable
 internal fun JoinWebDavShareDialog(
     busy: Boolean,
+    nicknameError: String? = null,
     onJoin: (code: String, nickname: String) -> Unit,
+    onNickChange: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     var code by remember { mutableStateOf("") }
@@ -291,8 +306,17 @@ internal fun JoinWebDavShareDialog(
                 )
                 OutlinedTextField(
                     value = nick,
-                    onValueChange = { nick = it },
+                    onValueChange = {
+                        nick = it
+                        onNickChange()
+                    },
                     label = { Text("我的昵称") },
+                    supportingText = if (nicknameError != null) {
+                        { Text(nicknameError) }
+                    } else {
+                        null
+                    },
+                    isError = nicknameError != null,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )

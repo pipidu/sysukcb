@@ -70,7 +70,12 @@ class WebDavClient {
         }
     }
 
-    suspend fun listJsonFiles(fileUrl: String, user: String, password: String): List<String> = withContext(Dispatchers.IO) {
+    suspend fun listJsonFiles(
+        fileUrl: String,
+        user: String,
+        password: String,
+        missingAsEmpty: Boolean = false,
+    ): List<String> = withContext(Dispatchers.IO) {
         val dir = directoryOf(normalizeFileUrl(fileUrl))
         val response = execute(
             Request.Builder()
@@ -82,10 +87,11 @@ class WebDavClient {
                 .method("PROPFIND", PROPFIND_BODY.toRequestBody(XML))
                 .build(),
         )
-        if (response.code !in 200..299) {
-            throw ImportFailedException(errorMessage("列出好友课表", response.code, response.body))
+        when {
+            response.code in 200..299 -> parseJsonHrefs(response.body, dir)
+            missingAsEmpty && response.code in listOf(404, 409) -> emptyList()
+            else -> throw ImportFailedException(errorMessage("列出好友课表", response.code, response.body))
         }
-        parseJsonHrefs(response.body, dir)
     }
 
     private fun parseJsonHrefs(xml: String, dir: HttpUrl): List<String> {

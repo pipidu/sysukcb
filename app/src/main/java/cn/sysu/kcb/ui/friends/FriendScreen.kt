@@ -90,6 +90,7 @@ import kotlin.math.max
 fun FriendScreen(viewModel: AppViewModel, onSetupSync: () -> Unit) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val webdavBusy by viewModel.webdavBusy.collectAsStateWithLifecycle()
+    val nickError by viewModel.webdavNicknameError.collectAsStateWithLifecycle()
     val friends by KcbApp.instance.container.friends.observe().collectAsStateWithLifecycle(emptyList())
     var pane by rememberSaveable { mutableStateOf("timetable") }
     var selectedId by rememberSaveable { mutableStateOf("") }
@@ -223,12 +224,17 @@ fun FriendScreen(viewModel: AppViewModel, onSetupSync: () -> Unit) {
     if (joinOpen) {
         JoinWebDavShareDialog(
             busy = webdavBusy,
+            nicknameError = nickError,
             onJoin = { code, nick ->
                 viewModel.joinWebDavShareCode(code, nick) { ok ->
                     if (ok) joinOpen = false
                 }
             },
-            onDismiss = { joinOpen = false },
+            onNickChange = { viewModel.clearWebDavNicknameError() },
+            onDismiss = {
+                viewModel.clearWebDavNicknameError()
+                joinOpen = false
+            },
         )
     }
 }
