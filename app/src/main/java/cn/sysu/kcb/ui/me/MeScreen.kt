@@ -128,6 +128,7 @@ fun MeScreen(
     LaunchedEffect(Unit) {
         viewModel.checkSession()
         viewModel.checkForUpdate(manual = false)
+        viewModel.consumeStaleWebDavNicknameTaken()
     }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {

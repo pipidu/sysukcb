@@ -131,8 +131,8 @@ class WebDavSyncService(
     ) {
         if (nickname.isBlank()) return
         val nick = WebDavClient.sanitizeNickname(nickname)
-        val lastUploaded = settings.snapshot().webdavLastUploadedNickname
-        if (lastUploaded.isNotBlank() && lastUploaded.equals(nick, ignoreCase = true)) return
+        val snap = settings.snapshot()
+        if (ownsNickname(nick, snap.webdavNickname, snap.webdavLastUploadedNickname)) return
         val filename = WebDavClient.nicknameFilename(nick)
         val files = client.listJsonFiles(url, user, password, missingAsEmpty = true)
         if (files.any { it.equals(filename, ignoreCase = true) }) {
@@ -189,6 +189,19 @@ class WebDavSyncService(
     companion object {
         const val NICKNAME_TAKEN = "昵称已存在，请更换"
         private const val MIN_AUTO_INTERVAL_MS = 10 * 60 * 1000L
+
+        fun ownsNickname(nickname: String, savedNickname: String, lastUploadedNickname: String): Boolean {
+            val nick = runCatching { WebDavClient.sanitizeNickname(nickname) }.getOrNull() ?: return false
+            val last = lastUploadedNickname.trim()
+            if (last.isNotBlank()) {
+                val lastNick = runCatching { WebDavClient.sanitizeNickname(last) }.getOrNull() ?: last
+                return lastNick.equals(nick, ignoreCase = true)
+            }
+            val saved = savedNickname.trim()
+            if (saved.isBlank()) return false
+            val savedNick = runCatching { WebDavClient.sanitizeNickname(saved) }.getOrNull() ?: saved
+            return savedNick.equals(nick, ignoreCase = true)
+        }
 
         fun isOnWifi(context: Context): Boolean {
             val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false

@@ -132,6 +132,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         webdavNicknameError.value = null
     }
 
+    fun consumeStaleWebDavNicknameTaken() = viewModelScope.launch {
+        webdavNicknameError.value = null
+        val snap = container.settings.snapshot()
+        if (snap.webdavLastMessage != WebDavSyncService.NICKNAME_TAKEN) return@launch
+        if (WebDavSyncService.ownsNickname(snap.webdavNickname, snap.webdavNickname, snap.webdavLastUploadedNickname)) {
+            container.settings.setWebDavLastSync(snap.webdavLastSyncAt, "")
+        }
+    }
+
     fun checkForUpdate(manual: Boolean = false) = viewModelScope.launch {
         val now = System.currentTimeMillis()
         if (!manual && updateState.value is UpdateCheckState.Available) return@launch
@@ -721,8 +730,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         val snapBefore = container.settings.snapshot()
         if (nick.isNotBlank() &&
-            !nick.equals(snapBefore.webdavNickname, ignoreCase = true) &&
-            !nick.equals(snapBefore.webdavLastUploadedNickname, ignoreCase = true)
+            !WebDavSyncService.ownsNickname(nick, snapBefore.webdavNickname, snapBefore.webdavLastUploadedNickname)
         ) {
             val pass = password.trim().ifBlank { container.webdavSecrets.password() }
             if (user.trim().isNotBlank() && pass.isNotBlank()) {

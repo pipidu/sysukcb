@@ -60,6 +60,9 @@ fun WebDavScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     var shareCode by remember { mutableStateOf<String?>(null) }
     var joinOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.consumeStaleWebDavNicknameTaken()
+    }
     LaunchedEffect(settings.webdavUrl, settings.webdavUser, settings.webdavNickname, settings.webdavAutoSync) {
         davUrl = settings.webdavUrl.ifBlank { WebDavClient.DEFAULT_NUTSTORE_FILE_URL }
         davUser = settings.webdavUser
