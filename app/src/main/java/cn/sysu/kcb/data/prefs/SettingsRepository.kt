@@ -31,6 +31,7 @@ data class UserSettings(
     val webdavWifiOnly: Boolean = true,
     val webdavLastSyncAt: Long = 0L,
     val webdavLastMessage: String = "",
+    val webdavLastUploadedNickname: String = "",
     val updateUseMirror: Boolean = true,
     val updateUseCos: Boolean = true,
     val selectedFriendId: String = "",
@@ -149,6 +150,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setWebDavWifiOnly(enabled: Boolean) {
         context.dataStore.edit { it[Keys.webdavWifiOnly] = enabled }
+    }
+
+    suspend fun setWebDavLastUploadedNickname(nickname: String) {
+        context.dataStore.edit { it[Keys.webdavLastUploadedNickname] = nickname.trim() }
     }
 
     suspend fun setUpdateUseMirror(enabled: Boolean) {
@@ -313,6 +318,7 @@ class SettingsRepository(private val context: Context) {
         webdavWifiOnly = this[Keys.webdavWifiOnly] ?: true,
         webdavLastSyncAt = this[Keys.webdavLastSyncAt] ?: 0L,
         webdavLastMessage = this[Keys.webdavLastMessage].orEmpty(),
+        webdavLastUploadedNickname = this[Keys.webdavLastUploadedNickname].orEmpty(),
         updateUseMirror = this[Keys.updateUseMirror] ?: true,
         updateUseCos = this[Keys.updateUseCos] ?: true,
         selectedFriendId = this[Keys.selectedFriendId].orEmpty(),
@@ -391,6 +397,7 @@ class SettingsRepository(private val context: Context) {
         val webdavWifiOnly = booleanPreferencesKey("webdav_wifi_only")
         val webdavLastSyncAt = longPreferencesKey("webdav_last_sync_at")
         val webdavLastMessage = stringPreferencesKey("webdav_last_message")
+        val webdavLastUploadedNickname = stringPreferencesKey("webdav_last_uploaded_nickname")
         val updateUseMirror = booleanPreferencesKey("update_use_mirror")
         val updateUseCos = booleanPreferencesKey("update_use_cos")
         val selectedFriendId = stringPreferencesKey("selected_friend_id")

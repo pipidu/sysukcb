@@ -2,6 +2,10 @@
 
 每次发版把对应 `versionName` 的一节写进 GitHub Release；应用检查更新时显示同一段（会去掉 `versionCode=` / `versionName=` 行）。
 
+## 1.2.3
+
+- 修改 WebDAV 昵称后，会删除网盘上旧昵称的课表文件，好友列表里不会再出现旧昵称
+
 ## 1.2.2
 
 - 没有对象存储地址时不显示该下载开关，默认用 GitHub 镜像下载

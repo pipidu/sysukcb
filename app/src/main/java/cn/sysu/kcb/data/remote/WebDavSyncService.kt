@@ -118,11 +118,27 @@ class WebDavSyncService(
     }
 
     private suspend fun uploadNicknameFile(creds: Creds, body: String) {
+        removeStaleNicknameFiles(creds)
         val url = WebDavClient.fileInDirectory(
             WebDavClient.normalizeFileUrl(creds.url),
             WebDavClient.nicknameFilename(creds.nickname),
         ).toString()
         client.upload(url, creds.user, creds.password, body)
+        settings.setWebDavLastUploadedNickname(creds.nickname)
+    }
+
+    private suspend fun removeStaleNicknameFiles(creds: Creds) {
+        val lastUploaded = settings.snapshot().webdavLastUploadedNickname
+        if (lastUploaded.isBlank() || lastUploaded.equals(creds.nickname, ignoreCase = true)) return
+        val nick = runCatching { WebDavClient.sanitizeNickname(lastUploaded) }.getOrNull() ?: return
+        if (nick.equals(creds.nickname, ignoreCase = true)) return
+        val filename = WebDavClient.nicknameFilename(nick)
+        val fileUrl = WebDavClient.fileInDirectory(
+            WebDavClient.normalizeFileUrl(creds.url),
+            filename,
+        ).toString()
+        runCatching { client.delete(fileUrl, creds.user, creds.password) }
+        friends.deleteById(WebDavClient.stemOf(filename))
     }
 
     private suspend fun requireCreds(needNickname: Boolean = false): Creds {

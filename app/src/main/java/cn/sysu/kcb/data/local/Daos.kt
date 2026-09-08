@@ -214,6 +214,9 @@ interface FriendPackDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: FriendPackEntity)
 
+    @Query("DELETE FROM friend_packs WHERE id = :id")
+    suspend fun deleteById(id: String)
+
     @Query("DELETE FROM friend_packs WHERE id NOT IN (:ids)")
     suspend fun deleteNotIn(ids: List<String>)
 

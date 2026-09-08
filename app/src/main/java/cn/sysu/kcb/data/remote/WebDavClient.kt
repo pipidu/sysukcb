@@ -37,6 +37,22 @@ class WebDavClient {
         }
     }
 
+    suspend fun delete(fileUrl: String, user: String, password: String) = withContext(Dispatchers.IO) {
+        val url = normalizeFileUrl(fileUrl)
+        val response = execute(
+            Request.Builder()
+                .url(url)
+                .header("Authorization", davAuth(user, password))
+                .header("User-Agent", UA)
+                .delete()
+                .build(),
+        )
+        when (response.code) {
+            in 200..204, 404 -> Unit
+            else -> throw ImportFailedException(errorMessage("删除", response.code, response.body))
+        }
+    }
+
     suspend fun download(fileUrl: String, user: String, password: String): String = withContext(Dispatchers.IO) {
         val url = normalizeFileUrl(fileUrl)
         val response = execute(

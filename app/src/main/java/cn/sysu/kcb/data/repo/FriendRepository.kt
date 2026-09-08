@@ -19,6 +19,11 @@ class FriendRepository(
         db.friendPackDao().upsert(item)
     }
 
+    suspend fun deleteById(id: String) {
+        if (id.isBlank()) return
+        db.friendPackDao().deleteById(id)
+    }
+
     suspend fun keepOnly(ids: Collection<String>) {
         val dao = db.friendPackDao()
         if (ids.isEmpty()) {
