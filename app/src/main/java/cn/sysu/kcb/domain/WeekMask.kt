@@ -25,30 +25,43 @@ object WeekMask {
     fun parse(timeDetail: String, startWeek: Int, maxWeek: Int = MAX_WEEK): Long {
         val raw = timeDetail.replace("/", "").trim()
         if (raw.isEmpty()) return bit(startWeek.coerceAtLeast(1))
-        val odd = raw.contains("单")
-        val even = raw.contains("双") && !odd
-        val cleaned = raw
+        var mask = 0L
+        for (part in raw.split(",", "，", "、", ";", "；")) {
+            mask = mask or parsePart(part, startWeek, maxWeek)
+        }
+        if (mask == 0L) mask = bit(startWeek.coerceAtLeast(1))
+        return mask
+    }
+
+    private fun parsePart(part: String, startWeek: Int, maxWeek: Int): Long {
+        val token = part.trim()
+        if (token.isEmpty()) return 0L
+        val odd = token.contains("单")
+        val even = token.contains("双") && !odd
+        val cleaned = token
             .replace("每周", "")
             .replace("单周", "")
             .replace("双周", "")
             .replace("周", "")
+            .replace("单", "")
+            .replace("双", "")
+            .replace("(", "")
+            .replace(")", "")
+            .replace("（", "")
+            .replace("）", "")
             .trim()
         var mask = 0L
         if (cleaned.isEmpty()) {
             mask = fromRange(startWeek.coerceAtLeast(1), maxWeek)
         } else {
-            for (part in cleaned.split(",", "，", "、", ";", "；")) {
-                val token = part.trim()
-                if (token.isEmpty()) continue
-                val range = token.split("-", "–", "—", "~")
-                if (range.size >= 2) {
-                    val a = range[0].filter { it.isDigit() }.toIntOrNull() ?: continue
-                    val b = range[1].filter { it.isDigit() }.toIntOrNull() ?: continue
-                    mask = mask or fromRange(min(a, b), max(a, b))
-                } else {
-                    val n = token.filter { it.isDigit() }.toIntOrNull() ?: continue
-                    mask = mask or bit(n)
-                }
+            val range = cleaned.split("-", "–", "—", "~")
+            if (range.size >= 2) {
+                val a = range[0].filter { it.isDigit() }.toIntOrNull()
+                val b = range[1].filter { it.isDigit() }.toIntOrNull()
+                if (a != null && b != null) mask = fromRange(min(a, b), max(a, b))
+            } else {
+                val n = cleaned.filter { it.isDigit() }.toIntOrNull()
+                if (n != null) mask = bit(n)
             }
         }
         if (odd) {
@@ -60,7 +73,6 @@ object WeekMask {
             for (w in 1..maxWeek) if (w % 2 == 0 && has(mask, w)) filtered = filtered or bit(w)
             mask = filtered
         }
-        if (mask == 0L) mask = bit(startWeek.coerceAtLeast(1))
         return mask
     }
 
