@@ -617,12 +617,6 @@ fun MeScreen(
                     onOpenBattery = { openBatteryOptimizationSettings(context) },
                 )
             }
-            Text(
-                "数据默认只保存在本机。WebDAV 同步走你自己的网盘，密码存在本机加密存储。HAR 抓包文件不会被应用读取或上传。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
             ListItem(
                 headlineContent = { Text("关于") },
                 supportingContent = {

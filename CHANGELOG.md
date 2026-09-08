@@ -2,6 +2,10 @@
 
 每次发版把对应 `versionName` 的一节写进 GitHub Release；应用检查更新时显示同一段（会去掉 `versionCode=` / `versionName=` 行）。
 
+## 1.2.7
+
+- 设置页「关于」上方不再显示数据保存在本机那段说明
+
 ## 1.2.6
 
 - 自己的 WebDAV 昵称不再误报「昵称已存在」
