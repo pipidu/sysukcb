@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="380" viewBox="0 0 360 380">
+  <defs><style>.s{font-family:"Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif}</style></defs>
+  <rect width="360" height="380" fill="#FFFFFF"/>
+  <!-- Today 4x2 -->
+  <rect x="12" y="12" width="336" height="132" rx="16" fill="#FFFFFF" stroke="#E8E0E0"/>
+  <text x="28" y="40" class="s" font-size="16" font-weight="700" fill="#8C1A1A">今日课程</text>
+  <text x="120" y="40" class="s" font-size="12" fill="#667085">周二 · 还有 2 节</text>
+  <rect x="28" y="54" width="148" height="76" rx="12" fill="#F7F4F4"/>
+  <rect x="28" y="54" width="6" height="76" rx="3" fill="#8C1A1A"/>
+  <text x="44" y="78" class="s" font-size="13" font-weight="500" fill="#1D2939">高等数学A</text>
+  <text x="44" y="98" class="s" font-size="11" fill="#667085">1-2节 · 张老师</text>
+  <text x="44" y="116" class="s" font-size="11" fill="#667085">A101（1座）</text>
+  <rect x="188" y="54" width="144" height="76" rx="12" fill="#F7F4F4"/>
+  <rect x="188" y="54" width="6" height="76" rx="3" fill="#1A237E"/>
+  <text x="204" y="78" class="s" font-size="13" font-weight="500" fill="#1D2939">大学英语</text>
+  <text x="204" y="98" class="s" font-size="11" fill="#667085">3-4节 · 李老师</text>
+  <text x="204" y="116" class="s" font-size="11" fill="#667085">教学楼B203</text>
+
+  <!-- Next 2x2 -->
+  <rect x="12" y="156" width="160" height="160" rx="16" fill="#FFFFFF" stroke="#E8E0E0"/>
+  <rect x="12" y="156" width="160" height="36" rx="16" fill="#8C1A1A"/>
+  <rect x="12" y="176" width="160" height="16" fill="#8C1A1A"/>
+  <text x="24" y="180" class="s" font-size="13" font-weight="700" fill="#FFFFFF">最近两节</text>
+  <rect x="24" y="204" width="136" height="44" rx="10" fill="#8C1A1A"/>
+  <text x="34" y="222" class="s" font-size="12" font-weight="600" fill="#fff">高等数学A</text>
+  <text x="34" y="238" class="s" font-size="9" fill="#fff" opacity="0.92">1-2节</text>
+  <rect x="24" y="256" width="136" height="44" rx="10" fill="#1A237E"/>
+  <text x="34" y="274" class="s" font-size="12" font-weight="600" fill="#fff">大学英语</text>
+  <text x="34" y="290" class="s" font-size="9" fill="#fff" opacity="0.92">3-4节</text>
+
+  <!-- Week 2x2-ish -->
+  <rect x="188" y="156" width="160" height="160" rx="16" fill="#FFFFFF" stroke="#E8E0E0"/>
+  <text x="204" y="182" class="s" font-size="14" font-weight="700" fill="#8C1A1A">本周课表</text>
+  <text x="204" y="200" class="s" font-size="10" fill="#667085">第5周</text>
+  <rect x="204" y="212" width="24" height="20" rx="3" fill="#8C1A1A"/>
+  <rect x="204" y="234" width="24" height="20" rx="3" fill="#1A237E"/>
+  <rect x="232" y="234" width="24" height="20" rx="3" fill="#1B7A4E"/>
+  <rect x="232" y="267" width="24" height="20" rx="3" fill="#4A148C"/>
+  <rect x="260" y="256" width="24" height="20" rx="3" fill="#E65100"/>
+  <rect x="260" y="234" width="24" height="20" rx="3" fill="#37474F"/>
+  <rect x="288" y="212" width="24" height="20" rx="3" fill="#1B5E20"/>
+  <rect x="288" y="212" width="24" height="20" rx="3" fill="#C62828"/>
+</svg>
