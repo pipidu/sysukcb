@@ -60,6 +60,7 @@ data class UserSettings(
     val timetableBgColor: Long = 0L,
     val timetableBgImageRev: Long = 0L,
     val timetableBgDim: Int = SettingsRepository.DEFAULT_TIMETABLE_BG_DIM,
+    val stickyNotesLocked: Boolean = false,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -294,6 +295,10 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun setStickyNotesLocked(locked: Boolean) {
+        context.dataStore.edit { it[Keys.stickyNotesLocked] = locked }
+    }
+
     suspend fun setWebDavLastSync(at: Long, message: String) {
         context.dataStore.edit {
             it[Keys.webdavLastSyncAt] = at
@@ -378,6 +383,7 @@ class SettingsRepository(private val context: Context) {
         timetableBgImageRev = this[Keys.timetableBgImageRev] ?: 0L,
         timetableBgDim = (this[Keys.timetableBgDim] ?: SettingsRepository.DEFAULT_TIMETABLE_BG_DIM)
             .coerceIn(SettingsRepository.MIN_TIMETABLE_BG_DIM, SettingsRepository.MAX_TIMETABLE_BG_DIM),
+        stickyNotesLocked = this[Keys.stickyNotesLocked] ?: false,
     )
 
     private object Keys {
@@ -426,6 +432,7 @@ class SettingsRepository(private val context: Context) {
         val timetableBgColor = longPreferencesKey("timetable_bg_color")
         val timetableBgImageRev = longPreferencesKey("timetable_bg_image_rev")
         val timetableBgDim = intPreferencesKey("timetable_bg_dim")
+        val stickyNotesLocked = booleanPreferencesKey("sticky_notes_locked")
     }
 
     companion object {

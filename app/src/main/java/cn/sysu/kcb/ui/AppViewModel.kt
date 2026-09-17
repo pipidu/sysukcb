@@ -790,6 +790,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         WidgetData.refreshAll(getApplication())
     }
 
+    fun setStickyNotesLocked(locked: Boolean) = viewModelScope.launch {
+        container.settings.setStickyNotesLocked(locked)
+    }
+
     fun addStickyNote(semester: String, existingCount: Int = 0, week: Int = 1) = viewModelScope.launch {
         val id = semester.trim()
         if (id.isBlank()) {

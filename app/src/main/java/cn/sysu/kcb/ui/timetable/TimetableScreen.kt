@@ -39,10 +39,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.automirrored.outlined.StickyNote2
 import androidx.compose.material.icons.outlined.CalendarViewMonth
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.ViewWeek
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -355,6 +357,18 @@ fun TimetableScreen(
                                 },
                             )
                             DropdownMenuItem(
+                                text = { Text("固定所有便签") },
+                                leadingIcon = { Icon(Icons.Outlined.PushPin, contentDescription = null) },
+                                trailingIcon = if (settings.stickyNotesLocked) {
+                                    { Icon(Icons.Filled.Check, contentDescription = null) }
+                                } else {
+                                    null
+                                },
+                                onClick = {
+                                    viewModel.setStickyNotesLocked(!settings.stickyNotesLocked)
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text(if (editing) "退出编辑模式" else "进入编辑模式") },
                                 leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
                                 onClick = {
@@ -416,7 +430,7 @@ fun TimetableScreen(
                             },
                             themeColor = settings.themeColor,
                             notes = snapshot.notes,
-                            noteEditable = true,
+                            noteEditable = !settings.stickyNotesLocked,
                             onNoteChange = { viewModel.saveStickyNote(it) },
                             onNoteEdit = { editingNote = it },
                             periodHeightDp = settings.periodHeightDp,
@@ -457,7 +471,7 @@ fun TimetableScreen(
                                 },
                                 themeColor = settings.themeColor,
                                 notes = stickyNotesOnWeek(snapshot.notes, weekNo),
-                                noteEditable = true,
+                                noteEditable = !settings.stickyNotesLocked,
                                 onNoteChange = { viewModel.saveStickyNote(it) },
                                 onNoteEdit = { editingNote = it },
                                 periodHeightDp = settings.periodHeightDp,
