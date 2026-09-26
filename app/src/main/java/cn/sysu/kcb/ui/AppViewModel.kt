@@ -148,8 +148,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return@launch
         }
         updateState.value = UpdateCheckState.Checking
-        val useMirror = container.settings.snapshot().updateUseMirror
-        runCatching { container.updates.fetchLatest(useMirror) }
+        val snap = container.settings.snapshot()
+        runCatching { container.updates.fetchLatest(snap.updateUseMirror, snap.updateUseMirror2) }
             .onSuccess { latest ->
                 lastUpdateCheckAt = System.currentTimeMillis()
                 updateState.value = if (latest != null && latest.isNewerThan(BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME)) {
@@ -180,7 +180,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val snap = settings.value
-        val urls = update.downloadUrls(snap.updateUseCos, snap.updateUseMirror)
+        val urls = update.downloadUrls(snap.updateUseCos, snap.updateUseMirror, snap.updateUseMirror2)
         if (urls.isEmpty()) {
             apkDownload.value = ApkDownloadState.Failed("这个版本没有安装包")
             return
@@ -460,6 +460,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setUpdateUseMirror(enabled: Boolean) = viewModelScope.launch {
         container.settings.setUpdateUseMirror(enabled)
+    }
+
+    fun setUpdateUseMirror2(enabled: Boolean) = viewModelScope.launch {
+        container.settings.setUpdateUseMirror2(enabled)
     }
 
     fun setUpdateUseCos(enabled: Boolean) = viewModelScope.launch {

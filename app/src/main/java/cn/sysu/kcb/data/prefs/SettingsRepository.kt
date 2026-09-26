@@ -33,6 +33,7 @@ data class UserSettings(
     val webdavLastMessage: String = "",
     val webdavLastUploadedNickname: String = "",
     val updateUseMirror: Boolean = true,
+    val updateUseMirror2: Boolean = true,
     val updateUseCos: Boolean = true,
     val selectedFriendId: String = "",
     val periodHeightDp: Int = SettingsRepository.DEFAULT_PERIOD_HEIGHT_DP,
@@ -159,6 +160,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setUpdateUseMirror(enabled: Boolean) {
         context.dataStore.edit { it[Keys.updateUseMirror] = enabled }
+    }
+
+    suspend fun setUpdateUseMirror2(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.updateUseMirror2] = enabled }
     }
 
     suspend fun setUpdateUseCos(enabled: Boolean) {
@@ -325,6 +330,7 @@ class SettingsRepository(private val context: Context) {
         webdavLastMessage = this[Keys.webdavLastMessage].orEmpty(),
         webdavLastUploadedNickname = this[Keys.webdavLastUploadedNickname].orEmpty(),
         updateUseMirror = this[Keys.updateUseMirror] ?: true,
+        updateUseMirror2 = this[Keys.updateUseMirror2] ?: true,
         updateUseCos = this[Keys.updateUseCos] ?: true,
         selectedFriendId = this[Keys.selectedFriendId].orEmpty(),
         periodHeightDp = (this[Keys.periodHeightDp] ?: SettingsRepository.DEFAULT_PERIOD_HEIGHT_DP)
@@ -405,6 +411,7 @@ class SettingsRepository(private val context: Context) {
         val webdavLastMessage = stringPreferencesKey("webdav_last_message")
         val webdavLastUploadedNickname = stringPreferencesKey("webdav_last_uploaded_nickname")
         val updateUseMirror = booleanPreferencesKey("update_use_mirror")
+        val updateUseMirror2 = booleanPreferencesKey("update_use_mirror_2")
         val updateUseCos = booleanPreferencesKey("update_use_cos")
         val selectedFriendId = stringPreferencesKey("selected_friend_id")
         val periodHeightDp = intPreferencesKey("period_height_dp")

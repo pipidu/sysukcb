@@ -167,15 +167,27 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             }
             if (!hasCosUrl || !settings.updateUseCos) {
                 ListItem(
-                    headlineContent = { Text("GitHub 镜像") },
-                    supportingContent = { Text("默认经镜像拉取 GitHub 安装包，国内更稳") },
+                    headlineContent = { Text("使用镜像 2.0 下载") },
+                    supportingContent = { Text("默认开启。GitHub 安装包经镜像 2.0 下载") },
                     trailingContent = {
                         Switch(
-                            checked = settings.updateUseMirror,
-                            onCheckedChange = { viewModel.setUpdateUseMirror(it) },
+                            checked = settings.updateUseMirror2,
+                            onCheckedChange = { viewModel.setUpdateUseMirror2(it) },
                         )
                     },
                 )
+                if (!settings.updateUseMirror2) {
+                    ListItem(
+                        headlineContent = { Text("GitHub 镜像") },
+                        supportingContent = { Text("镜像 2.0 关闭后，改经原来的镜像下载") },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.updateUseMirror,
+                                onCheckedChange = { viewModel.setUpdateUseMirror(it) },
+                            )
+                        },
+                    )
+                }
             }
             ListItem(
                 headlineContent = { Text("GitHub") },
@@ -238,18 +250,38 @@ fun AboutScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Column(Modifier.weight(1f).padding(end = 12.dp)) {
-                                    Text("使用 GitHub 镜像", fontWeight = FontWeight.Medium)
+                                    Text("使用镜像 2.0 下载", fontWeight = FontWeight.Medium)
                                     Text(
-                                        "默认经镜像下载，国内更稳",
+                                        "默认开启，经镜像 2.0 下载 GitHub 安装包",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                                     )
                                 }
                                 Switch(
-                                    checked = settings.updateUseMirror,
-                                    onCheckedChange = { viewModel.setUpdateUseMirror(it) },
+                                    checked = settings.updateUseMirror2,
+                                    onCheckedChange = { viewModel.setUpdateUseMirror2(it) },
                                     enabled = !downloading,
                                 )
+                            }
+                            if (!settings.updateUseMirror2) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                                        Text("使用 GitHub 镜像", fontWeight = FontWeight.Medium)
+                                        Text(
+                                            "镜像 2.0 关闭后，改经原来的镜像下载",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                        )
+                                    }
+                                    Switch(
+                                        checked = settings.updateUseMirror,
+                                        onCheckedChange = { viewModel.setUpdateUseMirror(it) },
+                                        enabled = !downloading,
+                                    )
+                                }
                             }
                         }
                     }

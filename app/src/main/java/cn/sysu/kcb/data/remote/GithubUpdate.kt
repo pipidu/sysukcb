@@ -14,12 +14,22 @@ import java.util.concurrent.TimeUnit
 const val GITHUB_PAGE_URL = "https://github.com/pipidu/sysukcb"
 private const val GITHUB_API_LATEST = "https://api.github.com/repos/pipidu/sysukcb/releases/latest"
 const val GITHUB_RELEASE_MIRROR_PREFIX = "https://gh-proxy.com/"
+const val GITHUB_MIRROR2_PREFIX = "https://gh.4o.pw/"
 
-fun mirroredGithubUrl(url: String, useMirror: Boolean): String {
-    if (!useMirror) return url
+fun mirroredGithubUrl(url: String, useMirror: Boolean, useMirror2: Boolean = false): String {
+    val prefix = when {
+        useMirror2 -> GITHUB_MIRROR2_PREFIX
+        useMirror -> GITHUB_RELEASE_MIRROR_PREFIX
+        else -> return url.trim()
+    }
     val trimmed = url.trim()
-    if (trimmed.isBlank() || trimmed.startsWith(GITHUB_RELEASE_MIRROR_PREFIX)) return trimmed
-    return GITHUB_RELEASE_MIRROR_PREFIX + trimmed
+    if (trimmed.isBlank() ||
+        trimmed.startsWith(GITHUB_MIRROR2_PREFIX) ||
+        trimmed.startsWith(GITHUB_RELEASE_MIRROR_PREFIX)
+    ) {
+        return trimmed
+    }
+    return prefix + trimmed
 }
 
 data class AppUpdate(
@@ -31,10 +41,10 @@ data class AppUpdate(
     val notes: String,
 )
 
-fun AppUpdate.downloadUrls(useCos: Boolean, useMirror: Boolean): List<String> {
+fun AppUpdate.downloadUrls(useCos: Boolean, useMirror: Boolean, useMirror2: Boolean = false): List<String> {
     val urls = LinkedHashSet<String>()
     if (useCos) cosUrl?.trim()?.takeIf { it.isNotBlank() }?.let { urls += it }
-    apkUrl?.trim()?.takeIf { it.isNotBlank() }?.let { urls += mirroredGithubUrl(it, useMirror) }
+    apkUrl?.trim()?.takeIf { it.isNotBlank() }?.let { urls += mirroredGithubUrl(it, useMirror, useMirror2) }
     return urls.toList()
 }
 
@@ -51,9 +61,9 @@ class GithubUpdateService(private val json: Json) {
         .followSslRedirects(true)
         .build()
 
-    suspend fun fetchLatest(useMirror: Boolean = false): AppUpdate? = withContext(Dispatchers.IO) {
+    suspend fun fetchLatest(useMirror: Boolean = false, useMirror2: Boolean = false): AppUpdate? = withContext(Dispatchers.IO) {
         val request = Request.Builder()
-            .url(mirroredGithubUrl(GITHUB_API_LATEST, useMirror))
+            .url(mirroredGithubUrl(GITHUB_API_LATEST, useMirror, useMirror2))
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
             .header("User-Agent", "sysukcb-android")
