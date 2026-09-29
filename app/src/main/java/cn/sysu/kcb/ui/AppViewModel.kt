@@ -14,7 +14,10 @@ import cn.sysu.kcb.BuildConfig
 import cn.sysu.kcb.KcbApp
 import cn.sysu.kcb.data.TimetableBackground
 import cn.sysu.kcb.data.local.CourseEntity
+import cn.sysu.kcb.data.local.CoursePatchEntity
+import cn.sysu.kcb.data.local.DayMoveEntity
 import cn.sysu.kcb.data.local.StickyNoteEntity
+import cn.sysu.kcb.domain.ScheduleAdjustments
 import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.prefs.UserSettings
 import cn.sysu.kcb.data.remote.AppUpdate
@@ -798,6 +801,56 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         container.settings.setStickyNotesLocked(locked)
     }
 
+    fun setSuspendedDays(semester: String, weekNo: Int, days: Set<Int>) = viewModelScope.launch {
+        val id = semester.trim()
+        if (id.isBlank()) return@launch
+        container.timetable.ensureSemester(id)
+        container.timetable.replaceSuspensions(id, weekNo, days)
+        refreshAlarms()
+        WidgetData.refreshAll(getApplication())
+        message.value = if (days.isEmpty()) "已取消第${weekNo}周停课" else "已设置停课，这些天的课变灰且不再提醒"
+    }
+
+    fun moveClassDay(semester: String, fromWeek: Int, fromDay: Int, toWeek: Int, toDay: Int) = viewModelScope.launch {
+        val id = semester.trim()
+        if (id.isBlank()) return@launch
+        container.timetable.ensureSemester(id)
+        container.timetable.saveMove(
+            DayMoveEntity(
+                acadYearSemester = id,
+                fromWeek = fromWeek,
+                fromDay = fromDay,
+                toWeek = toWeek,
+                toDay = toDay,
+            ),
+        )
+        refreshAlarms()
+        WidgetData.refreshAll(getApplication())
+        message.value = "已把这天的课调到另一天，原来的课保留并变灰"
+    }
+
+    fun clearClassMove(semester: String, fromWeek: Int, fromDay: Int) = viewModelScope.launch {
+        container.timetable.deleteMove(semester, fromWeek, fromDay)
+        refreshAlarms()
+        WidgetData.refreshAll(getApplication())
+        message.value = "已撤销这次调课"
+    }
+
+    fun saveCoursePatch(patch: CoursePatchEntity) = viewModelScope.launch {
+        container.timetable.ensureSemester(patch.acadYearSemester)
+        container.timetable.savePatch(patch)
+        refreshAlarms()
+        WidgetData.refreshAll(getApplication())
+        message.value = "已更新这节课，改过的内容会高亮"
+    }
+
+    fun clearCoursePatch(semester: String, courseKey: String, weekNo: Int) = viewModelScope.launch {
+        container.timetable.deletePatch(semester, courseKey, weekNo)
+        refreshAlarms()
+        WidgetData.refreshAll(getApplication())
+        message.value = "已撤销这节课的修改"
+    }
+
     fun addStickyNote(semester: String, existingCount: Int = 0, week: Int = 1) = viewModelScope.launch {
         val id = semester.trim()
         if (id.isBlank()) {
@@ -833,6 +886,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             weeks = if (semester.isBlank()) emptyList() else container.timetable.listWeeks(semester),
             settings = snap,
             semesterStartMillis = startMillis,
+            adjustments = if (semester.isBlank()) ScheduleAdjustments() else container.timetable.adjustments(semester),
         )
     }
 }

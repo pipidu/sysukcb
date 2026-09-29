@@ -3,6 +3,9 @@ package cn.sysu.kcb.data.repo
 import androidx.room.withTransaction
 import cn.sysu.kcb.data.local.AppDatabase
 import cn.sysu.kcb.data.local.CourseEntity
+import cn.sysu.kcb.data.local.CoursePatchEntity
+import cn.sysu.kcb.data.local.DayMoveEntity
+import cn.sysu.kcb.data.local.DaySuspensionEntity
 import cn.sysu.kcb.data.local.ExamEntity
 import cn.sysu.kcb.data.local.ExamWeekEntity
 import cn.sysu.kcb.data.local.PeriodEntity
@@ -12,6 +15,7 @@ import cn.sysu.kcb.data.local.StickyNoteEntity
 import cn.sysu.kcb.data.local.WeekdayEntity
 import cn.sysu.kcb.domain.CourseColors
 import cn.sysu.kcb.domain.DefaultPeriods
+import cn.sysu.kcb.domain.ScheduleAdjustments
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 
@@ -28,8 +32,8 @@ class TimetableRepository(private val db: AppDatabase) {
     fun periods(semester: String): Flow<List<PeriodEntity>> = db.periodDao().observe(semester)
     fun allExams(): Flow<List<ExamEntity>> = db.examDao().observeAll()
 
-    fun timetableState(semester: String): Flow<TimetableSnapshot> =
-        combine(
+    fun timetableState(semester: String): Flow<TimetableSnapshot> {
+        val base = combine(
             db.courseDao().observe(semester),
             db.weekDao().observe(semester),
             db.periodDao().observe(semester),
@@ -44,6 +48,17 @@ class TimetableRepository(private val db: AppDatabase) {
                 notes = notes,
             )
         }
+        val adjustments = combine(
+            db.daySuspensionDao().observe(semester),
+            db.dayMoveDao().observe(semester),
+            db.coursePatchDao().observe(semester),
+        ) { suspensions, moves, patches ->
+            ScheduleAdjustments(suspensions, moves, patches)
+        }
+        return combine(base, adjustments) { snap, adjust ->
+            snap.copy(suspensions = adjust.suspensions, moves = adjust.moves, patches = adjust.patches)
+        }
+    }
 
     suspend fun listCourses(semester: String) = db.courseDao().list(semester)
     suspend fun listWeeks(semester: String) = db.weekDao().list(semester)
@@ -227,11 +242,82 @@ class TimetableRepository(private val db: AppDatabase) {
         }
     }
 
+    suspend fun adjustments(semester: String) = ScheduleAdjustments(
+        suspensions = db.daySuspensionDao().list(semester),
+        moves = db.dayMoveDao().list(semester),
+        patches = db.coursePatchDao().list(semester),
+    )
+
+    suspend fun listAllSuspensions() = db.daySuspensionDao().listAll()
+    suspend fun listAllMoves() = db.dayMoveDao().listAll()
+    suspend fun listAllPatches() = db.coursePatchDao().listAll()
+
+    suspend fun replaceSuspensions(semester: String, weekNo: Int, days: Set<Int>) {
+        db.withTransaction {
+            db.daySuspensionDao().deleteWeek(semester, weekNo)
+            val rows = days.filter { it in 1..7 }.map {
+                DaySuspensionEntity(acadYearSemester = semester, weekNo = weekNo, dayOfWeek = it)
+            }
+            if (rows.isNotEmpty()) db.daySuspensionDao().insertAll(rows)
+        }
+    }
+
+    suspend fun saveMove(item: DayMoveEntity) {
+        if (item.fromWeek == item.toWeek && item.fromDay == item.toDay) {
+            db.dayMoveDao().deleteOne(item.acadYearSemester, item.fromWeek, item.fromDay)
+        } else {
+            db.dayMoveDao().insert(item.copy(id = 0))
+        }
+    }
+
+    suspend fun deleteMove(semester: String, fromWeek: Int, fromDay: Int) {
+        db.dayMoveDao().deleteOne(semester, fromWeek, fromDay)
+    }
+
+    suspend fun savePatch(item: CoursePatchEntity) {
+        val empty = item.courseName == null && item.teacher == null && item.place == null &&
+            item.dayOfWeek == null && item.startPeriod == null && item.endPeriod == null && item.notes == null
+        if (empty) {
+            db.coursePatchDao().deleteOne(item.acadYearSemester, item.courseKey, item.weekNo)
+        } else {
+            db.coursePatchDao().insert(item.copy(id = 0))
+        }
+    }
+
+    suspend fun deletePatch(semester: String, courseKey: String, weekNo: Int) {
+        db.coursePatchDao().deleteOne(semester, courseKey, weekNo)
+    }
+
+    suspend fun replaceAdjustments(
+        semester: String,
+        suspensions: List<DaySuspensionEntity>,
+        moves: List<DayMoveEntity>,
+        patches: List<CoursePatchEntity>,
+    ) {
+        db.withTransaction {
+            db.daySuspensionDao().deleteSemester(semester)
+            db.dayMoveDao().deleteSemester(semester)
+            db.coursePatchDao().deleteSemester(semester)
+            if (suspensions.isNotEmpty()) {
+                db.daySuspensionDao().insertAll(suspensions.map { it.copy(id = 0, acadYearSemester = semester) })
+            }
+            if (moves.isNotEmpty()) {
+                db.dayMoveDao().insertAll(moves.map { it.copy(id = 0, acadYearSemester = semester) })
+            }
+            if (patches.isNotEmpty()) {
+                db.coursePatchDao().insertAll(patches.map { it.copy(id = 0, acadYearSemester = semester) })
+            }
+        }
+    }
+
     suspend fun clearAll() {
         db.courseDao().clear()
         db.examDao().clear()
         db.examWeekDao().clear()
         db.stickyNoteDao().clear()
+        db.daySuspensionDao().clear()
+        db.dayMoveDao().clear()
+        db.coursePatchDao().clear()
         db.semesterDao().clear()
         db.rawImportDao().clear()
     }
@@ -255,4 +341,7 @@ data class TimetableSnapshot(
     val weeks: List<WeekEntity>,
     val periods: List<PeriodEntity>,
     val notes: List<StickyNoteEntity> = emptyList(),
+    val suspensions: List<DaySuspensionEntity> = emptyList(),
+    val moves: List<DayMoveEntity> = emptyList(),
+    val patches: List<CoursePatchEntity> = emptyList(),
 )

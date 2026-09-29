@@ -44,7 +44,9 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.automirrored.outlined.StickyNote2
 import androidx.compose.material.icons.outlined.CalendarViewMonth
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.ViewWeek
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -101,6 +103,11 @@ import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.prefs.UserSettings
 import cn.sysu.kcb.data.repo.TimetableSnapshot
 import cn.sysu.kcb.domain.CourseColors
+import cn.sysu.kcb.domain.CourseField
+import cn.sysu.kcb.domain.PlacedCourse
+import cn.sysu.kcb.domain.ScheduleAdjustments
+import cn.sysu.kcb.domain.placedCourses
+import cn.sysu.kcb.domain.weekdayLabel
 import cn.sysu.kcb.domain.SemesterRange
 import cn.sysu.kcb.domain.TeachingWeek
 import cn.sysu.kcb.domain.WeekMask
@@ -177,6 +184,8 @@ fun TimetableScreen(
     var addSemesterOpen by remember { mutableStateOf(false) }
     var weekPicker by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
+    var suspendOpen by remember { mutableStateOf(false) }
+    var adjustOpen by remember { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf(false) }
     var termOverview by rememberSaveable { mutableStateOf(false) }
     var viewingCourses by remember { mutableStateOf<List<CourseEntity>?>(null) }
@@ -344,6 +353,22 @@ fun TimetableScreen(
                                 },
                             )
                             DropdownMenuItem(
+                                text = { Text("一键停课") },
+                                leadingIcon = { Icon(Icons.Outlined.EventBusy, contentDescription = null) },
+                                onClick = {
+                                    moreMenu = false
+                                    suspendOpen = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("一键调课") },
+                                leadingIcon = { Icon(Icons.Outlined.SwapHoriz, contentDescription = null) },
+                                onClick = {
+                                    moreMenu = false
+                                    adjustOpen = true
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text("添加便签") },
                                 leadingIcon = { Icon(Icons.AutoMirrored.Outlined.StickyNote2, contentDescription = null) },
                                 onClick = {
@@ -471,6 +496,11 @@ fun TimetableScreen(
                                 },
                                 themeColor = settings.themeColor,
                                 notes = stickyNotesOnWeek(snapshot.notes, weekNo),
+                                placed = placedCourses(
+                                    snapshot.courses,
+                                    weekNo,
+                                    ScheduleAdjustments(snapshot.suspensions, snapshot.moves, snapshot.patches),
+                                ),
                                 noteEditable = !settings.stickyNotesLocked,
                                 onNoteChange = { viewModel.saveStickyNote(it) },
                                 onNoteEdit = { editingNote = it },
@@ -543,6 +573,48 @@ fun TimetableScreen(
                         editingNote = null
                     },
                     onDismiss = { editingNote = null },
+                )
+            }
+            val adjustWeek = if (termOverview) {
+                academicWeek ?: selectedWeek.coerceAtLeast(1)
+            } else {
+                displayedWeekNo(pagerState, selectedWeek, syncingPager)
+            }
+            if (suspendOpen) {
+                SuspendClassesDialog(
+                    initialWeek = adjustWeek,
+                    maxWeek = maxWeek,
+                    suspensions = snapshot.suspensions,
+                    onSave = { week, days ->
+                        viewModel.setSuspendedDays(semester, week, days)
+                        suspendOpen = false
+                    },
+                    onDismiss = { suspendOpen = false },
+                )
+            }
+            if (adjustOpen) {
+                AdjustClassesDialog(
+                    semester = semester,
+                    initialWeek = adjustWeek,
+                    maxWeek = maxWeek,
+                    courses = snapshot.courses,
+                    moves = snapshot.moves,
+                    patches = snapshot.patches,
+                    onMove = { fromWeek, fromDay, toWeek, toDay ->
+                        viewModel.moveClassDay(semester, fromWeek, fromDay, toWeek, toDay)
+                        adjustOpen = false
+                    },
+                    onClearMove = { fromWeek, fromDay ->
+                        viewModel.clearClassMove(semester, fromWeek, fromDay)
+                    },
+                    onSavePatch = { patch ->
+                        viewModel.saveCoursePatch(patch)
+                        adjustOpen = false
+                    },
+                    onClearPatch = { key, week ->
+                        viewModel.clearCoursePatch(semester, key, week)
+                    },
+                    onDismiss = { adjustOpen = false },
                 )
             }
         }
@@ -788,6 +860,7 @@ private val compactTime = TextStyle(
 internal fun TimetableGrid(
     periods: List<PeriodEntity>,
     courses: List<CourseEntity>,
+    placed: List<PlacedCourse>? = null,
     weekStart: LocalDate?,
     onCourses: (List<CourseEntity>) -> Unit,
     onEmpty: ((Int, Int) -> Unit)?,
@@ -840,7 +913,8 @@ internal fun TimetableGrid(
             delay(nextHighlightDelayMs(rows, now))
         }
     }
-    val groups = remember(courses) { overlapGroups(courses) }
+    val cards = placed ?: courses.map { PlacedCourse(it) }
+    val groups = remember(cards) { overlapGroups(cards) }
     val vScroll = rememberScrollState()
     BoxWithConstraints(Modifier.fillMaxSize().verticalScroll(vScroll)) {
         val colW = (maxWidth - timeW) / 7
@@ -1075,10 +1149,18 @@ internal fun TimetableGrid(
                 }
             }
             groups.forEach { group ->
-                val course = group.first()
-                val cardColor = CourseColors.display(course.color, course.courseName, themeColor)
-                val startPeriod = group.minOf { it.startPeriod }
-                val endPeriod = group.maxOf { it.endPeriod }
+                val placedCard = group.first()
+                val course = placedCard.course
+                val muted = placedCard.muted
+                val highlights = placedCard.highlights
+                val cardColor = if (muted) {
+                    0xFFBDBDBD
+                } else {
+                    CourseColors.display(course.color, course.courseName, themeColor)
+                }
+                val ink = if (muted) Color(0xFF424242) else Color.White
+                val startPeriod = group.minOf { it.course.startPeriod }
+                val endPeriod = group.maxOf { it.course.endPeriod }
                 val startIndex = rows.indexOfFirst { it.sectionNumber == startPeriod }.takeIf { it >= 0 }
                     ?: (startPeriod - 1)
                 val span = (endPeriod - startPeriod + 1).coerceAtLeast(1)
@@ -1091,42 +1173,33 @@ internal fun TimetableGrid(
                         .size(width = colW - 2.dp, height = periodH * span - 2.dp)
                         .clip(RoundedCornerShape(5.dp))
                         .background(Color(cardColor))
-                        .clickable { onCourses(group) }
+                        .clickable { onCourses(group.map { it.course }) }
                         .padding(horizontal = 2.dp, vertical = 2.dp),
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                        Text(
-                            course.courseName,
-                            color = Color.White,
-                            style = compactName,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (course.teacher.isNotBlank()) {
-                            Text(
-                                course.teacher,
-                                color = Color.White.copy(alpha = 0.92f),
-                                style = compactMeta,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                        if (CourseField.TIME in highlights) {
+                            CourseLine(
+                                "${weekdayLabel(course.dayOfWeek)} ${course.startPeriod}-${course.endPeriod}节",
+                                compactMeta,
+                                ink,
+                                highlight = true,
                             )
                         }
-                        if (course.place.isNotBlank()) {
-                            Text(
-                                displayPlace(course.place),
-                                color = Color.White.copy(alpha = 0.92f),
-                                style = compactMeta,
-                                overflow = TextOverflow.Ellipsis,
+                        CourseLine(course.courseName, compactName, ink, CourseField.NAME in highlights)
+                        if (course.teacher.isNotBlank() || CourseField.TEACHER in highlights) {
+                            CourseLine(course.teacher.ifBlank { "教师已清空" }, compactMeta, ink, CourseField.TEACHER in highlights, maxLines = 1)
+                        }
+                        if (course.place.isNotBlank() || CourseField.PLACE in highlights) {
+                            CourseLine(
+                                displayPlace(course.place).ifBlank { "地点已清空" },
+                                compactMeta,
+                                ink,
+                                CourseField.PLACE in highlights,
                             )
                         }
-                        if (course.notes.isNotBlank()) {
+                        if (course.notes.isNotBlank() || CourseField.NOTES in highlights) {
                             Spacer(Modifier.height(10.dp))
-                            Text(
-                                course.notes,
-                                color = Color.White.copy(alpha = 0.92f),
-                                style = compactMeta,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            CourseLine(course.notes.ifBlank { "备注已清空" }, compactMeta, ink, CourseField.NOTES in highlights, maxLines = 2)
                         }
                     }
                     if (group.size > 1) {
@@ -1160,20 +1233,20 @@ internal fun TimetableGrid(
     }
 }
 
-private fun overlapGroups(courses: List<CourseEntity>): List<List<CourseEntity>> {
-    val result = mutableListOf<List<CourseEntity>>()
-    for ((_, dayCourses) in courses.groupBy { it.dayOfWeek }) {
+private fun overlapGroups(courses: List<PlacedCourse>): List<List<PlacedCourse>> {
+    val result = mutableListOf<List<PlacedCourse>>()
+    for ((_, dayCourses) in courses.groupBy { it.course.dayOfWeek to it.muted }) {
         val remaining = dayCourses
-            .sortedWith(compareBy({ it.startPeriod }, { it.endPeriod }, { it.courseName }, { it.id }))
+            .sortedWith(compareBy({ it.course.startPeriod }, { it.course.endPeriod }, { it.course.courseName }, { it.course.id }))
             .toMutableList()
         while (remaining.isNotEmpty()) {
             val group = mutableListOf(remaining.removeAt(0))
             var changed = true
             while (changed) {
                 changed = false
-                val start = group.minOf { it.startPeriod }
-                val end = group.maxOf { it.endPeriod }
-                val hit = remaining.filter { it.startPeriod <= end && it.endPeriod >= start }
+                val start = group.minOf { it.course.startPeriod }
+                val end = group.maxOf { it.course.endPeriod }
+                val hit = remaining.filter { it.course.startPeriod <= end && it.course.endPeriod >= start }
                 if (hit.isNotEmpty()) {
                     remaining.removeAll(hit.toSet())
                     group += hit
@@ -1184,6 +1257,31 @@ private fun overlapGroups(courses: List<CourseEntity>): List<List<CourseEntity>>
         }
     }
     return result
+}
+
+@Composable
+private fun CourseLine(
+    text: String,
+    style: TextStyle,
+    ink: Color,
+    highlight: Boolean,
+    maxLines: Int = Int.MAX_VALUE,
+) {
+    Text(
+        text,
+        color = if (highlight) Color(0xFF3E2723) else ink,
+        style = style,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        modifier = if (highlight) {
+            Modifier
+                .clip(RoundedCornerShape(2.dp))
+                .background(Color(0xFFFFF59D))
+                .padding(horizontal = 1.dp)
+        } else {
+            Modifier
+        },
+    )
 }
 
 private fun displayPlace(place: String): String =

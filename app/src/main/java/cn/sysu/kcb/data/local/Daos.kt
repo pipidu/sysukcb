@@ -253,3 +253,81 @@ interface StickyNoteDao {
     @Query("DELETE FROM sticky_notes")
     suspend fun clear()
 }
+
+@Dao
+interface DaySuspensionDao {
+    @Query("SELECT * FROM day_suspensions WHERE acadYearSemester = :sem ORDER BY weekNo, dayOfWeek")
+    fun observe(sem: String): Flow<List<DaySuspensionEntity>>
+
+    @Query("SELECT * FROM day_suspensions WHERE acadYearSemester = :sem ORDER BY weekNo, dayOfWeek")
+    suspend fun list(sem: String): List<DaySuspensionEntity>
+
+    @Query("SELECT * FROM day_suspensions")
+    suspend fun listAll(): List<DaySuspensionEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<DaySuspensionEntity>)
+
+    @Query("DELETE FROM day_suspensions WHERE acadYearSemester = :sem AND weekNo = :week")
+    suspend fun deleteWeek(sem: String, week: Int)
+
+    @Query("DELETE FROM day_suspensions WHERE acadYearSemester = :sem")
+    suspend fun deleteSemester(sem: String)
+
+    @Query("DELETE FROM day_suspensions")
+    suspend fun clear()
+}
+
+@Dao
+interface DayMoveDao {
+    @Query("SELECT * FROM day_moves WHERE acadYearSemester = :sem ORDER BY fromWeek, fromDay")
+    fun observe(sem: String): Flow<List<DayMoveEntity>>
+
+    @Query("SELECT * FROM day_moves WHERE acadYearSemester = :sem ORDER BY fromWeek, fromDay")
+    suspend fun list(sem: String): List<DayMoveEntity>
+
+    @Query("SELECT * FROM day_moves")
+    suspend fun listAll(): List<DayMoveEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(item: DayMoveEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<DayMoveEntity>)
+
+    @Query("DELETE FROM day_moves WHERE acadYearSemester = :sem AND fromWeek = :week AND fromDay = :day")
+    suspend fun deleteOne(sem: String, week: Int, day: Int)
+
+    @Query("DELETE FROM day_moves WHERE acadYearSemester = :sem")
+    suspend fun deleteSemester(sem: String)
+
+    @Query("DELETE FROM day_moves")
+    suspend fun clear()
+}
+
+@Dao
+interface CoursePatchDao {
+    @Query("SELECT * FROM course_patches WHERE acadYearSemester = :sem")
+    fun observe(sem: String): Flow<List<CoursePatchEntity>>
+
+    @Query("SELECT * FROM course_patches WHERE acadYearSemester = :sem")
+    suspend fun list(sem: String): List<CoursePatchEntity>
+
+    @Query("SELECT * FROM course_patches")
+    suspend fun listAll(): List<CoursePatchEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(item: CoursePatchEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<CoursePatchEntity>)
+
+    @Query("DELETE FROM course_patches WHERE acadYearSemester = :sem AND courseKey = :key AND weekNo = :week")
+    suspend fun deleteOne(sem: String, key: String, week: Int)
+
+    @Query("DELETE FROM course_patches WHERE acadYearSemester = :sem")
+    suspend fun deleteSemester(sem: String)
+
+    @Query("DELETE FROM course_patches")
+    suspend fun clear()
+}

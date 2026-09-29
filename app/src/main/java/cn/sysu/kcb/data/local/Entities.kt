@@ -148,6 +148,51 @@ data class StickyNoteEntity(
     val fontHighlight: Boolean = false,
 )
 
+@Serializable
+@Entity(
+    tableName = "day_suspensions",
+    indices = [Index(value = ["acadYearSemester", "weekNo", "dayOfWeek"], unique = true)],
+)
+data class DaySuspensionEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val acadYearSemester: String,
+    val weekNo: Int,
+    val dayOfWeek: Int,
+)
+
+@Serializable
+@Entity(
+    tableName = "day_moves",
+    indices = [Index(value = ["acadYearSemester", "fromWeek", "fromDay"], unique = true)],
+)
+data class DayMoveEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val acadYearSemester: String,
+    val fromWeek: Int,
+    val fromDay: Int,
+    val toWeek: Int,
+    val toDay: Int,
+)
+
+@Serializable
+@Entity(
+    tableName = "course_patches",
+    indices = [Index(value = ["acadYearSemester", "courseKey", "weekNo"], unique = true)],
+)
+data class CoursePatchEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val acadYearSemester: String,
+    val courseKey: String,
+    val weekNo: Int,
+    val courseName: String? = null,
+    val teacher: String? = null,
+    val place: String? = null,
+    val dayOfWeek: Int? = null,
+    val startPeriod: Int? = null,
+    val endPeriod: Int? = null,
+    val notes: String? = null,
+)
+
 @Entity(tableName = "friend_packs")
 data class FriendPackEntity(
     @PrimaryKey val id: String,

@@ -3,7 +3,10 @@ package cn.sysu.kcb.data.repo
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.FileProvider
+import cn.sysu.kcb.data.local.CoursePatchEntity
 import cn.sysu.kcb.data.local.CourseEntity
+import cn.sysu.kcb.data.local.DayMoveEntity
+import cn.sysu.kcb.data.local.DaySuspensionEntity
 import cn.sysu.kcb.data.local.ExamEntity
 import cn.sysu.kcb.data.local.ExamWeekEntity
 import cn.sysu.kcb.data.local.PeriodEntity
@@ -28,6 +31,9 @@ data class SharePack(
     val exams: List<ExamEntity> = emptyList(),
     val examWeeks: List<ExamWeekEntity> = emptyList(),
     val notes: List<StickyNoteEntity> = emptyList(),
+    val suspensions: List<DaySuspensionEntity> = emptyList(),
+    val moves: List<DayMoveEntity> = emptyList(),
+    val patches: List<CoursePatchEntity> = emptyList(),
 )
 
 class ShareService(
@@ -37,7 +43,7 @@ class ShareService(
 ) {
     suspend fun exportSemester(semester: String): File {
         val pack = SharePack(
-            version = 2,
+            version = 3,
             semesters = repo.listSemesters().filter { it.acadYearSemester == semester },
             weeks = repo.listWeeks(semester).map { it.copy(id = 0) },
             periods = repo.listPeriods(semester).map { it.copy(id = 0) },
@@ -45,6 +51,9 @@ class ShareService(
             exams = repo.listExams(semester).map { it.copy(id = 0) },
             examWeeks = repo.listExamWeeks(semester).map { it.copy(id = 0) },
             notes = repo.listNotes(semester).map { it.copy(id = 0) },
+            suspensions = repo.adjustments(semester).suspensions.map { it.copy(id = 0) },
+            moves = repo.adjustments(semester).moves.map { it.copy(id = 0) },
+            patches = repo.adjustments(semester).patches.map { it.copy(id = 0) },
         )
         val dir = File(context.cacheDir, "share").apply { mkdirs() }
         dir.listFiles()?.forEach { child ->
@@ -59,7 +68,7 @@ class ShareService(
         return repo.withTransaction {
             encode(
                 SharePack(
-                    version = 2,
+                    version = 3,
                     nickname = nickname,
                     semesters = repo.listSemesters(),
                     weeks = repo.listAllWeeks().map { it.copy(id = 0) },
@@ -68,6 +77,9 @@ class ShareService(
                     exams = repo.listAllExams().map { it.copy(id = 0) },
                     examWeeks = repo.listAllExamWeeks().map { it.copy(id = 0) },
                     notes = repo.listAllNotes().map { it.copy(id = 0) },
+                    suspensions = repo.listAllSuspensions().map { it.copy(id = 0) },
+                    moves = repo.listAllMoves().map { it.copy(id = 0) },
+                    patches = repo.listAllPatches().map { it.copy(id = 0) },
                 ),
             )
         }
@@ -110,6 +122,9 @@ class ShareService(
         val groupedExams = pack.exams.groupBy { it.acadYearSemester }
         val groupedExamWeeks = pack.examWeeks.groupBy { it.acadYearSemester }
         val groupedNotes = pack.notes.groupBy { it.acadYearSemester }
+        val groupedSuspensions = pack.suspensions.groupBy { it.acadYearSemester }
+        val groupedMoves = pack.moves.groupBy { it.acadYearSemester }
+        val groupedPatches = pack.patches.groupBy { it.acadYearSemester }
         val semesters = pack.semesters.ifEmpty {
             groupedCourses.keys.map {
                 SemesterEntity(it, it, 0, 0, 0, false)
@@ -128,6 +143,14 @@ class ShareService(
             )
             if (pack.version >= 2) {
                 repo.replaceNotes(semester.acadYearSemester, groupedNotes[semester.acadYearSemester].orEmpty())
+            }
+            if (pack.version >= 3) {
+                repo.replaceAdjustments(
+                    semester.acadYearSemester,
+                    groupedSuspensions[semester.acadYearSemester].orEmpty(),
+                    groupedMoves[semester.acadYearSemester].orEmpty(),
+                    groupedPatches[semester.acadYearSemester].orEmpty(),
+                )
             }
         }
         if (pack.version >= 2) {

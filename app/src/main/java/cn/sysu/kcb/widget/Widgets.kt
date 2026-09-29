@@ -42,7 +42,9 @@ import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.PeriodEntity
 import cn.sysu.kcb.data.local.WeekEntity
 import cn.sysu.kcb.domain.CourseColors
-import cn.sysu.kcb.domain.WeekMask
+import cn.sysu.kcb.domain.ScheduleAdjustments
+import cn.sysu.kcb.domain.activeCoursesOn
+import cn.sysu.kcb.domain.placedCourses
 import cn.sysu.kcb.notify.ClassAlarmScheduler
 import java.time.LocalDate
 import java.time.LocalTime
@@ -143,15 +145,19 @@ object WidgetData {
         val startMillis = semesterMeta?.startMillis ?: 0L
         val weeks = app.container.timetable.listWeeks(semester)
         val courses = app.container.timetable.listCourses(semester)
+        val adjustments = if (semester.isBlank()) ScheduleAdjustments() else app.container.timetable.adjustments(semester)
         val periods = app.container.timetable.listPeriods(semester)
         val today = LocalDate.now()
         val weekNo = ClassAlarmScheduler.resolveWeek(today, weeks, startMillis)
         val todayCourses = if (weekNo == null) {
             emptyList()
         } else {
-            courses
-                .filter { it.dayOfWeek == today.dayOfWeek.value && WeekMask.has(it.weeksMask, weekNo) }
-                .sortedBy { it.startPeriod }
+            activeCoursesOn(courses, weekNo, today.dayOfWeek.value, adjustments)
+        }
+        val weekCards = if (weekNo == null) {
+            emptyList()
+        } else {
+            placedCourses(courses, weekNo, adjustments).filter { !it.muted }.map { it.course }
         }
         val weekday = weekdayName(today.dayOfWeek.value)
         return WidgetState(
@@ -164,10 +170,10 @@ object WidgetData {
                 "${today.monthValue}/${today.dayOfMonth} $weekday · 学期未开始"
             },
             today = todayCourses,
-            weekCourses = if (weekNo == null) emptyList() else courses.filter { WeekMask.has(it.weeksMask, weekNo) },
+            weekCourses = weekCards,
             periods = periods,
             weekNo = weekNo ?: 0,
-            upcoming = upcomingClasses(courses, periods, weeks, startMillis, 2, settings.themeColor),
+            upcoming = upcomingClasses(courses, periods, weeks, startMillis, 2, settings.themeColor, adjustments),
         )
     }
 
@@ -188,6 +194,7 @@ object WidgetData {
         semesterStart: Long,
         limit: Int,
         theme: Long,
+        adjustments: ScheduleAdjustments = ScheduleAdjustments(),
     ): List<UpcomingItem> {
         val now = java.time.LocalDateTime.now()
         val today = now.toLocalDate()
@@ -197,9 +204,7 @@ object WidgetData {
             if (result.size >= limit) break
             val date = today.plusDays(offset.toLong())
             val weekNo = ClassAlarmScheduler.resolveWeek(date, weeks, semesterStart) ?: continue
-            val dayCourses = courses
-                .filter { it.dayOfWeek == date.dayOfWeek.value && WeekMask.has(it.weeksMask, weekNo) }
-                .sortedBy { it.startPeriod }
+            val dayCourses = activeCoursesOn(courses, weekNo, date.dayOfWeek.value, adjustments)
             for (course in dayCourses) {
                 val startRaw = periodMap[course.startPeriod]?.startTime.orEmpty()
                 val endRaw = periodMap[course.endPeriod]?.endTime.orEmpty()

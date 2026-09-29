@@ -22,8 +22,10 @@ import cn.sysu.kcb.data.local.PeriodEntity
 import cn.sysu.kcb.data.local.WeekEntity
 import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.prefs.UserSettings
+import cn.sysu.kcb.domain.ScheduleAdjustments
 import cn.sysu.kcb.domain.TeachingWeek
 import cn.sysu.kcb.domain.WeekMask
+import cn.sysu.kcb.domain.activeCoursesOn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -141,6 +143,7 @@ class ClassAlarmScheduler(private val context: Context) {
         weeks: List<WeekEntity>,
         settings: UserSettings,
         semesterStartMillis: Long = 0L,
+        adjustments: ScheduleAdjustments = ScheduleAdjustments(),
     ) {
         ensureChannels()
         cancelUpcoming()
@@ -155,9 +158,12 @@ class ClassAlarmScheduler(private val context: Context) {
             for (offset in 0..13) {
                 val date = today.plusDays(offset.toLong())
                 val weekNo = resolveWeek(date, weeks, semesterStartMillis)
-                for (course in courses) {
-                    if (course.dayOfWeek != date.dayOfWeek.value) continue
-                    if (weekNo != null && !WeekMask.has(course.weeksMask, weekNo)) continue
+                val dayCourses = if (weekNo == null) {
+                    courses.filter { it.dayOfWeek == date.dayOfWeek.value }
+                } else {
+                    activeCoursesOn(courses, weekNo, date.dayOfWeek.value, adjustments)
+                }
+                for (course in dayCourses) {
                     val start = periodMap[course.startPeriod]?.startTime ?: continue
                     val startTime = parseTime(start) ?: continue
                     val trigger = LocalDateTime.of(date, startTime)
@@ -357,5 +363,6 @@ suspend fun rescheduleFromStore(context: Context) {
         weeks = if (semester.isBlank()) emptyList() else container.timetable.listWeeks(semester),
         settings = settings,
         semesterStartMillis = startMillis,
+        adjustments = if (semester.isBlank()) ScheduleAdjustments() else container.timetable.adjustments(semester),
     )
 }

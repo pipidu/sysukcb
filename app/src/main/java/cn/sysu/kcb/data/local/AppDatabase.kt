@@ -19,8 +19,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         WeekdayEntity::class,
         FriendPackEntity::class,
         StickyNoteEntity::class,
+        DaySuspensionEntity::class,
+        DayMoveEntity::class,
+        CoursePatchEntity::class,
     ],
-        version = 6,
+        version = 7,
         exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -34,6 +37,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun weekdayDao(): WeekdayDao
     abstract fun friendPackDao(): FriendPackDao
     abstract fun stickyNoteDao(): StickyNoteDao
+    abstract fun daySuspensionDao(): DaySuspensionDao
+    abstract fun dayMoveDao(): DayMoveDao
+    abstract fun coursePatchDao(): CoursePatchDao
 
     companion object {
         private val MIGRATION_2_3 = object : Migration(2, 3) {
@@ -96,9 +102,62 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS day_suspensions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        acadYearSemester TEXT NOT NULL,
+                        weekNo INTEGER NOT NULL,
+                        dayOfWeek INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS index_day_suspensions_acadYearSemester_weekNo_dayOfWeek ON day_suspensions (acadYearSemester, weekNo, dayOfWeek)",
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS day_moves (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        acadYearSemester TEXT NOT NULL,
+                        fromWeek INTEGER NOT NULL,
+                        fromDay INTEGER NOT NULL,
+                        toWeek INTEGER NOT NULL,
+                        toDay INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS index_day_moves_acadYearSemester_fromWeek_fromDay ON day_moves (acadYearSemester, fromWeek, fromDay)",
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS course_patches (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        acadYearSemester TEXT NOT NULL,
+                        courseKey TEXT NOT NULL,
+                        weekNo INTEGER NOT NULL,
+                        courseName TEXT,
+                        teacher TEXT,
+                        place TEXT,
+                        dayOfWeek INTEGER,
+                        startPeriod INTEGER,
+                        endPeriod INTEGER,
+                        notes TEXT
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS index_course_patches_acadYearSemester_courseKey_weekNo ON course_patches (acadYearSemester, courseKey, weekNo)",
+                )
+            }
+        }
+
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "sysu-kcb.db")
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .fallbackToDestructiveMigrationFrom(1)
                 .build()
     }
