@@ -172,6 +172,7 @@ data class DayMoveEntity(
     val fromDay: Int,
     val toWeek: Int,
     val toDay: Int,
+    val copy: Boolean = false,
 )
 
 @Serializable

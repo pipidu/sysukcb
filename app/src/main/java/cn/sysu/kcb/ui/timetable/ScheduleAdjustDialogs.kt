@@ -96,7 +96,7 @@ internal fun AdjustClassesDialog(
     courses: List<CourseEntity>,
     moves: List<DayMoveEntity>,
     patches: List<CoursePatchEntity>,
-    onMove: (fromWeek: Int, fromDay: Int, toWeek: Int, toDay: Int) -> Unit,
+    onMove: (fromWeek: Int, fromDay: Int, toWeek: Int, toDay: Int, copy: Boolean) -> Unit,
     onClearMove: (fromWeek: Int, fromDay: Int) -> Unit,
     onSavePatch: (CoursePatchEntity) -> Unit,
     onClearPatch: (courseKey: String, week: Int) -> Unit,
@@ -142,20 +142,27 @@ internal fun AdjustClassesDialog(
             ) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     KcbFilterChip(selected = mode == 0, onClick = { mode = 0 }, label = { Text("挪到另一天") })
+                    KcbFilterChip(selected = mode == 2, onClick = { mode = 2 }, label = { Text("复制到某一天") })
                     KcbFilterChip(selected = mode == 1, onClick = { mode = 1 }, label = { Text("改某一节") })
                 }
-                if (mode == 0) {
-                    Text("停课的日期也能调走。调过去之后，停的是到达那天原来的课，被调走的课照常上课。")
+                if (mode == 0 || mode == 2) {
+                    Text(
+                        if (mode == 2) {
+                            "原来那天的课保留。复制过去之后，停的是到达那天原来的课。"
+                        } else {
+                            "停课的日期也能调走。调过去之后，停的是到达那天原来的课，被调走的课照常上课。"
+                        },
+                    )
                     Text("从", fontWeight = FontWeight.Medium)
                     WeekStepper(fromWeek, weekMax, weeks, semesterStartMillis) { fromWeek = it }
                     DayChips(fromWeek, fromDay, weeks, semesterStartMillis) { fromDay = it }
-                    Text("调到", fontWeight = FontWeight.Medium)
+                    Text(if (mode == 2) "复制到" else "调到", fontWeight = FontWeight.Medium)
                     WeekStepper(toWeek, weekMax, weeks, semesterStartMillis) { toWeek = it }
                     DayChips(toWeek, toDay, weeks, semesterStartMillis) { toDay = it }
                     moves.forEach { move ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "${dayChoiceLabel(move.fromWeek, move.fromDay, weeks, semesterStartMillis)} → ${dayChoiceLabel(move.toWeek, move.toDay, weeks, semesterStartMillis)}",
+                                "${if (move.copy) "复制 " else "挪动 "}${dayChoiceLabel(move.fromWeek, move.fromDay, weeks, semesterStartMillis)} → ${dayChoiceLabel(move.toWeek, move.toDay, weeks, semesterStartMillis)}",
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.bodySmall,
                             )
@@ -208,8 +215,10 @@ internal fun AdjustClassesDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (mode == 0) {
-                        if (fromWeek != toWeek || fromDay != toDay) onMove(fromWeek, fromDay, toWeek, toDay)
+                    if (mode == 0 || mode == 2) {
+                        if (fromWeek != toWeek || fromDay != toDay) {
+                            onMove(fromWeek, fromDay, toWeek, toDay, mode == 2)
+                        }
                     } else {
                         val course = picked ?: return@TextButton
                         val start = minOf(startPeriod, endPeriod)
@@ -230,8 +239,8 @@ internal fun AdjustClassesDialog(
                         )
                     }
                 },
-                enabled = if (mode == 0) fromWeek != toWeek || fromDay != toDay else picked != null,
-            ) { Text(if (mode == 0) "调课" else "保存") }
+                enabled = if (mode == 0 || mode == 2) fromWeek != toWeek || fromDay != toDay else picked != null,
+            ) { Text(if (mode == 2) "复制" else if (mode == 0) "调课" else "保存") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("关闭") }

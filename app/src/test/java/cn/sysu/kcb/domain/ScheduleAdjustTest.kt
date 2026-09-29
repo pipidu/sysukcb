@@ -36,6 +36,32 @@ class ScheduleAdjustTest {
     }
 
     @Test
+    fun copyKeepsSourceAndStopsDestinationOriginals() {
+        val copied = course("高数", day = 1)
+        val stayed = course("英语", day = 3)
+        val courses = listOf(copied, stayed)
+        val adjustments = ScheduleAdjustments(
+            moves = listOf(
+                DayMoveEntity(
+                    acadYearSemester = "2026-1",
+                    fromWeek = 1,
+                    fromDay = 1,
+                    toWeek = 1,
+                    toDay = 3,
+                    copy = true,
+                ),
+            ),
+        )
+        val placed = placedCourses(courses, 1, adjustments)
+        assertEquals(
+            listOf("高数" to (1 to false), "高数" to (3 to false), "英语" to (3 to true)),
+            placed.map { it.course.courseName to (it.course.dayOfWeek to it.muted) },
+        )
+        assertEquals(listOf("高数"), activeCoursesOn(courses, 1, 1, adjustments).map { it.courseName })
+        assertEquals(listOf("高数"), activeCoursesOn(courses, 1, 3, adjustments).map { it.courseName })
+    }
+
+    @Test
     fun suspendedDayCanStillBeMoved() {
         val course = course("高数", day = 1)
         val adjustments = ScheduleAdjustments(

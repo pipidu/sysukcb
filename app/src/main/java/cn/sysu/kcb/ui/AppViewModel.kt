@@ -811,7 +811,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         message.value = if (days.isEmpty()) "已取消第${weekNo}周停课" else "已设置停课，这些天的课变灰且不再提醒"
     }
 
-    fun moveClassDay(semester: String, fromWeek: Int, fromDay: Int, toWeek: Int, toDay: Int) = viewModelScope.launch {
+    fun moveClassDay(
+        semester: String,
+        fromWeek: Int,
+        fromDay: Int,
+        toWeek: Int,
+        toDay: Int,
+        copy: Boolean = false,
+    ) = viewModelScope.launch {
         val id = semester.trim()
         if (id.isBlank()) return@launch
         container.timetable.ensureSemester(id)
@@ -822,11 +829,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 fromDay = fromDay,
                 toWeek = toWeek,
                 toDay = toDay,
+                copy = copy,
             ),
         )
         refreshAlarms()
         WidgetData.refreshAll(getApplication())
-        message.value = "已把这天的课调走，到达那天原来的课停课"
+        message.value = if (copy) {
+            "已复制到另一天，原来的课保留，到达那天原来的课停课"
+        } else {
+            "已把这天的课调走，到达那天原来的课停课"
+        }
     }
 
     fun clearClassMove(semester: String, fromWeek: Int, fromDay: Int) = viewModelScope.launch {

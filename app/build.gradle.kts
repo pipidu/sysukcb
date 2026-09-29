@@ -22,8 +22,8 @@ android {
         applicationId = "cn.sysu.kcb"
         minSdk = 26
         targetSdk = 35
-        versionCode = 84
-        versionName = "1.2.12"
+        versionCode = 85
+        versionName = "1.2.13"
         vectorDrawables.useSupportLibrary = true
     }
 

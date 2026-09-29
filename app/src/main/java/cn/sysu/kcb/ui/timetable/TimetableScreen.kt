@@ -624,8 +624,8 @@ fun TimetableScreen(
                     courses = snapshot.courses,
                     moves = snapshot.moves,
                     patches = snapshot.patches,
-                    onMove = { fromWeek, fromDay, toWeek, toDay ->
-                        viewModel.moveClassDay(semester, fromWeek, fromDay, toWeek, toDay)
+                    onMove = { fromWeek, fromDay, toWeek, toDay, copy ->
+                        viewModel.moveClassDay(semester, fromWeek, fromDay, toWeek, toDay, copy)
                         adjustOpen = false
                     },
                     onClearMove = { fromWeek, fromDay ->

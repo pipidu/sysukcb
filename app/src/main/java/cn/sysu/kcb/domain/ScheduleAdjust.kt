@@ -48,7 +48,16 @@ fun placedCourses(
         if (!WeekMask.has(course.weeksMask, weekNo)) continue
         val homeMove = adjustments.moves.firstOrNull { it.fromWeek == weekNo && it.fromDay == course.dayOfWeek }
         val (edited, highlights) = applyPatch(course, patchFor(adjustments, course, weekNo))
-        if (homeMove != null) {
+        if (homeMove != null && !homeMove.copy) {
+            if (homeMove.toWeek == weekNo) {
+                out += PlacedCourse(edited.copy(dayOfWeek = homeMove.toDay), muted = false, highlights)
+            }
+            continue
+        }
+        if (homeMove != null && homeMove.copy) {
+            val muted = isSuspended(adjustments, weekNo, course.dayOfWeek) ||
+                hasArrival(courses, weekNo, course.dayOfWeek, adjustments)
+            out += PlacedCourse(edited.copy(dayOfWeek = course.dayOfWeek), muted, if (muted) emptySet() else highlights)
             if (homeMove.toWeek == weekNo) {
                 out += PlacedCourse(edited.copy(dayOfWeek = homeMove.toDay), muted = false, highlights)
             }
