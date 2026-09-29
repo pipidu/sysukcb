@@ -189,6 +189,7 @@ fun TimetableScreen(
     var editing by rememberSaveable { mutableStateOf(false) }
     var termOverview by rememberSaveable { mutableStateOf(false) }
     var viewingCourses by remember { mutableStateOf<List<CourseEntity>?>(null) }
+    var viewingPlaced by remember { mutableStateOf<List<PlacedCourse>?>(null) }
     var editingNote by remember { mutableStateOf<StickyNoteEntity?>(null) }
     val maxWeek = snapshot.weeks.maxOfOrNull { it.weekly } ?: 30
     val academicWeek = remember(snapshot.weeks, snapshot.semester?.startMillis) {
@@ -489,6 +490,11 @@ fun TimetableScreen(
                                     if (editing && group.size == 1) onEdit(group.first().id)
                                     else viewingCourses = group
                                 },
+                                onPlacedCourses = { group ->
+                                    val items = group.map { it.course }
+                                    if (editing && items.size == 1) onEdit(items.first().id)
+                                    else viewingPlaced = group
+                                },
                                 onEmpty = if (editing) {
                                     { day, period -> onAdd(day, period, semester) }
                                 } else {
@@ -539,6 +545,20 @@ fun TimetableScreen(
                         }
                     }
                 }
+            }
+            viewingPlaced?.let { group ->
+                CourseDetailSheet(
+                    courses = group.map { it.course },
+                    periods = snapshot.periods,
+                    themeColor = settings.themeColor,
+                    suspendedIds = group.filter { it.muted }.map { it.course.id }.toSet(),
+                    onDismiss = { viewingPlaced = null },
+                    onEdit = { course ->
+                        viewingPlaced = null
+                        onEdit(course.id)
+                    },
+                    bottomInset = sheetBottomInset,
+                )
             }
             viewingCourses?.let { courses ->
                 CourseDetailSheet(
@@ -867,6 +887,7 @@ internal fun TimetableGrid(
     placed: List<PlacedCourse>? = null,
     weekStart: LocalDate?,
     onCourses: (List<CourseEntity>) -> Unit,
+    onPlacedCourses: ((List<PlacedCourse>) -> Unit)? = null,
     onEmpty: ((Int, Int) -> Unit)?,
     themeColor: Long,
     notes: List<StickyNoteEntity> = emptyList(),
@@ -1153,7 +1174,7 @@ internal fun TimetableGrid(
                 }
             }
             groups.forEach { group ->
-                val placedCard = group.first()
+                val placedCard = group.firstOrNull { !it.muted } ?: group.first()
                 val course = placedCard.course
                 val muted = placedCard.muted
                 val highlights = placedCard.highlights
@@ -1177,7 +1198,10 @@ internal fun TimetableGrid(
                         .size(width = colW - 2.dp, height = periodH * span - 2.dp)
                         .clip(RoundedCornerShape(5.dp))
                         .background(Color(cardColor))
-                        .clickable { onCourses(group.map { it.course }) }
+                        .clickable {
+                            if (onPlacedCourses != null) onPlacedCourses(group)
+                            else onCourses(group.map { it.course })
+                        }
                         .padding(horizontal = 2.dp, vertical = 2.dp),
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
@@ -1239,7 +1263,7 @@ internal fun TimetableGrid(
 
 private fun overlapGroups(courses: List<PlacedCourse>): List<List<PlacedCourse>> {
     val result = mutableListOf<List<PlacedCourse>>()
-    for ((_, dayCourses) in courses.groupBy { it.course.dayOfWeek to it.muted }) {
+    for ((_, dayCourses) in courses.groupBy { it.course.dayOfWeek }) {
         val remaining = dayCourses
             .sortedWith(compareBy({ it.course.startPeriod }, { it.course.endPeriod }, { it.course.courseName }, { it.course.id }))
             .toMutableList()
@@ -1257,7 +1281,7 @@ private fun overlapGroups(courses: List<PlacedCourse>): List<List<PlacedCourse>>
                     changed = true
                 }
             }
-            result += group
+            result += group.sortedBy { if (it.muted) 1 else 0 }
         }
     }
     return result

@@ -43,6 +43,7 @@ fun CourseDetailSheet(
     courses: List<CourseEntity>,
     periods: List<PeriodEntity>,
     themeColor: Long = CourseColors.DEFAULT_THEME,
+    suspendedIds: Set<Long> = emptySet(),
     onDismiss: () -> Unit,
     onEdit: ((CourseEntity) -> Unit)? = null,
     bottomInset: Dp = 0.dp,
@@ -71,7 +72,7 @@ fun CourseDetailSheet(
             }
             courses.forEachIndexed { index, course ->
                 if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-                CourseDetailBlock(course, periods, themeColor, onEdit)
+                CourseDetailBlock(course, periods, themeColor, onEdit, suspended = course.id in suspendedIds)
             }
         }
     }
@@ -83,6 +84,7 @@ private fun CourseDetailBlock(
     periods: List<PeriodEntity>,
     themeColor: Long,
     onEdit: ((CourseEntity) -> Unit)?,
+    suspended: Boolean = false,
 ) {
     val start = periods.firstOrNull { it.sectionNumber == course.startPeriod }?.startTime.orEmpty()
     val end = periods.firstOrNull { it.sectionNumber == course.endPeriod }?.endTime.orEmpty()
@@ -110,6 +112,7 @@ private fun CourseDetailBlock(
                 modifier = Modifier.weight(1f),
             )
         }
+        if (suspended) DetailLine("状态", "停课")
         DetailLine("时间", "$day  第${course.startPeriod}-${course.endPeriod}节  $timeRange")
         if (course.teacher.isNotBlank()) DetailLine("教师", course.teacher)
         if (course.place.isNotBlank()) DetailLine("地点", course.place)
