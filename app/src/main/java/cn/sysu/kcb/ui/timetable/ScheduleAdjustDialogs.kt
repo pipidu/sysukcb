@@ -30,16 +30,21 @@ import cn.sysu.kcb.data.local.CourseEntity
 import cn.sysu.kcb.data.local.CoursePatchEntity
 import cn.sysu.kcb.data.local.DayMoveEntity
 import cn.sysu.kcb.data.local.DaySuspensionEntity
+import cn.sysu.kcb.data.local.WeekEntity
+import cn.sysu.kcb.domain.TeachingWeek
 import cn.sysu.kcb.domain.WeekMask
 import cn.sysu.kcb.domain.courseAdjustKey
 import cn.sysu.kcb.domain.weekdayLabel
 import cn.sysu.kcb.ui.theme.KcbFilterChip
+import java.time.LocalDate
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SuspendClassesDialog(
     initialWeek: Int,
     maxWeek: Int,
+    weeks: List<WeekEntity>,
+    semesterStartMillis: Long,
     suspensions: List<DaySuspensionEntity>,
     onSave: (week: Int, days: Set<Int>) -> Unit,
     onDismiss: () -> Unit,
@@ -58,14 +63,14 @@ internal fun SuspendClassesDialog(
                 Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("勾选要停课的日子。停课后卡片变灰，也不再提醒。")
-                WeekStepper(week, weekMax) { week = it }
+                Text("勾选要停课的日期。停课后卡片变灰，也不再提醒。")
+                WeekStepper(week, weekMax, weeks, semesterStartMillis) { week = it }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     for (day in 1..7) {
                         KcbFilterChip(
                             selected = day in days,
                             onClick = { days = if (day in days) days - day else days + day },
-                            label = { Text(weekdayLabel(day)) },
+                            label = { Text(dayChoiceLabel(week, day, weeks, semesterStartMillis)) },
                         )
                     }
                 }
@@ -86,6 +91,8 @@ internal fun AdjustClassesDialog(
     semester: String,
     initialWeek: Int,
     maxWeek: Int,
+    weeks: List<WeekEntity>,
+    semesterStartMillis: Long,
     courses: List<CourseEntity>,
     moves: List<DayMoveEntity>,
     patches: List<CoursePatchEntity>,
@@ -138,17 +145,17 @@ internal fun AdjustClassesDialog(
                     KcbFilterChip(selected = mode == 1, onClick = { mode = 1 }, label = { Text("改某一节") })
                 }
                 if (mode == 0) {
-                    Text("原位置的课会留下并变灰，提醒改到新的那天。")
+                    Text("停课的日期也能调走。调过去之后，停的是到达那天原来的课，被调走的课照常上课。")
                     Text("从", fontWeight = FontWeight.Medium)
-                    WeekStepper(fromWeek, weekMax) { fromWeek = it }
-                    DayChips(fromDay) { fromDay = it }
+                    WeekStepper(fromWeek, weekMax, weeks, semesterStartMillis) { fromWeek = it }
+                    DayChips(fromWeek, fromDay, weeks, semesterStartMillis) { fromDay = it }
                     Text("调到", fontWeight = FontWeight.Medium)
-                    WeekStepper(toWeek, weekMax) { toWeek = it }
-                    DayChips(toDay) { toDay = it }
+                    WeekStepper(toWeek, weekMax, weeks, semesterStartMillis) { toWeek = it }
+                    DayChips(toWeek, toDay, weeks, semesterStartMillis) { toDay = it }
                     moves.forEach { move ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "第${move.fromWeek}周${weekdayLabel(move.fromDay)} → 第${move.toWeek}周${weekdayLabel(move.toDay)}",
+                                "${dayChoiceLabel(move.fromWeek, move.fromDay, weeks, semesterStartMillis)} → ${dayChoiceLabel(move.toWeek, move.toDay, weeks, semesterStartMillis)}",
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.bodySmall,
                             )
@@ -156,8 +163,8 @@ internal fun AdjustClassesDialog(
                         }
                     }
                 } else {
-                    Text("改过的名称、教师、地点、时间和备注会高亮。改了星期或节次时，原位置留下灰色卡片。")
-                    WeekStepper(editWeek, weekMax) { editWeek = it }
+                    Text("改过的名称、教师、地点、时间和备注会高亮。改了日期后，到达那天原来的课停课，被调走的这节不停。")
+                    WeekStepper(editWeek, weekMax, weeks, semesterStartMillis) { editWeek = it }
                     if (weekCourses.isEmpty()) {
                         Text("这一周没有课")
                     } else {
@@ -167,7 +174,11 @@ internal fun AdjustClassesDialog(
                                 KcbFilterChip(
                                     selected = key == pickedKey,
                                     onClick = { pickedKey = key },
-                                    label = { Text("${weekdayLabel(course.dayOfWeek)} ${course.startPeriod} ${course.courseName}") },
+                                    label = {
+                                        Text(
+                                            "${dayChoiceLabel(editWeek, course.dayOfWeek, weeks, semesterStartMillis)} ${course.startPeriod}节 ${course.courseName}",
+                                        )
+                                    },
                                 )
                             }
                         }
@@ -177,8 +188,8 @@ internal fun AdjustClassesDialog(
                         OutlinedTextField(teacher, { teacher = it.take(40) }, Modifier.fillMaxWidth(), label = { Text("教师") }, singleLine = true)
                         OutlinedTextField(place, { place = it.take(40) }, Modifier.fillMaxWidth(), label = { Text("地点") }, singleLine = true)
                         OutlinedTextField(notes, { notes = it.take(80) }, Modifier.fillMaxWidth(), label = { Text("备注") }, singleLine = true)
-                        Text("星期")
-                        DayChips(editDay) { editDay = it }
+                        Text("日期")
+                        DayChips(editWeek, editDay, weeks, semesterStartMillis) { editDay = it }
                         Text("节次 ${startPeriod}-${endPeriod}")
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             KcbFilterChip(selected = false, onClick = { if (startPeriod > 1) startPeriod -= 1 }, label = { Text("开始-") })
@@ -229,24 +240,66 @@ internal fun AdjustClassesDialog(
 }
 
 @Composable
-private fun WeekStepper(week: Int, maxWeek: Int, onChange: (Int) -> Unit) {
+private fun WeekStepper(
+    week: Int,
+    maxWeek: Int,
+    weeks: List<WeekEntity>,
+    semesterStartMillis: Long,
+    onChange: (Int) -> Unit,
+) {
+    val start = dayDate(week, 1, weeks, semesterStartMillis)
+    val end = dayDate(week, 7, weeks, semesterStartMillis)
+    val range = if (start != null && end != null) " ${monthDay(start)}–${monthDay(end)}" else ""
     Row(verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = { if (week > 1) onChange(week - 1) }, enabled = week > 1) { Text("上一周") }
-        Text("第${week}周", modifier = Modifier.padding(horizontal = 8.dp), fontWeight = FontWeight.Medium)
+        Text("第${week}周$range", modifier = Modifier.padding(horizontal = 8.dp), fontWeight = FontWeight.Medium)
         TextButton(onClick = { if (week < maxWeek) onChange(week + 1) }, enabled = week < maxWeek) { Text("下一周") }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DayChips(selected: Int, onSelect: (Int) -> Unit) {
+private fun DayChips(
+    week: Int,
+    selected: Int,
+    weeks: List<WeekEntity>,
+    semesterStartMillis: Long,
+    onSelect: (Int) -> Unit,
+) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         for (day in 1..7) {
             KcbFilterChip(
                 selected = day == selected,
                 onClick = { onSelect(day) },
-                label = { Text(weekdayLabel(day)) },
+                label = { Text(dayChoiceLabel(week, day, weeks, semesterStartMillis)) },
             )
         }
     }
 }
+
+private fun dayChoiceLabel(
+    week: Int,
+    day: Int,
+    weeks: List<WeekEntity>,
+    semesterStartMillis: Long,
+): String {
+    val date = dayDate(week, day, weeks, semesterStartMillis)
+    return if (date == null) weekdayLabel(day) else "${monthDay(date)} ${weekdayLabel(day)}"
+}
+
+private fun dayDate(
+    week: Int,
+    day: Int,
+    weeks: List<WeekEntity>,
+    semesterStartMillis: Long,
+): LocalDate? {
+    val monday = TeachingWeek.resolveWeekStart(
+        week,
+        weeks.firstOrNull { it.weekly == week },
+        weeks,
+        semesterStartMillis,
+    ) ?: return null
+    return monday.plusDays((day - 1).toLong())
+}
+
+private fun monthDay(date: LocalDate): String = "${date.monthValue}/${date.dayOfMonth}"

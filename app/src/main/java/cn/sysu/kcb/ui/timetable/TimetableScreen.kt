@@ -584,6 +584,8 @@ fun TimetableScreen(
                 SuspendClassesDialog(
                     initialWeek = adjustWeek,
                     maxWeek = maxWeek,
+                    weeks = snapshot.weeks,
+                    semesterStartMillis = snapshot.semester?.startMillis ?: 0L,
                     suspensions = snapshot.suspensions,
                     onSave = { week, days ->
                         viewModel.setSuspendedDays(semester, week, days)
@@ -597,6 +599,8 @@ fun TimetableScreen(
                     semester = semester,
                     initialWeek = adjustWeek,
                     maxWeek = maxWeek,
+                    weeks = snapshot.weeks,
+                    semesterStartMillis = snapshot.semester?.startMillis ?: 0L,
                     courses = snapshot.courses,
                     moves = snapshot.moves,
                     patches = snapshot.patches,

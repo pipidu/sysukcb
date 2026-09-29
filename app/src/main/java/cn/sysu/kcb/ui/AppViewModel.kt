@@ -826,7 +826,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
         refreshAlarms()
         WidgetData.refreshAll(getApplication())
-        message.value = "已把这天的课调到另一天，原来的课保留并变灰"
+        message.value = "已把这天的课调走，到达那天原来的课停课"
     }
 
     fun clearClassMove(semester: String, fromWeek: Int, fromDay: Int) = viewModelScope.launch {
@@ -841,7 +841,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         container.timetable.savePatch(patch)
         refreshAlarms()
         WidgetData.refreshAll(getApplication())
-        message.value = "已更新这节课，改过的内容会高亮"
+        message.value = "已更新这节课，改过的内容会高亮；改了日期后，到达那天原来的课停课"
     }
 
     fun clearCoursePatch(semester: String, courseKey: String, weekNo: Int) = viewModelScope.launch {

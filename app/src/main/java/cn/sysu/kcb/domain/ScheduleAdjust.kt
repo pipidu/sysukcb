@@ -43,21 +43,31 @@ fun placedCourses(
     adjustments: ScheduleAdjustments,
 ): List<PlacedCourse> {
     if (weekNo !in 1..WeekMask.MAX_WEEK) return courses.map { PlacedCourse(it) }
-    val suspended = adjustments.suspensions.filter { it.weekNo == weekNo }.map { it.dayOfWeek }.toSet()
     val out = mutableListOf<PlacedCourse>()
     for (course in courses) {
         if (!WeekMask.has(course.weeksMask, weekNo)) continue
-        out += placeOne(course, weekNo, weekNo, suspended, adjustments)
+        val homeMove = adjustments.moves.firstOrNull { it.fromWeek == weekNo && it.fromDay == course.dayOfWeek }
+        val (edited, highlights) = applyPatch(course, patchFor(adjustments, course, weekNo))
+        if (homeMove != null) {
+            if (homeMove.toWeek == weekNo) {
+                out += PlacedCourse(edited.copy(dayOfWeek = homeMove.toDay), muted = false, highlights)
+            }
+            continue
+        }
+        if (edited.dayOfWeek != course.dayOfWeek) {
+            out += PlacedCourse(edited, muted = false, highlights)
+            continue
+        }
+        val muted = isSuspended(adjustments, weekNo, course.dayOfWeek) ||
+            hasArrival(courses, weekNo, course.dayOfWeek, adjustments)
+        out += PlacedCourse(edited, muted, if (muted) emptySet() else highlights)
     }
     for (move in adjustments.moves) {
         if (move.toWeek != weekNo || move.fromWeek == weekNo) continue
-        if (isSuspended(adjustments, move.fromWeek, move.fromDay)) continue
         for (course in courses) {
             if (course.dayOfWeek != move.fromDay || !WeekMask.has(course.weeksMask, move.fromWeek)) continue
             val (edited, highlights) = applyPatch(course, patchFor(adjustments, course, move.fromWeek))
-            val copy = edited.copy(dayOfWeek = move.toDay)
-            val muted = move.toDay in suspended
-            out += PlacedCourse(copy, muted, if (muted) emptySet() else highlights)
+            out += PlacedCourse(edited.copy(dayOfWeek = move.toDay), muted = false, highlights)
         }
     }
     return out
@@ -73,45 +83,26 @@ fun activeCoursesOn(
     .map { it.course }
     .sortedBy { it.startPeriod }
 
-private fun placeOne(
-    course: CourseEntity,
-    sourceWeek: Int,
-    viewWeek: Int,
-    suspendedOnView: Set<Int>,
-    adjustments: ScheduleAdjustments,
-): List<PlacedCourse> {
-    val patch = patchFor(adjustments, course, sourceWeek)
-    val (edited, highlights) = applyPatch(course, patch)
-    val dayMove = adjustments.moves.firstOrNull { it.fromWeek == sourceWeek && it.fromDay == course.dayOfWeek }
-    val sourceSuspended = isSuspended(adjustments, sourceWeek, course.dayOfWeek)
-    if (dayMove != null && !sourceSuspended) {
-        val cards = mutableListOf(PlacedCourse(course, muted = true))
-        if (dayMove.toWeek == viewWeek) {
-            val copy = edited.copy(dayOfWeek = dayMove.toDay)
-            val muted = dayMove.toDay in suspendedOnView
-            cards += PlacedCourse(copy, muted, if (muted) emptySet() else highlights)
-        }
-        return cards
-    }
-    if (dayMove != null && sourceSuspended) {
-        return listOf(PlacedCourse(course, muted = true))
-    }
-    val relocated = edited.dayOfWeek != course.dayOfWeek ||
-        edited.startPeriod != course.startPeriod ||
-        edited.endPeriod != course.endPeriod
-    if (relocated) {
-        val muted = edited.dayOfWeek in suspendedOnView
-        return listOf(
-            PlacedCourse(course, muted = true),
-            PlacedCourse(edited, muted, if (muted) emptySet() else highlights),
-        )
-    }
-    val muted = course.dayOfWeek in suspendedOnView
-    return listOf(PlacedCourse(edited, muted, if (muted) emptySet() else highlights))
-}
-
 private fun isSuspended(adjustments: ScheduleAdjustments, weekNo: Int, day: Int): Boolean =
     adjustments.suspensions.any { it.weekNo == weekNo && it.dayOfWeek == day }
+
+private fun hasArrival(
+    courses: List<CourseEntity>,
+    weekNo: Int,
+    day: Int,
+    adjustments: ScheduleAdjustments,
+): Boolean {
+    if (adjustments.moves.any { it.toWeek == weekNo && it.toDay == day && !(it.fromWeek == weekNo && it.fromDay == day) }) {
+        return true
+    }
+    return courses.any { course ->
+        if (course.dayOfWeek == day || !WeekMask.has(course.weeksMask, weekNo)) return@any false
+        if (adjustments.moves.any { it.fromWeek == weekNo && it.fromDay == course.dayOfWeek }) return@any false
+        val patch = patchFor(adjustments, course, weekNo) ?: return@any false
+        val nextDay = patch.dayOfWeek ?: return@any false
+        nextDay != course.dayOfWeek && nextDay == day
+    }
+}
 
 private fun patchFor(adjustments: ScheduleAdjustments, course: CourseEntity, weekNo: Int): CoursePatchEntity? =
     adjustments.patches.firstOrNull { it.weekNo == weekNo && it.courseKey == courseAdjustKey(course) }
