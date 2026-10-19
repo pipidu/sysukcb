@@ -45,39 +45,81 @@ internal fun SuspendClassesDialog(
     maxWeek: Int,
     weeks: List<WeekEntity>,
     semesterStartMillis: Long,
+    courses: List<CourseEntity>,
     suspensions: List<DaySuspensionEntity>,
-    onSave: (week: Int, days: Set<Int>) -> Unit,
+    onSaveDays: (week: Int, days: Set<Int>) -> Unit,
+    onSaveCourses: (week: Int, items: List<Pair<Int, String>>) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val weekMax = maxWeek.coerceIn(1, WeekMask.MAX_WEEK)
+    var mode by remember { mutableIntStateOf(0) }
     var week by remember { mutableIntStateOf(initialWeek.coerceIn(1, weekMax)) }
     var days by remember { mutableStateOf(setOf<Int>()) }
+    var courseKeys by remember { mutableStateOf(setOf<String>()) }
+    val weekCourses = courses
+        .filter { WeekMask.has(it.weeksMask, week) }
+        .sortedWith(compareBy({ it.dayOfWeek }, { it.startPeriod }, { it.courseName }))
     LaunchedEffect(week, suspensions) {
-        days = suspensions.filter { it.weekNo == week }.map { it.dayOfWeek }.toSet()
+        days = suspensions.filter { it.weekNo == week && it.courseKey.isEmpty() }.map { it.dayOfWeek }.toSet()
+        courseKeys = suspensions.filter { it.weekNo == week && it.courseKey.isNotEmpty() }.map { it.courseKey }.toSet()
     }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("一键停课") },
         text = {
             Column(
-                Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("勾选要停课的日期。停课后卡片变灰，也不再提醒。")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    KcbFilterChip(selected = mode == 0, onClick = { mode = 0 }, label = { Text("停整天") })
+                    KcbFilterChip(selected = mode == 1, onClick = { mode = 1 }, label = { Text("停某一节") })
+                }
+                Text(if (mode == 0) "勾选要停课的日期。停课后卡片变灰，也不再提醒。" else "勾选要停的那一节。只停这一节，同一天的其他课照常上课。")
                 WeekStepper(week, weekMax, weeks, semesterStartMillis) { week = it }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    for (day in 1..7) {
-                        KcbFilterChip(
-                            selected = day in days,
-                            onClick = { days = if (day in days) days - day else days + day },
-                            label = { Text(dayChoiceLabel(week, day, weeks, semesterStartMillis)) },
-                        )
+                if (mode == 0) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        for (day in 1..7) {
+                            KcbFilterChip(
+                                selected = day in days,
+                                onClick = { days = if (day in days) days - day else days + day },
+                                label = { Text(dayChoiceLabel(week, day, weeks, semesterStartMillis)) },
+                            )
+                        }
+                    }
+                } else if (weekCourses.isEmpty()) {
+                    Text("这一周没有课")
+                } else {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        weekCourses.forEach { course ->
+                            val key = courseAdjustKey(course)
+                            KcbFilterChip(
+                                selected = key in courseKeys,
+                                onClick = { courseKeys = if (key in courseKeys) courseKeys - key else courseKeys + key },
+                                label = {
+                                    Text(
+                                        "${dayChoiceLabel(week, course.dayOfWeek, weeks, semesterStartMillis)} ${course.startPeriod}-${course.endPeriod}节 ${course.courseName}",
+                                    )
+                                },
+                            )
+                        }
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(week, days) }) { Text("保存") }
+            TextButton(
+                onClick = {
+                    if (mode == 0) {
+                        onSaveDays(week, days)
+                    } else {
+                        onSaveCourses(
+                            week,
+                            weekCourses.filter { courseAdjustKey(it) in courseKeys }.map { it.dayOfWeek to courseAdjustKey(it) },
+                        )
+                    }
+                },
+            ) { Text("保存") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("取消") }

@@ -254,9 +254,26 @@ class TimetableRepository(private val db: AppDatabase) {
 
     suspend fun replaceSuspensions(semester: String, weekNo: Int, days: Set<Int>) {
         db.withTransaction {
-            db.daySuspensionDao().deleteWeek(semester, weekNo)
+            db.daySuspensionDao().deleteWeekDays(semester, weekNo)
             val rows = days.filter { it in 1..7 }.map {
                 DaySuspensionEntity(acadYearSemester = semester, weekNo = weekNo, dayOfWeek = it)
+            }
+            if (rows.isNotEmpty()) db.daySuspensionDao().insertAll(rows)
+        }
+    }
+
+    suspend fun replaceCourseSuspensions(semester: String, weekNo: Int, items: List<Pair<Int, String>>) {
+        db.withTransaction {
+            db.daySuspensionDao().deleteWeekCourses(semester, weekNo)
+            val rows = items.mapNotNull { (day, key) ->
+                val trimmed = key.trim()
+                if (day !in 1..7 || trimmed.isEmpty()) null
+                else DaySuspensionEntity(
+                    acadYearSemester = semester,
+                    weekNo = weekNo,
+                    dayOfWeek = day,
+                    courseKey = trimmed,
+                )
             }
             if (rows.isNotEmpty()) db.daySuspensionDao().insertAll(rows)
         }

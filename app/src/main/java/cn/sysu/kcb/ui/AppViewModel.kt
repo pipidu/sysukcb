@@ -811,6 +811,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         message.value = if (days.isEmpty()) "已取消第${weekNo}周停课" else "已设置停课，这些天的课变灰且不再提醒"
     }
 
+    fun setSuspendedCourses(semester: String, weekNo: Int, items: List<Pair<Int, String>>) = viewModelScope.launch {
+        val id = semester.trim()
+        if (id.isBlank()) return@launch
+        container.timetable.ensureSemester(id)
+        container.timetable.replaceCourseSuspensions(id, weekNo, items)
+        refreshAlarms()
+        WidgetData.refreshAll(getApplication())
+        message.value = if (items.isEmpty()) "已取消这几节停课" else "已停这几节课，卡片变灰且不再提醒"
+    }
+
     fun moveClassDay(
         semester: String,
         fromWeek: Int,

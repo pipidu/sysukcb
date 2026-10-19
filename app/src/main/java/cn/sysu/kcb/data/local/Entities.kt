@@ -151,13 +151,14 @@ data class StickyNoteEntity(
 @Serializable
 @Entity(
     tableName = "day_suspensions",
-    indices = [Index(value = ["acadYearSemester", "weekNo", "dayOfWeek"], unique = true)],
+    indices = [Index(value = ["acadYearSemester", "weekNo", "dayOfWeek", "courseKey"], unique = true)],
 )
 data class DaySuspensionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val acadYearSemester: String,
     val weekNo: Int,
     val dayOfWeek: Int,
+    val courseKey: String = "",
 )
 
 @Serializable

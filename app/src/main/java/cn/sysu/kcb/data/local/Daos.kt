@@ -268,8 +268,11 @@ interface DaySuspensionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(items: List<DaySuspensionEntity>)
 
-    @Query("DELETE FROM day_suspensions WHERE acadYearSemester = :sem AND weekNo = :week")
-    suspend fun deleteWeek(sem: String, week: Int)
+    @Query("DELETE FROM day_suspensions WHERE acadYearSemester = :sem AND weekNo = :week AND courseKey = ''")
+    suspend fun deleteWeekDays(sem: String, week: Int)
+
+    @Query("DELETE FROM day_suspensions WHERE acadYearSemester = :sem AND weekNo = :week AND courseKey != ''")
+    suspend fun deleteWeekCourses(sem: String, week: Int)
 
     @Query("DELETE FROM day_suspensions WHERE acadYearSemester = :sem")
     suspend fun deleteSemester(sem: String)

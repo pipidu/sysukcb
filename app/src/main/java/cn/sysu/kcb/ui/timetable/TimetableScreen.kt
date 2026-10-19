@@ -606,9 +606,14 @@ fun TimetableScreen(
                     maxWeek = maxWeek,
                     weeks = snapshot.weeks,
                     semesterStartMillis = snapshot.semester?.startMillis ?: 0L,
+                    courses = snapshot.courses,
                     suspensions = snapshot.suspensions,
-                    onSave = { week, days ->
+                    onSaveDays = { week, days ->
                         viewModel.setSuspendedDays(semester, week, days)
+                        suspendOpen = false
+                    },
+                    onSaveCourses = { week, items ->
+                        viewModel.setSuspendedCourses(semester, week, items)
                         suspendOpen = false
                     },
                     onDismiss = { suspendOpen = false },

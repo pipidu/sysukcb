@@ -50,12 +50,18 @@ fun placedCourses(
         val (edited, highlights) = applyPatch(course, patchFor(adjustments, course, weekNo))
         if (homeMove != null && !homeMove.copy) {
             if (homeMove.toWeek == weekNo) {
-                out += PlacedCourse(edited.copy(dayOfWeek = homeMove.toDay), muted = false, highlights)
+                val stopped = courseSuspended(adjustments, weekNo, course.dayOfWeek, course)
+                out += PlacedCourse(
+                    edited.copy(dayOfWeek = homeMove.toDay),
+                    muted = stopped,
+                    highlights = if (stopped) emptySet() else highlights,
+                )
             }
             continue
         }
         if (homeMove != null && homeMove.copy) {
             val muted = isSuspended(adjustments, weekNo, course.dayOfWeek) ||
+                courseSuspended(adjustments, weekNo, course.dayOfWeek, course) ||
                 hasArrival(courses, weekNo, course.dayOfWeek, adjustments)
             out += PlacedCourse(edited.copy(dayOfWeek = course.dayOfWeek), muted, if (muted) emptySet() else highlights)
             if (homeMove.toWeek == weekNo) {
@@ -64,10 +70,12 @@ fun placedCourses(
             continue
         }
         if (edited.dayOfWeek != course.dayOfWeek) {
-            out += PlacedCourse(edited, muted = false, highlights)
+            val stopped = courseSuspended(adjustments, weekNo, course.dayOfWeek, course)
+            out += PlacedCourse(edited, muted = stopped, highlights = if (stopped) emptySet() else highlights)
             continue
         }
         val muted = isSuspended(adjustments, weekNo, course.dayOfWeek) ||
+            courseSuspended(adjustments, weekNo, course.dayOfWeek, course) ||
             hasArrival(courses, weekNo, course.dayOfWeek, adjustments)
         out += PlacedCourse(edited, muted, if (muted) emptySet() else highlights)
     }
@@ -76,7 +84,12 @@ fun placedCourses(
         for (course in courses) {
             if (course.dayOfWeek != move.fromDay || !WeekMask.has(course.weeksMask, move.fromWeek)) continue
             val (edited, highlights) = applyPatch(course, patchFor(adjustments, course, move.fromWeek))
-            out += PlacedCourse(edited.copy(dayOfWeek = move.toDay), muted = false, highlights)
+            val stopped = !move.copy && courseSuspended(adjustments, move.fromWeek, course.dayOfWeek, course)
+            out += PlacedCourse(
+                edited.copy(dayOfWeek = move.toDay),
+                muted = stopped,
+                highlights = if (stopped) emptySet() else highlights,
+            )
         }
     }
     return out
@@ -93,7 +106,19 @@ fun activeCoursesOn(
     .sortedBy { it.startPeriod }
 
 private fun isSuspended(adjustments: ScheduleAdjustments, weekNo: Int, day: Int): Boolean =
-    adjustments.suspensions.any { it.weekNo == weekNo && it.dayOfWeek == day }
+    adjustments.suspensions.any { it.weekNo == weekNo && it.dayOfWeek == day && it.courseKey.isEmpty() }
+
+private fun courseSuspended(
+    adjustments: ScheduleAdjustments,
+    weekNo: Int,
+    day: Int,
+    course: CourseEntity,
+): Boolean {
+    val key = courseAdjustKey(course)
+    return adjustments.suspensions.any {
+        it.weekNo == weekNo && it.dayOfWeek == day && it.courseKey.isNotEmpty() && it.courseKey == key
+    }
+}
 
 private fun hasArrival(
     courses: List<CourseEntity>,

@@ -22,6 +22,26 @@ class ScheduleAdjustTest {
     }
 
     @Test
+    fun oneCourseCanBeSuspendedWithoutStoppingTheRestOfTheDay() {
+        val math = course("高数", day = 1)
+        val english = course("英语", day = 1, start = 3, end = 4)
+        val courses = listOf(math, english)
+        val adjustments = ScheduleAdjustments(
+            suspensions = listOf(
+                DaySuspensionEntity(
+                    acadYearSemester = "2026-1",
+                    weekNo = 1,
+                    dayOfWeek = 1,
+                    courseKey = courseAdjustKey(math),
+                ),
+            ),
+        )
+        val placed = placedCourses(courses, 1, adjustments)
+        assertEquals(listOf("高数" to true, "英语" to false), placed.map { it.course.courseName to it.muted })
+        assertEquals(listOf("英语"), activeCoursesOn(courses, 1, 1, adjustments).map { it.courseName })
+    }
+
+    @Test
     fun movedDayLeavesSourceAndStopsDestinationOriginals() {
         val moved = course("高数", day = 1)
         val stayed = course("英语", day = 3)
@@ -97,14 +117,20 @@ class ScheduleAdjustTest {
         assertEquals(true, placed.first { it.course.courseName == "英语" }.muted)
     }
 
-    private fun course(name: String, day: Int, teacher: String = ""): CourseEntity = CourseEntity(
+    private fun course(
+        name: String,
+        day: Int,
+        teacher: String = "",
+        start: Int = 1,
+        end: Int = 2,
+    ): CourseEntity = CourseEntity(
         acadYearSemester = "2026-1",
         source = "manual",
         courseName = name,
         teacher = teacher,
         dayOfWeek = day,
-        startPeriod = 1,
-        endPeriod = 2,
+        startPeriod = start,
+        endPeriod = end,
         weeksMask = WeekMask.bit(1),
         color = 1L,
     )
