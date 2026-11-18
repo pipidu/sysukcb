@@ -25,4 +25,19 @@ class WebDavNicknameOwnershipTest {
         assertFalse(WebDavSyncService.ownsNickname("", "Alice", "Alice"))
         assertFalse(WebDavSyncService.ownsNickname("   ", "Alice", ""))
     }
+
+    @Test
+    fun establishedNicknameDoesNotNeedAnotherProbe() {
+        assertFalse(WebDavSyncService.shouldProbeNicknameAvailability("Alice", "Alice", "Alice"))
+        assertFalse(WebDavSyncService.shouldProbeNicknameAvailability("Alice", "Alice", ""))
+        assertFalse(WebDavSyncService.shouldProbeNicknameAvailability("alice", "Alice", "Alice"))
+        assertFalse(WebDavSyncService.shouldProbeNicknameAvailability("", "Alice", "Alice"))
+    }
+
+    @Test
+    fun newOrChangedNicknameStillNeedsAProbe() {
+        assertTrue(WebDavSyncService.shouldProbeNicknameAvailability("Bob", "Alice", "Alice"))
+        assertTrue(WebDavSyncService.shouldProbeNicknameAvailability("Bob", "Alice", ""))
+        assertTrue(WebDavSyncService.shouldProbeNicknameAvailability("Alice", "", ""))
+    }
 }

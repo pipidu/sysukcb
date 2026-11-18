@@ -11,6 +11,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 
 class ClassAlarmPlanTest {
     private val origin = LocalDate.of(2026, 2, 16)
@@ -157,6 +159,72 @@ class ClassAlarmPlanTest {
     }
 
 
+    @Test
+    fun widgetRefreshIncludesUpcomingClassBoundariesAndMidnights() {
+        val periods = listOf(period(1, "08:00", "08:45"), period(2, "08:55", "09:40"))
+        val now = LocalDateTime.of(origin, LocalTime.of(7, 0))
+        val times = widgetRefreshTimes(now, listOf(week1Only), periods, weeks, startMillis)
+        assertEquals(
+            listOf(
+                LocalDateTime.of(origin, LocalTime.of(8, 0)),
+                LocalDateTime.of(origin, LocalTime.of(9, 40)),
+            ),
+            times.filter { it.kind == ALARM_KIND_WIDGET }.map { it.at },
+        )
+        assertEquals(14, times.count { it.kind == ALARM_KIND_MIDNIGHT })
+        assertEquals(origin.plusDays(1).atStartOfDay(), times.first { it.kind == ALARM_KIND_MIDNIGHT }.at)
+        assertEquals(origin.plusDays(14).atStartOfDay(), times.last { it.kind == ALARM_KIND_MIDNIGHT }.at)
+        assertTrue(times.all { it.at.isAfter(now) })
+    }
+
+    @Test
+    fun widgetRefreshSkipsClassBoundariesThatAlreadyPassed() {
+        val periods = listOf(period(1, "08:00", "08:45"), period(2, "08:55", "09:40"))
+        val now = LocalDateTime.of(origin, LocalTime.of(8, 20))
+        val widgetTimes = widgetRefreshTimes(now, listOf(week1Only), periods, weeks, startMillis)
+            .filter { it.kind == ALARM_KIND_WIDGET }
+            .map { it.at }
+        assertEquals(listOf(LocalDateTime.of(origin, LocalTime.of(9, 40))), widgetTimes)
+    }
+
+    @Test
+    fun widgetRefreshSkipsDaysWithoutATeachingWeek() {
+        val periods = listOf(period(1, "08:00", "08:45"), period(2, "08:55", "09:40"))
+        val afterTerm = LocalDateTime.of(2026, 6, 8, 7, 0)
+        val times = widgetRefreshTimes(afterTerm, listOf(week1Only), periods, weeks, startMillis)
+        assertTrue(times.none { it.kind == ALARM_KIND_WIDGET })
+        assertEquals(14, times.count { it.kind == ALARM_KIND_MIDNIGHT })
+    }
+
+    @Test
+    fun widgetRefreshRespectsSuspensions() {
+        val periods = listOf(period(1, "08:00", "08:45"), period(2, "08:55", "09:40"))
+        val adjustments = ScheduleAdjustments(
+            suspensions = listOf(
+                DaySuspensionEntity(acadYearSemester = "2026-2", weekNo = 1, dayOfWeek = 1),
+            ),
+        )
+        val now = LocalDateTime.of(origin, LocalTime.of(7, 0))
+        val times = widgetRefreshTimes(now, listOf(week1Only), periods, weeks, startMillis, adjustments)
+        assertTrue(times.none { it.kind == ALARM_KIND_WIDGET && it.at.toLocalDate() == origin })
+    }
+
+    @Test
+    fun midnightAlarmsExtendTheClassReminderWindow() {
+        assertTrue(shouldExtendClassReminderWindow(ALARM_KIND_MIDNIGHT))
+        assertFalse(shouldExtendClassReminderWindow(ALARM_KIND_WIDGET))
+        assertFalse(shouldExtendClassReminderWindow(ALARM_KIND_REMINDER))
+    }
+
+    @Test
+    fun parseClockTimeAcceptsCommonFormats() {
+        assertEquals(LocalTime.of(8, 0), parseClockTime("08:00"))
+        assertEquals(LocalTime.of(8, 0), parseClockTime("8:00"))
+        assertEquals(LocalTime.of(8, 0), parseClockTime("08：00"))
+        assertEquals(null, parseClockTime(""))
+        assertEquals(null, parseClockTime("abc"))
+    }
+
     private fun course(name: String, day: Int, mask: Long): CourseEntity = CourseEntity(
         acadYearSemester = "2026-2",
         source = "imported",
@@ -168,13 +236,17 @@ class ClassAlarmPlanTest {
         color = 1L,
     )
 
-    private fun period(): PeriodEntity = PeriodEntity(
+    private fun period(
+        section: Int = 1,
+        start: String = "08:00",
+        end: String = "08:45",
+    ): PeriodEntity = PeriodEntity(
         acadYearSemester = "2026-2",
-        sectionNumber = 1,
-        minorName = "1",
-        startTime = "08:00",
-        endTime = "08:45",
-        bigSection = "1",
-        bigSectionName = "第一节",
+        sectionNumber = section,
+        minorName = section.toString(),
+        startTime = start,
+        endTime = end,
+        bigSection = section.toString(),
+        bigSectionName = "第${section}节",
     )
 }

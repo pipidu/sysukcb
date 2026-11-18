@@ -21,12 +21,15 @@ class WebDavSyncService(
     suspend fun upload() {
         val creds = requireCreds()
         val body = share.exportAllJson(creds.nickname)
-        if (creds.nickname.isNotBlank()) {
+        val snap = settings.snapshot()
+        val checkedNickname = creds.nickname.isNotBlank() &&
+            shouldProbeNicknameAvailability(creds.nickname, snap.webdavNickname, snap.webdavLastUploadedNickname)
+        if (checkedNickname) {
             ensureNicknameAvailable(creds.url, creds.user, creds.password, creds.nickname)
         }
         client.upload(creds.url, creds.user, creds.password, body)
         if (creds.nickname.isNotBlank()) {
-            uploadNicknameFile(creds, body)
+            uploadNicknameFile(creds, body, alreadyChecked = true)
         }
         settings.setWebDavLastSync(System.currentTimeMillis(), "已上传到云端")
     }
@@ -56,12 +59,14 @@ class WebDavSyncService(
         return try {
             val creds = requireCreds(needNickname = false)
             val body = share.exportAllJson(creds.nickname)
-            if (creds.nickname.isNotBlank()) {
+            val probeNickname = creds.nickname.isNotBlank() &&
+                shouldProbeNicknameAvailability(creds.nickname, snap.webdavNickname, snap.webdavLastUploadedNickname)
+            if (probeNickname) {
                 ensureNicknameAvailable(creds.url, creds.user, creds.password, creds.nickname)
             }
             client.upload(creds.url, creds.user, creds.password, body)
             if (creds.nickname.isNotBlank()) {
-                pullFriends(creds, body)
+                pullFriends(creds, body, nicknameAlreadyChecked = true)
             } else {
                 settings.setWebDavLastSync(now, "已自动上传到云端")
                 "已自动上传到云端"
@@ -76,8 +81,8 @@ class WebDavSyncService(
         }
     }
 
-    private suspend fun pullFriends(creds: Creds, ownBody: String): String {
-        uploadNicknameFile(creds, ownBody)
+    private suspend fun pullFriends(creds: Creds, ownBody: String, nicknameAlreadyChecked: Boolean = false): String {
+        uploadNicknameFile(creds, ownBody, alreadyChecked = nicknameAlreadyChecked)
         val files = client.listJsonFiles(creds.url, creds.user, creds.password)
         val ownName = WebDavClient.nicknameFilename(creds.nickname)
         val ownUrl = WebDavClient.normalizeFileUrl(creds.url)
@@ -140,8 +145,10 @@ class WebDavSyncService(
         }
     }
 
-    private suspend fun uploadNicknameFile(creds: Creds, body: String) {
-        ensureNicknameAvailable(creds.url, creds.user, creds.password, creds.nickname)
+    private suspend fun uploadNicknameFile(creds: Creds, body: String, alreadyChecked: Boolean = false) {
+        if (!alreadyChecked) {
+            ensureNicknameAvailable(creds.url, creds.user, creds.password, creds.nickname)
+        }
         removeStaleNicknameFiles(creds)
         val url = WebDavClient.fileInDirectory(
             WebDavClient.normalizeFileUrl(creds.url),
@@ -189,6 +196,15 @@ class WebDavSyncService(
     companion object {
         const val NICKNAME_TAKEN = "昵称已存在，请更换"
         private const val MIN_AUTO_INTERVAL_MS = 10 * 60 * 1000L
+
+        fun shouldProbeNicknameAvailability(
+            nickname: String,
+            savedNickname: String,
+            lastUploadedNickname: String,
+        ): Boolean {
+            if (nickname.isBlank()) return false
+            return !ownsNickname(nickname, savedNickname, lastUploadedNickname)
+        }
 
         fun ownsNickname(nickname: String, savedNickname: String, lastUploadedNickname: String): Boolean {
             val nick = runCatching { WebDavClient.sanitizeNickname(nickname) }.getOrNull() ?: return false

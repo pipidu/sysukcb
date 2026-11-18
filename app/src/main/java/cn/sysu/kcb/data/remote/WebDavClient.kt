@@ -29,6 +29,7 @@ class WebDavClient {
         ensureParents(url, user, password)
         var response = putFile(url, user, password, body)
         if (response.code == 404) {
+            forgetParents(url, user)
             ensureParents(url, user, password)
             response = putFile(url, user, password, body)
         }
@@ -124,17 +125,33 @@ class WebDavClient {
         return path.substringAfterLast('/').takeIf { it.isNotBlank() }
     }
 
+    private val ensuredParents = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    private fun parentCachePrefix(user: String, host: String): String =
+        user.trim().lowercase() + "@" + host.lowercase()
+
+    private fun rememberedParentPaths(user: String, host: String): Set<String> {
+        val prefix = parentCachePrefix(user, host)
+        return ensuredParents.mapNotNull { key ->
+            if (key.startsWith(prefix)) key.removePrefix(prefix) else null
+        }.toSet()
+    }
+
+    private fun rememberParent(user: String, host: String, path: String) {
+        ensuredParents += parentCachePrefix(user, host) + path
+    }
+
+    private fun forgetParents(fileUrl: HttpUrl, user: String) {
+        val prefix = parentCachePrefix(user, fileUrl.host)
+        for (path in webDavParentsToCreate(fileUrl.pathSegments)) {
+            ensuredParents.remove(prefix + path)
+        }
+    }
+
     private fun ensureParents(fileUrl: HttpUrl, user: String, password: String) {
-        val segments = fileUrl.pathSegments.filter { it.isNotEmpty() }
-        if (segments.size < 2) return
-        val builder = fileUrl.newBuilder().query(null).fragment(null).encodedPath("/")
-        for (i in 0 until segments.lastIndex) {
-            builder.addPathSegment(segments[i])
-            val soFar = builder.build().pathSegments.filter { it.isNotEmpty() }
-            if (soFar.size == 1 && soFar[0].equals("dav", ignoreCase = true)) continue
-            val dir = builder.build().let { url ->
-                url.newBuilder().encodedPath(url.encodedPath.trimEnd('/') + "/").build()
-            }
+        val remembered = rememberedParentPaths(user, fileUrl.host)
+        for (path in webDavParentsToCreate(fileUrl.pathSegments, remembered)) {
+            val dir = fileUrl.newBuilder().query(null).fragment(null).encodedPath(path).build()
             val response = execute(
                 Request.Builder()
                     .url(dir)
@@ -145,7 +162,7 @@ class WebDavClient {
             )
             when (response.code) {
                 401 -> throw ImportFailedException(errorMessage("创建目录", response.code, response.body))
-                in MKCOL_OK -> Unit
+                in MKCOL_OK -> rememberParent(user, fileUrl.host, path)
                 else -> throw ImportFailedException(errorMessage("创建目录", response.code, response.body))
             }
         }
@@ -208,6 +225,24 @@ class WebDavClient {
         private val HREF_REGEX = Regex("(?is)<(?:[\\w-]+:)?href\\s*>(.*?)</(?:[\\w-]+:)?href\\s*>")
         private const val PROPFIND_BODY =
             """<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:resourcetype/></d:prop></d:propfind>"""
+
+        fun webDavParentsToCreate(
+            pathSegments: List<String>,
+            alreadyEnsured: Set<String> = emptySet(),
+        ): List<String> {
+            val segments = pathSegments.filter { it.isNotEmpty() }
+            if (segments.size < 2) return emptyList()
+            val result = mutableListOf<String>()
+            val soFar = StringBuilder()
+            for (i in 0 until segments.lastIndex) {
+                soFar.append('/').append(segments[i])
+                if (i == 0 && segments[0].equals("dav", ignoreCase = true)) continue
+                val path = "$soFar/"
+                val known = alreadyEnsured.any { it.equals(path, ignoreCase = true) }
+                if (!known) result += path
+            }
+            return result
+        }
 
         fun normalizeFileUrl(raw: String): HttpUrl {
             var value = raw.trim()

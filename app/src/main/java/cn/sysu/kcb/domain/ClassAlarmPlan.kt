@@ -6,6 +6,8 @@ import cn.sysu.kcb.data.local.PeriodEntity
 import cn.sysu.kcb.data.local.WeekEntity
 import cn.sysu.kcb.data.prefs.UserSettings
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 
 fun coursesForClassRemindersOn(
     date: LocalDate,
@@ -107,4 +109,61 @@ fun alarmRequestCodesToCancel(stored: Collection<String>, legacyCleared: Boolean
         for (code in 0 until legacyLimit) codes += code
     }
     return codes
+}
+
+const val CLASS_REMINDER_HORIZON_DAYS = 14
+const val WIDGET_BOUNDARY_DAYS = 2
+const val WIDGET_MIDNIGHT_DAYS = 14
+const val ALARM_KIND_REMINDER = "reminder"
+const val ALARM_KIND_WIDGET = "widget"
+const val ALARM_KIND_MIDNIGHT = "midnight"
+
+data class WidgetRefreshAt(val at: LocalDateTime, val kind: String)
+
+fun parseClockTime(raw: String): LocalTime? {
+    val text = raw.trim().replace("：", ":")
+    runCatching { return LocalTime.parse(text) }
+    val parts = text.split(":")
+    val hour = parts.getOrNull(0)?.filter { it.isDigit() }?.toIntOrNull() ?: return null
+    val minute = parts.getOrNull(1)?.filter { it.isDigit() }?.toIntOrNull() ?: 0
+    val second = parts.getOrNull(2)?.filter { it.isDigit() }?.toIntOrNull() ?: 0
+    return runCatching { LocalTime.of(hour, minute, second) }.getOrNull()
+}
+
+fun shouldExtendClassReminderWindow(kind: String): Boolean = kind == ALARM_KIND_MIDNIGHT
+
+fun widgetRefreshTimes(
+    now: LocalDateTime,
+    courses: List<CourseEntity>,
+    periods: List<PeriodEntity>,
+    weeks: List<WeekEntity>,
+    semesterStartMillis: Long,
+    adjustments: ScheduleAdjustments = ScheduleAdjustments(),
+    boundaryDays: Int = WIDGET_BOUNDARY_DAYS,
+    midnightDays: Int = WIDGET_MIDNIGHT_DAYS,
+): List<WidgetRefreshAt> {
+    val byTime = sortedMapOf<LocalDateTime, String>()
+    val today = now.toLocalDate()
+    val periodMap = periods.associateBy { it.sectionNumber }
+    for (offset in 0 until boundaryDays) {
+        val date = today.plusDays(offset.toLong())
+        val dayCourses = coursesForClassRemindersOn(date, courses, weeks, semesterStartMillis, adjustments)
+        for (course in dayCourses) {
+            val start = periodMap[course.startPeriod]?.startTime?.let(::parseClockTime)
+            val end = periodMap[course.endPeriod]?.endTime?.let(::parseClockTime)
+            if (start != null) {
+                val at = LocalDateTime.of(date, start)
+                if (at.isAfter(now)) byTime.putIfAbsent(at, ALARM_KIND_WIDGET)
+            }
+            if (end != null) {
+                val at = LocalDateTime.of(date, end)
+                if (at.isAfter(now)) byTime.putIfAbsent(at, ALARM_KIND_WIDGET)
+            }
+        }
+    }
+    for (offset in 1..midnightDays) {
+        val at = today.plusDays(offset.toLong()).atStartOfDay()
+        if (at.isAfter(now)) byTime[at] = ALARM_KIND_MIDNIGHT
+    }
+    return byTime.map { (at, kind) -> WidgetRefreshAt(at, kind) }
 }

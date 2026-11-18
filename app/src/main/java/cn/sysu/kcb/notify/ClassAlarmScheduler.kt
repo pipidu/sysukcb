@@ -22,10 +22,18 @@ import cn.sysu.kcb.data.local.PeriodEntity
 import cn.sysu.kcb.data.local.WeekEntity
 import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.prefs.UserSettings
+import cn.sysu.kcb.domain.ALARM_KIND_MIDNIGHT
+import cn.sysu.kcb.domain.ALARM_KIND_REMINDER
+import cn.sysu.kcb.domain.ALARM_KIND_WIDGET
+import cn.sysu.kcb.domain.CLASS_REMINDER_HORIZON_DAYS
 import cn.sysu.kcb.domain.ScheduleAdjustments
 import cn.sysu.kcb.domain.TeachingWeek
 import cn.sysu.kcb.domain.alarmRequestCodesToCancel
 import cn.sysu.kcb.domain.coursesForClassRemindersOn
+import cn.sysu.kcb.domain.parseClockTime
+import cn.sysu.kcb.domain.shouldExtendClassReminderWindow
+import cn.sysu.kcb.domain.widgetRefreshTimes
+import cn.sysu.kcb.widget.WidgetData
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -156,7 +164,7 @@ class ClassAlarmScheduler(private val context: Context) {
         if (settings.reminderEnabled) {
             val periodMap = periods.associateBy { it.sectionNumber }
             val today = LocalDate.now()
-            for (offset in 0..13) {
+            for (offset in 0 until CLASS_REMINDER_HORIZON_DAYS) {
                 val date = today.plusDays(offset.toLong())
                 val dayCourses = coursesForClassRemindersOn(
                     date,
@@ -192,6 +200,12 @@ class ClassAlarmScheduler(private val context: Context) {
                 }
             }
         }
+        for (refresh in widgetRefreshTimes(now, courses, periods, weeks, semesterStartMillis, adjustments)) {
+            val code = requestCode("w", 0L, refresh.at.toString())
+            if (schedule(code, refresh.at, title = "", body = "", channel = classChannel, persist = false, alarmStyle = false, kind = refresh.kind)) {
+                codes += code.toString()
+            }
+        }
         prefs.edit().putStringSet(KEY_CODES, codes).apply()
     }
 
@@ -203,6 +217,7 @@ class ClassAlarmScheduler(private val context: Context) {
         channel: String,
         persist: Boolean = true,
         alarmStyle: Boolean = false,
+        kind: String = ALARM_KIND_REMINDER,
     ): Boolean {
         val intent = Intent(context, ClassAlarmReceiver::class.java).apply {
             action = "$ACTION_REMIND.$requestCode"
@@ -210,6 +225,7 @@ class ClassAlarmScheduler(private val context: Context) {
             putExtra(EXTRA_BODY, body)
             putExtra(EXTRA_CHANNEL, channel)
             putExtra(EXTRA_ALARM, alarmStyle)
+            putExtra(EXTRA_KIND, kind)
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
         }
         val pending = PendingIntent.getBroadcast(
@@ -296,6 +312,7 @@ class ClassAlarmScheduler(private val context: Context) {
         const val EXTRA_BODY = "body"
         const val EXTRA_CHANNEL = "channel"
         const val EXTRA_ALARM = "alarm"
+        const val EXTRA_KIND = "kind"
         const val ACTION_REMIND = "cn.sysu.kcb.action.REMIND"
         private const val KEY_CODES = "codes"
         private const val KEY_LEGACY_CLEARED = "legacy_codes_cleared"
@@ -304,15 +321,7 @@ class ClassAlarmScheduler(private val context: Context) {
         fun resolveWeek(date: LocalDate, weeks: List<WeekEntity>, semesterStartMillis: Long = 0): Int? =
             TeachingWeek.resolveWeek(date, weeks, semesterStartMillis)
 
-        fun parseTime(raw: String): LocalTime? {
-            val text = raw.trim().replace("：", ":")
-            runCatching { return LocalTime.parse(text) }
-            val parts = text.split(":")
-            val hour = parts.getOrNull(0)?.filter { it.isDigit() }?.toIntOrNull() ?: return null
-            val minute = parts.getOrNull(1)?.filter { it.isDigit() }?.toIntOrNull() ?: 0
-            val second = parts.getOrNull(2)?.filter { it.isDigit() }?.toIntOrNull() ?: 0
-            return runCatching { LocalTime.of(hour, minute, second) }.getOrNull()
-        }
+        fun parseTime(raw: String): LocalTime? = parseClockTime(raw)
 
         fun parseDate(raw: String): LocalDate? = TeachingWeek.parseLocalDate(raw)
     }
@@ -326,14 +335,29 @@ data class ReminderDiagnostics(
 
 class ClassAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val title = intent.getStringExtra(ClassAlarmScheduler.EXTRA_TITLE) ?: return
+        val title = intent.getStringExtra(ClassAlarmScheduler.EXTRA_TITLE)
         val body = intent.getStringExtra(ClassAlarmScheduler.EXTRA_BODY).orEmpty()
         val channel = intent.getStringExtra(ClassAlarmScheduler.EXTRA_CHANNEL)
             ?: ClassAlarmScheduler.CHANNEL_CLASS
         val alarmStyle = intent.getBooleanExtra(ClassAlarmScheduler.EXTRA_ALARM, false)
+        val kind = intent.getStringExtra(ClassAlarmScheduler.EXTRA_KIND)
+            ?: if (title.isNullOrBlank()) ALARM_KIND_WIDGET else ALARM_KIND_REMINDER
         val scheduler = (context.applicationContext as? KcbApp)?.container?.alarms
             ?: ClassAlarmScheduler(context)
-        scheduler.showReminder(title, body, channel, alarmStyle)
+        val pending = goAsync()
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            try {
+                if (kind == ALARM_KIND_REMINDER && !title.isNullOrBlank()) {
+                    scheduler.showReminder(title, body, channel, alarmStyle)
+                }
+                WidgetData.refreshAll(context.applicationContext)
+                if (shouldExtendClassReminderWindow(kind)) {
+                    rescheduleFromStore(context.applicationContext)
+                }
+            } finally {
+                pending.finish()
+            }
+        }
     }
 }
 
