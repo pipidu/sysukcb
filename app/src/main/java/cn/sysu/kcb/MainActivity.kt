@@ -97,9 +97,7 @@ class MainActivity : ComponentActivity() {
             }
             else -> null
         } ?: return
-        runCatching {
-            contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
-        }.getOrNull()?.let { viewModel.importJson(it) }
+        viewModel.importJsonFromUri(uri)
     }
 
     companion object {

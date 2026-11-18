@@ -238,13 +238,8 @@ fun TimetableScreen(
         .union(WindowInsets.systemBars)
         .asPaddingValues()
         .calculateBottomPadding()
-    val context = LocalContext.current
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            runCatching {
-                context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
-            }.getOrNull()?.let { viewModel.importJson(it) }
-        }
+        if (uri != null) viewModel.importJsonFromUri(uri)
     }
 
     Scaffold(

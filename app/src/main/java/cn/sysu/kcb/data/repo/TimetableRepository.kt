@@ -16,6 +16,7 @@ import cn.sysu.kcb.data.local.WeekdayEntity
 import cn.sysu.kcb.domain.CourseColors
 import cn.sysu.kcb.domain.DefaultPeriods
 import cn.sysu.kcb.domain.ScheduleAdjustments
+import cn.sysu.kcb.domain.incomingImportedToInsert
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 
@@ -120,8 +121,11 @@ class TimetableRepository(private val db: AppDatabase) {
 
     suspend fun replaceImportedCourses(semester: String, imported: List<CourseEntity>) {
         db.withTransaction {
+            val retainedEdited = db.courseDao().list(semester)
+                .filter { it.source == "imported" && it.locallyEdited }
             db.courseDao().deleteImported(semester)
-            if (imported.isNotEmpty()) db.courseDao().insertAll(imported.map { it.copy(id = 0) })
+            val toInsert = incomingImportedToInsert(imported, retainedEdited)
+            if (toInsert.isNotEmpty()) db.courseDao().insertAll(toInsert.map { it.copy(id = 0) })
         }
     }
 

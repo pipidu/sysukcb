@@ -131,18 +131,10 @@ fun MeScreen(
         viewModel.consumeStaleWebDavNicknameTaken()
     }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            runCatching {
-                context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
-            }.getOrNull()?.let { viewModel.importJson(it) }
-        }
+        if (uri != null) viewModel.importJsonFromUri(uri)
     }
     val wakeupPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            runCatching {
-                context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
-            }.getOrNull()?.let { viewModel.importWakeUp(it) }
-        }
+        if (uri != null) viewModel.importWakeUpFromUri(uri)
     }
     val bgPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) viewModel.setTimetableBackgroundImage(uri)

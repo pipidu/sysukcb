@@ -18,6 +18,8 @@ import cn.sysu.kcb.data.local.CoursePatchEntity
 import cn.sysu.kcb.data.local.DayMoveEntity
 import cn.sysu.kcb.data.local.StickyNoteEntity
 import cn.sysu.kcb.domain.ScheduleAdjustments
+import cn.sysu.kcb.domain.classAlarmFingerprint
+import cn.sysu.kcb.domain.shouldRefreshClassAlarms
 import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.prefs.UserSettings
 import cn.sysu.kcb.data.remote.AppUpdate
@@ -54,6 +56,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.LocalDate
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val container = (application as KcbApp).container
@@ -103,6 +106,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var lastUpdateCheckAt = 0L
     private var installWhenDownloadDone = false
     private var handledApkWorkId: java.util.UUID? = null
+    private var lastAlarmScheduleDate: String? = null
+    private var lastAlarmFingerprint: String? = null
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -549,50 +554,80 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         importProgress.value = ""
     }
 
-    fun importJson(text: String) = viewModelScope.launch {
+    fun importJsonFromUri(uri: Uri) = importFromUri(uri, asWakeUp = false)
+
+    fun importWakeUpFromUri(uri: Uri) = importFromUri(uri, asWakeUp = true)
+
+    fun importJson(text: String) = importParsedFile(text, asWakeUp = false)
+
+    fun importWakeUp(text: String) = importParsedFile(text, asWakeUp = true)
+
+    private fun importFromUri(uri: Uri, asWakeUp: Boolean) = viewModelScope.launch {
         importing.value = true
-        runCatching {
-            if (text.contains("\"format\"") && text.contains("sysukcb")) {
-                container.share.importJson(text)
-            } else {
-                val result = container.wakeup.import(
-                    raw = text,
-                    semesterHint = container.settings.snapshot().selectedSemester,
-                    themeColor = settings.value.themeColor,
-                )
-                if (result.semester.isNotBlank()) container.settings.setSelectedSemester(result.semester)
-                result.semester
+        val result = runCatching {
+            withContext(Dispatchers.IO) {
+                val text = getApplication<Application>().contentResolver.openInputStream(uri)
+                    ?.use { it.bufferedReader().readText() }
+                    ?: error("无法读取文件")
+                applyFileImport(text, asWakeUp)
             }
         }
-            .onSuccess {
-                if (it.isNotBlank()) container.settings.setSelectedSemester(it)
-                message.value = "已从文件导入课表"
-                openTimetableAt.value = System.currentTimeMillis()
-                refreshAlarms()
-                WidgetData.refreshAll(getApplication())
-            }
-            .onFailure { message.value = it.message ?: "文件导入失败" }
+        if (result.isSuccess) {
+            applyFileImportSuccess(result.getOrThrow())
+        } else {
+            message.value = result.exceptionOrNull()?.message
+                ?: if (asWakeUp) "WakeUp 导入失败" else "文件导入失败"
+        }
         importing.value = false
     }
 
-    fun importWakeUp(text: String) = viewModelScope.launch {
+    private fun importParsedFile(text: String, asWakeUp: Boolean) = viewModelScope.launch {
         importing.value = true
-        runCatching {
-            container.wakeup.import(
+        val result = runCatching {
+            withContext(Dispatchers.IO) { applyFileImport(text, asWakeUp) }
+        }
+        if (result.isSuccess) {
+            applyFileImportSuccess(result.getOrThrow())
+        } else {
+            message.value = result.exceptionOrNull()?.message
+                ?: if (asWakeUp) "WakeUp 导入失败" else "文件导入失败"
+        }
+        importing.value = false
+    }
+
+    private data class FileImportResult(val semester: String, val message: String)
+
+    private suspend fun applyFileImport(text: String, asWakeUp: Boolean): FileImportResult {
+        if (asWakeUp) {
+            val result = container.wakeup.import(
                 raw = text,
                 semesterHint = container.settings.snapshot().selectedSemester,
                 themeColor = settings.value.themeColor,
             )
+            if (result.semester.isNotBlank()) container.settings.setSelectedSemester(result.semester)
+            return FileImportResult(result.semester, "已从 WakeUp 导入 ${result.count} 门课")
         }
-            .onSuccess {
-                if (it.semester.isNotBlank()) container.settings.setSelectedSemester(it.semester)
-                message.value = "已从 WakeUp 导入 ${it.count} 门课"
-                openTimetableAt.value = System.currentTimeMillis()
-                refreshAlarms()
-                WidgetData.refreshAll(getApplication())
-            }
-            .onFailure { message.value = it.message ?: "WakeUp 导入失败" }
-        importing.value = false
+        val semester = if (text.contains("\"format\"") && text.contains("sysukcb")) {
+            container.share.importJson(text)
+        } else {
+            val result = container.wakeup.import(
+                raw = text,
+                semesterHint = container.settings.snapshot().selectedSemester,
+                themeColor = settings.value.themeColor,
+            )
+            if (result.semester.isNotBlank()) container.settings.setSelectedSemester(result.semester)
+            result.semester
+        }
+        if (semester.isNotBlank()) container.settings.setSelectedSemester(semester)
+        return FileImportResult(semester, "已从文件导入课表")
+    }
+
+    private suspend fun applyFileImportSuccess(result: FileImportResult) {
+        if (result.semester.isNotBlank()) container.settings.setSelectedSemester(result.semester)
+        message.value = result.message
+        openTimetableAt.value = System.currentTimeMillis()
+        refreshAlarms()
+        WidgetData.refreshAll(getApplication())
     }
 
     fun exportSemester(semester: String) = viewModelScope.launch {
@@ -895,21 +930,44 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun getCourse(id: Long) = container.timetable.getCourse(id)
 
     private suspend fun refreshAlarms() {
-        val snap = container.settings.snapshot()
-        val semester = snap.selectedSemester.ifBlank {
-            container.timetable.currentSemester()?.acadYearSemester.orEmpty()
+        withContext(Dispatchers.IO) {
+            val snap = container.settings.snapshot()
+            val semester = snap.selectedSemester.ifBlank {
+                container.timetable.currentSemester()?.acadYearSemester.orEmpty()
+            }
+            val startMillis = container.timetable.listSemesters()
+                .find { it.acadYearSemester == semester }?.startMillis ?: 0L
+            val courses = if (semester.isBlank()) emptyList() else container.timetable.listCourses(semester)
+            val exams = container.timetable.listAllExams()
+            val periods = if (semester.isBlank()) emptyList() else container.timetable.listPeriods(semester)
+            val weeks = if (semester.isBlank()) emptyList() else container.timetable.listWeeks(semester)
+            val adjustments = if (semester.isBlank()) ScheduleAdjustments() else container.timetable.adjustments(semester)
+            val today = LocalDate.now().toString()
+            val fingerprint = classAlarmFingerprint(
+                settings = snap,
+                semester = semester,
+                semesterStartMillis = startMillis,
+                courses = courses,
+                exams = exams,
+                periods = periods,
+                weeks = weeks,
+                adjustments = adjustments,
+            )
+            if (!shouldRefreshClassAlarms(lastAlarmScheduleDate, lastAlarmFingerprint, today, fingerprint)) {
+                return@withContext
+            }
+            container.alarms.reschedule(
+                courses = courses,
+                exams = exams,
+                periods = periods,
+                weeks = weeks,
+                settings = snap,
+                semesterStartMillis = startMillis,
+                adjustments = adjustments,
+            )
+            lastAlarmScheduleDate = today
+            lastAlarmFingerprint = fingerprint
         }
-        val startMillis = container.timetable.listSemesters()
-            .find { it.acadYearSemester == semester }?.startMillis ?: 0L
-        container.alarms.reschedule(
-            courses = if (semester.isBlank()) emptyList() else container.timetable.listCourses(semester),
-            exams = container.timetable.listAllExams(),
-            periods = if (semester.isBlank()) emptyList() else container.timetable.listPeriods(semester),
-            weeks = if (semester.isBlank()) emptyList() else container.timetable.listWeeks(semester),
-            settings = snap,
-            semesterStartMillis = startMillis,
-            adjustments = if (semester.isBlank()) ScheduleAdjustments() else container.timetable.adjustments(semester),
-        )
     }
 }
 

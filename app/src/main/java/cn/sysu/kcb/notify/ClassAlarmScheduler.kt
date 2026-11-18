@@ -24,12 +24,13 @@ import cn.sysu.kcb.data.prefs.SettingsRepository
 import cn.sysu.kcb.data.prefs.UserSettings
 import cn.sysu.kcb.domain.ScheduleAdjustments
 import cn.sysu.kcb.domain.TeachingWeek
-import cn.sysu.kcb.domain.WeekMask
-import cn.sysu.kcb.domain.activeCoursesOn
+import cn.sysu.kcb.domain.alarmRequestCodesToCancel
+import cn.sysu.kcb.domain.coursesForClassRemindersOn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -144,7 +145,7 @@ class ClassAlarmScheduler(private val context: Context) {
         settings: UserSettings,
         semesterStartMillis: Long = 0L,
         adjustments: ScheduleAdjustments = ScheduleAdjustments(),
-    ) {
+    ) = withContext(Dispatchers.IO) {
         ensureChannels()
         cancelUpcoming()
         val now = LocalDateTime.now()
@@ -157,12 +158,13 @@ class ClassAlarmScheduler(private val context: Context) {
             val today = LocalDate.now()
             for (offset in 0..13) {
                 val date = today.plusDays(offset.toLong())
-                val weekNo = resolveWeek(date, weeks, semesterStartMillis)
-                val dayCourses = if (weekNo == null) {
-                    courses.filter { it.dayOfWeek == date.dayOfWeek.value }
-                } else {
-                    activeCoursesOn(courses, weekNo, date.dayOfWeek.value, adjustments)
-                }
+                val dayCourses = coursesForClassRemindersOn(
+                    date,
+                    courses,
+                    weeks,
+                    semesterStartMillis,
+                    adjustments,
+                )
                 for (course in dayCourses) {
                     val start = periodMap[course.startPeriod]?.startTime ?: continue
                     val startTime = parseTime(start) ?: continue
@@ -251,12 +253,14 @@ class ClassAlarmScheduler(private val context: Context) {
 
     private fun cancelUpcoming() {
         val stored = prefs.getStringSet(KEY_CODES, emptySet()).orEmpty()
-        val legacy = (0 until 400).map { it.toString() }
-        for (raw in stored + legacy) {
-            val code = raw.toIntOrNull() ?: continue
+        val legacyCleared = prefs.getBoolean(KEY_LEGACY_CLEARED, false)
+        for (code in alarmRequestCodesToCancel(stored, legacyCleared)) {
             cancelCode(code)
         }
-        prefs.edit().remove(KEY_CODES).apply()
+        prefs.edit()
+            .remove(KEY_CODES)
+            .putBoolean(KEY_LEGACY_CLEARED, true)
+            .apply()
     }
 
     private fun cancelCode(requestCode: Int) {
@@ -294,6 +298,7 @@ class ClassAlarmScheduler(private val context: Context) {
         const val EXTRA_ALARM = "alarm"
         const val ACTION_REMIND = "cn.sysu.kcb.action.REMIND"
         private const val KEY_CODES = "codes"
+        private const val KEY_LEGACY_CLEARED = "legacy_codes_cleared"
         private const val TEST_REQUEST_CODE = 0x6B636254
 
         fun resolveWeek(date: LocalDate, weeks: List<WeekEntity>, semesterStartMillis: Long = 0): Int? =
